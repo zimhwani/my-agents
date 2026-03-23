@@ -523,9 +523,6 @@ class DerivAPI:
         try:
             data = json.loads(message)
             
-            # Debug: print all raw messages so we can see the new API's format
-            print(f"  [WS] {json.dumps(data)[:200]}")
-
             # Handle errors
             if 'error' in data:
                 logger.error(f"API error: {data['error']}")
