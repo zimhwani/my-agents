@@ -57,7 +57,9 @@ class DerivScalpBot:
         self.logger.info("Initializing Deriv API client...")
         self.deriv_client = DerivAPI(
             app_id=config.DERIV_APP_ID,
-            api_token=config.DERIV_API_TOKEN
+            api_token=config.DERIV_API_TOKEN,
+            account_id=config.DERIV_ACCOUNT_ID,
+            demo=True
         )
         
         # Initialize components
