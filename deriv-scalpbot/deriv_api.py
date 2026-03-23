@@ -132,6 +132,15 @@ class DerivAPI:
             if self.connected:
                 logger.info("Connected to Deriv WebSocket")
                 self.authorized = True
+                # Pre-populate account info from known account_id; balance fetched separately
+                self.account_info = {
+                    "loginid": self.account_id,
+                    "currency": "USD",
+                }
+                # Try to fetch balance
+                bal = self.get_balance()
+                if bal is not None:
+                    self.balance = bal
                 return True
             else:
                 logger.error("Failed to connect to Deriv WebSocket")
@@ -514,6 +523,9 @@ class DerivAPI:
         try:
             data = json.loads(message)
             
+            # Debug: print all raw messages so we can see the new API's format
+            print(f"  [WS] {json.dumps(data)[:200]}")
+
             # Handle errors
             if 'error' in data:
                 logger.error(f"API error: {data['error']}")
