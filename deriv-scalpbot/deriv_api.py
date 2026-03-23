@@ -78,18 +78,22 @@ class DerivAPI:
             "deriv-app-id": self.app_id,
             "Content-Length": "0"
         }
+        if not self.account_id:
+            print("  ERROR: account_id is not set")
+            return None
         try:
             resp = requests.post(url, headers=headers, timeout=10)
             if resp.status_code == 200:
                 data = resp.json()
                 otp = data.get("otp") or data.get("data", {}).get("otp")
-                logger.info(f"OTP fetched successfully")
+                if not otp:
+                    print(f"  ERROR: OTP not found in response: {data}")
                 return otp
             else:
-                logger.error(f"OTP fetch failed ({resp.status_code}): {resp.text}")
+                print(f"  ERROR: OTP fetch failed HTTP {resp.status_code}: {resp.text}")
                 return None
         except Exception as e:
-            logger.error(f"OTP request error: {e}")
+            print(f"  ERROR: OTP request exception: {e}")
             return None
 
     def connect(self) -> bool:

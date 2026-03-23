@@ -26,9 +26,15 @@ if not DERIV_API_TOKEN or DERIV_API_TOKEN == 'your_api_token_here':
     print("   Get your API token from: https://api.deriv.com/dashboard")
     sys.exit(1)
 
+if not DERIV_ACCOUNT_ID:
+    print("❌ DERIV_ACCOUNT_ID not set in .env file")
+    print("   Add: DERIV_ACCOUNT_ID=DOT90279522  (your demo account ID)")
+    sys.exit(1)
+
 print("✓ Credentials found in .env")
-print(f"  App ID: {DERIV_APP_ID}")
-print(f"  Token: {DERIV_API_TOKEN[:10]}...")
+print(f"  App ID:     {DERIV_APP_ID}")
+print(f"  Token:      {DERIV_API_TOKEN[:10]}...")
+print(f"  Account ID: {DERIV_ACCOUNT_ID}")
 
 # Try to import deriv_api
 try:
