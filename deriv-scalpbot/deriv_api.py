@@ -85,10 +85,11 @@ class DerivAPI:
             resp = requests.post(url, headers=headers, timeout=10)
             if resp.status_code == 200:
                 data = resp.json()
-                otp = data.get("otp") or data.get("data", {}).get("otp")
-                if not otp:
-                    print(f"  ERROR: OTP not found in response: {data}")
-                return otp
+                ws_url = data.get("data", {}).get("url")
+                if ws_url:
+                    return ws_url  # Return the full WebSocket URL directly
+                print(f"  ERROR: No url in response: {data}")
+                return None
             else:
                 print(f"  ERROR: OTP fetch failed HTTP {resp.status_code}: {resp.text}")
                 return None
@@ -104,11 +105,11 @@ class DerivAPI:
             bool: True if connected successfully
         """
         try:
-            otp = self._get_otp()
-            if not otp:
-                logger.error("Could not obtain OTP — check account_id, app_id and token")
+            ws_url = self._get_otp()
+            if not ws_url:
+                print("Could not obtain WebSocket URL — check account_id, app_id and token")
                 return False
-            self.endpoint = f"wss://api.derivws.com/trading/v1/options/ws/{self.ws_mode}?otp={otp}"
+            self.endpoint = ws_url
 
             self.ws = websocket.WebSocketApp(
                 self.endpoint,
