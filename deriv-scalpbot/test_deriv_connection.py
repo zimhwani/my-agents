@@ -14,6 +14,7 @@ load_dotenv()
 # Check if credentials are set
 DERIV_APP_ID = os.getenv('DERIV_APP_ID')
 DERIV_API_TOKEN = os.getenv('DERIV_API_TOKEN')
+DERIV_ACCOUNT_ID = os.getenv('DERIV_ACCOUNT_ID')
 
 if not DERIV_APP_ID or DERIV_APP_ID == 'your_app_id_here':
     print("❌ DERIV_APP_ID not set in .env file")
@@ -40,7 +41,7 @@ except ImportError as e:
 
 # Try to connect
 print("\n📡 Connecting to Deriv API...")
-client = DerivAPI(app_id=DERIV_APP_ID, api_token=DERIV_API_TOKEN)
+client = DerivAPI(app_id=DERIV_APP_ID, api_token=DERIV_API_TOKEN, account_id=DERIV_ACCOUNT_ID, demo=True)
 
 if not client.connect():
     print("❌ Failed to connect to Deriv API")

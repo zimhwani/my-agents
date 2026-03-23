@@ -21,18 +21,22 @@ class DerivAPI:
     Deriv API client with WebSocket streaming and REST operations
     """
     
-    def __init__(self, app_id: str, api_token: str, endpoint: str = "wss://ws.derivws.com/websockets/v3"):
+    def __init__(self, app_id: str, api_token: str, account_id: str = None, demo: bool = True):
         """
         Initialize Deriv API client
-        
+
         Args:
-            app_id: Your Deriv app ID from api.deriv.com/dashboard
-            api_token: API token for authentication
-            endpoint: WebSocket endpoint (default: production)
+            app_id: Your Deriv app ID (alphanumeric, from api.deriv.com/dashboard)
+            api_token: PAT token for authentication
+            account_id: Deriv account ID (e.g. DOT90279522 for demo, ROT90100144 for real)
+            demo: Use demo account WebSocket endpoint (default: True)
         """
         self.app_id = app_id
         self.api_token = api_token
-        self.endpoint = f"{endpoint}?app_id={app_id}"
+        self.account_id = account_id
+        self.demo = demo
+        self.ws_mode = "demo" if demo else "real"
+        self.endpoint = None  # Set after OTP fetch
         
         self.ws = None
         self.connected = False
@@ -61,14 +65,47 @@ class DerivAPI:
         # Lock for thread safety
         self.lock = threading.Lock()
         
+    def _get_otp(self) -> Optional[str]:
+        """
+        Fetch a one-time password from the new Deriv trading API.
+
+        Returns:
+            OTP string or None if failed
+        """
+        url = f"https://api.derivws.com/trading/v1/options/accounts/{self.account_id}/otp"
+        headers = {
+            "Authorization": f"Bearer {self.api_token}",
+            "deriv-app-id": self.app_id,
+            "Content-Length": "0"
+        }
+        try:
+            resp = requests.post(url, headers=headers, timeout=10)
+            if resp.status_code == 200:
+                data = resp.json()
+                otp = data.get("otp") or data.get("data", {}).get("otp")
+                logger.info(f"OTP fetched successfully")
+                return otp
+            else:
+                logger.error(f"OTP fetch failed ({resp.status_code}): {resp.text}")
+                return None
+        except Exception as e:
+            logger.error(f"OTP request error: {e}")
+            return None
+
     def connect(self) -> bool:
         """
-        Establish WebSocket connection to Deriv
-        
+        Establish WebSocket connection to Deriv (new trading API)
+
         Returns:
             bool: True if connected successfully
         """
         try:
+            otp = self._get_otp()
+            if not otp:
+                logger.error("Could not obtain OTP — check account_id, app_id and token")
+                return False
+            self.endpoint = f"wss://api.derivws.com/trading/v1/options/ws/{self.ws_mode}?otp={otp}"
+
             self.ws = websocket.WebSocketApp(
                 self.endpoint,
                 on_message=self._on_message,
@@ -89,8 +126,8 @@ class DerivAPI:
             
             if self.connected:
                 logger.info("Connected to Deriv WebSocket")
-                # Authorize after connection
-                return self.authorize()
+                self.authorized = True
+                return True
             else:
                 logger.error("Failed to connect to Deriv WebSocket")
                 return False
