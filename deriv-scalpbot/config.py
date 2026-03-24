@@ -54,9 +54,7 @@ if MONITORED_SYMBOLS_ENV:
 else:
     # Default to major forex pairs as requested
     TRADING_SYMBOLS = [
-        "frxEURUSD",  # Most liquid
-        "frxGBPUSD",  # High volatility
-        "frxUSDJPY"   # Asian session
+        "frxXAUUSD",  # Gold / USD
     ]
 
 # ============================================================================
@@ -75,8 +73,8 @@ LOOKBACK_TICKS = 1000  # Number of historical ticks to keep in memory
 # ============================================================================
 # ACCOUNT & RISK SETTINGS (DERIV) - Optimized for Small Accounts
 # ============================================================================
-BASE_STAKE_USD = float(os.getenv('BASE_STAKE_USD', '0.50'))  # Base stake per contract in USD
-MAX_STAKE_USD = float(os.getenv('MAX_STAKE_USD', '2.00'))  # Maximum stake cap
+BASE_STAKE_USD = float(os.getenv('BASE_STAKE_USD', '100.00'))  # Base stake per contract in USD
+MAX_STAKE_USD = float(os.getenv('MAX_STAKE_USD', '100.00'))  # Maximum stake cap
 
 # Position Sizing - "Max Profit Builder" (Conservative)
 BUILDER_WINS_THRESHOLD = int(os.getenv('BUILDER_WINS_THRESHOLD', '5'))  # Increase after 5 wins
@@ -170,7 +168,7 @@ TELEGRAM_CHAT_ID = os.getenv('TELEGRAM_CHAT_ID')
 # ============================================================================
 ENABLE_RISK_ALERTS = os.getenv('ENABLE_RISK_ALERTS', 'true').lower() == 'true'
 DAILY_LOSS_LIMIT_PCT = float(os.getenv('DAILY_LOSS_LIMIT_PCT', '30.0'))  # Stop at -30%
-DAILY_LOSS_LIMIT_USD = float(os.getenv('DAILY_LOSS_LIMIT_USD', '30.00'))  # Hard USD limit
+DAILY_LOSS_LIMIT_USD = float(os.getenv('DAILY_LOSS_LIMIT_USD', '50.00'))  # Hard USD stop loss
 DRAWDOWN_LIMIT_PCT = float(os.getenv('DRAWDOWN_LIMIT_PCT', '15.0'))
 MARGIN_LEVEL_WARNING = float(os.getenv('MARGIN_LEVEL_WARNING', '150.0'))
 MARGIN_LEVEL_CRITICAL = float(os.getenv('MARGIN_LEVEL_CRITICAL', '100.0'))
