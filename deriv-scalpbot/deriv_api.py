@@ -9,6 +9,7 @@ import threading
 from typing import Optional, Dict, List, Callable
 from pathlib import Path
 import websocket
+import requests
 from datetime import datetime
 import logging
 
@@ -64,15 +65,62 @@ class DerivAPI:
         # Lock for thread safety
         self.lock = threading.Lock()
         
-    def connect(self) -> bool:
+    def _get_ws_url(self) -> Optional[str]:
         """
-        Establish WebSocket connection to Deriv API and authorize.
+        Fetch a one-time authenticated WebSocket URL from the Deriv REST API.
 
         Returns:
-            bool: True if connected and authorized successfully
+            WebSocket URL string or None if failed
+        """
+        if not self.account_id:
+            logger.error("DERIV_ACCOUNT_ID not set — needed for new Deriv API")
+            return None
+
+        url = f"https://api.derivws.com/trading/v1/options/accounts/{self.account_id}/otp"
+        headers = {
+            "Authorization": f"Bearer {self.api_token}",
+            "Deriv-App-ID": self.app_id,
+            "Content-Length": "0",
+        }
+        try:
+            resp = requests.post(url, headers=headers, timeout=15)
+            if resp.status_code == 200:
+                data = resp.json()
+                ws_url = data.get("data", {}).get("url")
+                if ws_url:
+                    logger.info("Got authenticated WebSocket URL from Deriv API")
+                    return ws_url
+                logger.error(f"No url in OTP response: {data}")
+                return None
+            logger.error(f"OTP request failed HTTP {resp.status_code}: {resp.text}")
+            return None
+        except Exception as e:
+            logger.error(f"OTP request error: {e}")
+            return None
+
+    def connect(self) -> bool:
+        """
+        Establish WebSocket connection to Deriv API.
+        Uses OTP flow (new alphanumeric app_id API) if account_id is set,
+        otherwise falls back to legacy numeric app_id WebSocket.
+
+        Returns:
+            bool: True if connected successfully
         """
         try:
-            self.endpoint = f"wss://ws.derivws.com/websockets/v3?app_id={self.app_id}"
+            ws_url = None
+
+            if self.account_id:
+                ws_url = self._get_ws_url()
+                if not ws_url:
+                    logger.error("Could not get WebSocket URL — check DERIV_ACCOUNT_ID, DERIV_APP_ID, DERIV_API_TOKEN")
+                    return False
+            else:
+                # Fallback: legacy numeric app_id WebSocket
+                ws_url = f"wss://ws.derivws.com/websockets/v3?app_id={self.app_id}"
+                logger.info("No account_id set — using legacy WebSocket endpoint")
+
+            self.endpoint = ws_url
 
             self.ws = websocket.WebSocketApp(
                 self.endpoint,
@@ -86,7 +134,7 @@ class DerivAPI:
             ws_thread.start()
 
             # Wait for WebSocket to open
-            timeout = 10
+            timeout = 15
             start_time = time.time()
             while not self.connected and time.time() - start_time < timeout:
                 time.sleep(0.1)
@@ -95,12 +143,15 @@ class DerivAPI:
                 logger.error("Failed to connect to Deriv WebSocket")
                 return False
 
-            # Authorize with API token
-            if not self.authorize():
-                logger.error("Authorization failed — check DERIV_API_TOKEN")
-                return False
+            # OTP URL is pre-authenticated; legacy URL needs authorize call
+            if not self.account_id:
+                if not self.authorize():
+                    logger.error("Authorization failed — check DERIV_API_TOKEN")
+                    return False
+            else:
+                self.authorized = True
+                self.account_info = {"loginid": self.account_id, "currency": "USD"}
 
-            # Fetch balance
             bal = self.get_balance()
             if bal is not None:
                 self.balance = bal
