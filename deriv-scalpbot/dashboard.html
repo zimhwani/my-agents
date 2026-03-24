@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Deriv ScalpBot Dashboard</title>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://unpkg.com/recharts@2.12.7/umd/Recharts.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #0f1117; color: #e2e8f0; font-family: 'Segoe UI', system-ui, sans-serif; font-size: 14px; }
+    ::-webkit-scrollbar { width: 6px; } ::-webkit-scrollbar-track { background: #1a1d2e; } ::-webkit-scrollbar-thumb { background: #3a3f5c; border-radius: 3px; }
+
+    .header { background: #1a1d2e; border-bottom: 1px solid #2d3148; padding: 14px 24px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 10; }
+    .header h1 { font-size: 18px; font-weight: 700; color: #a78bfa; letter-spacing: 0.5px; }
+    .header-right { display: flex; align-items: center; gap: 16px; font-size: 12px; color: #94a3b8; }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: #22c55e; display: inline-block; margin-right: 6px; animation: pulse 2s infinite; }
+    .dot.error { background: #ef4444; animation: none; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+    .main { padding: 20px 24px; max-width: 1400px; margin: 0 auto; }
+    .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; margin-bottom: 20px; }
+    .card { background: #1a1d2e; border: 1px solid #2d3148; border-radius: 10px; padding: 16px 18px; }
+    .card-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.8px; color: #64748b; margin-bottom: 6px; }
+    .card-value { font-size: 26px; font-weight: 700; }
+    .card-sub { font-size: 11px; color: #64748b; margin-top: 4px; }
+    .green { color: #22c55e; } .red { color: #ef4444; } .purple { color: #a78bfa; } .blue { color: #60a5fa; } .yellow { color: #fbbf24; }
+
+    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 20px; }
+    .grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; margin-bottom: 20px; }
+    @media(max-width:900px) { .grid2, .grid3 { grid-template-columns: 1fr; } }
+
+    .panel { background: #1a1d2e; border: 1px solid #2d3148; border-radius: 10px; padding: 16px; }
+    .panel-title { font-size: 13px; font-weight: 600; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 12px; }
+
+    table { width: 100%; border-collapse: collapse; }
+    th { font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: #64748b; padding: 6px 10px; text-align: left; border-bottom: 1px solid #2d3148; }
+    td { padding: 8px 10px; border-bottom: 1px solid #1e2235; font-size: 13px; }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: #1e2235; }
+    .badge { display: inline-block; padding: 2px 7px; border-radius: 4px; font-size: 11px; font-weight: 600; }
+    .badge-call { background: #14532d; color: #4ade80; }
+    .badge-put  { background: #450a0a; color: #f87171; }
+    .badge-win  { background: #14532d; color: #4ade80; }
+    .badge-loss { background: #450a0a; color: #f87171; }
+
+    .log-box { background: #0d0f1a; border: 1px solid #2d3148; border-radius: 8px; height: 260px; overflow-y: auto; padding: 10px 12px; font-family: 'JetBrains Mono', 'Fira Code', monospace; font-size: 11px; line-height: 1.7; }
+    .log-line { white-space: pre-wrap; word-break: break-all; }
+    .log-info  { color: #60a5fa; } .log-warn  { color: #fbbf24; } .log-error { color: #f87171; }
+    .log-signal { color: #c084fc; } .log-trade { color: #34d399; } .log-status { color: #94a3b8; }
+
+    .empty { color: #4b5563; text-align: center; padding: 28px; font-size: 13px; }
+    .refresh-note { font-size: 11px; color: #4b5563; text-align: right; margin-top: 8px; }
+    .no-data-banner { background: #1e2235; border: 1px solid #3a3f5c; border-radius: 8px; padding: 12px 16px; margin-bottom: 16px; color: #94a3b8; font-size: 13px; }
+  </style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useEffect, useRef } = React;
+const { LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } = Recharts;
+
+const API = 'http://localhost:5001';
+
+function useApi(endpoint, interval = 5000) {
+  const [data, setData] = useState(null);
+  const [error, setError] = useState(null);
+  useEffect(() => {
+    let active = true;
+    const fetch_data = () => {
+      fetch(API + endpoint)
+        .then(r => r.json())
+        .then(d => { if (active) { setData(d); setError(null); } })
+        .catch(e => { if (active) setError(e.message); });
+    };
+    fetch_data();
+    const id = setInterval(fetch_data, interval);
+    return () => { active = false; clearInterval(id); };
+  }, [endpoint, interval]);
+  return { data, error };
+}
+
+function StatCard({ label, value, sub, color = 'white' }) {
+  return (
+    <div className="card">
+      <div className="card-label">{label}</div>
+      <div className={`card-value ${color}`}>{value}</div>
+      {sub && <div className="card-sub">{sub}</div>}
+    </div>
+  );
+}
+
+function PnlChart({ trades }) {
+  if (!trades || trades.length === 0) return <div className="empty">No trades yet</div>;
+  let running = 0;
+  const points = [...trades].reverse().map((t, i) => {
+    running += t.profit || 0;
+    return { i: i + 1, pnl: parseFloat(running.toFixed(2)) };
+  });
+  return (
+    <ResponsiveContainer width="100%" height={160}>
+      <LineChart data={points}>
+        <CartesianGrid strokeDasharray="3 3" stroke="#2d3148" />
+        <XAxis dataKey="i" tick={{ fill: '#64748b', fontSize: 10 }} />
+        <YAxis tick={{ fill: '#64748b', fontSize: 10 }} tickFormatter={v => `$${v}`} />
+        <Tooltip contentStyle={{ background: '#1a1d2e', border: '1px solid #3a3f5c', borderRadius: 6 }} formatter={v => [`$${v}`, 'P/L']} />
+        <Line type="monotone" dataKey="pnl" stroke="#a78bfa" strokeWidth={2} dot={false} />
+      </LineChart>
+    </ResponsiveContainer>
+  );
+}
+
+function WinRateBar({ strategies }) {
+  if (!strategies || strategies.length === 0) return <div className="empty">No strategy data yet</div>;
+  return (
+    <ResponsiveContainer width="100%" height={160}>
+      <BarChart data={strategies} layout="vertical">
+        <CartesianGrid strokeDasharray="3 3" stroke="#2d3148" />
+        <XAxis type="number" domain={[0, 100]} tick={{ fill: '#64748b', fontSize: 10 }} tickFormatter={v => `${v}%`} />
+        <YAxis dataKey="strategy" type="category" tick={{ fill: '#94a3b8', fontSize: 10 }} width={90} />
+        <Tooltip contentStyle={{ background: '#1a1d2e', border: '1px solid #3a3f5c', borderRadius: 6 }} formatter={v => [`${v}%`, 'Win Rate']} />
+        <Bar dataKey="win_rate" fill="#60a5fa" radius={[0, 4, 4, 0]} />
+      </BarChart>
+    </ResponsiveContainer>
+  );
+}
+
+function LogViewer() {
+  const { data } = useApi('/api/logs', 3000);
+  const ref = useRef(null);
+  useEffect(() => {
+    if (ref.current) ref.current.scrollTop = ref.current.scrollHeight;
+  }, [data]);
+
+  const classFor = (line) => {
+    if (line.includes('ERROR'))  return 'log-error';
+    if (line.includes('WARNING') || line.includes('WARN')) return 'log-warn';
+    if (line.includes('SIGNAL')) return 'log-signal';
+    if (line.includes('TRADE'))  return 'log-trade';
+    if (line.includes('STATUS')) return 'log-status';
+    return 'log-info';
+  };
+
+  const lines = data?.lines || [];
+  return (
+    <div className="log-box" ref={ref}>
+      {lines.length === 0
+        ? <span className="log-status">Waiting for logs...</span>
+        : lines.map((l, i) => <div key={i} className={`log-line ${classFor(l)}`}>{l}</div>)
+      }
+    </div>
+  );
+}
+
+function TradesTable({ trades }) {
+  if (!trades || trades.length === 0) return <div className="empty">No trades yet</div>;
+  return (
+    <table>
+      <thead>
+        <tr>
+          <th>Time</th>
+          <th>Symbol</th>
+          <th>Strategy</th>
+          <th>Type</th>
+          <th>Stake</th>
+          <th>P/L</th>
+          <th>Result</th>
+        </tr>
+      </thead>
+      <tbody>
+        {trades.slice(0, 30).map((t, i) => {
+          const win = (t.profit || 0) > 0;
+          const ts = t.timestamp ? new Date(t.timestamp).toLocaleTimeString() : '—';
+          return (
+            <tr key={i}>
+              <td style={{color:'#64748b'}}>{ts}</td>
+              <td style={{fontWeight:600}}>{t.symbol || '—'}</td>
+              <td style={{color:'#94a3b8'}}>{(t.strategy || '—').replace('Strategy', 'S')}</td>
+              <td><span className={`badge ${t.contract_type === 'CALL' ? 'badge-call' : 'badge-put'}`}>{t.contract_type || '—'}</span></td>
+              <td>${(t.stake || 0).toFixed(2)}</td>
+              <td className={win ? 'green' : 'red'}>{win ? '+' : ''}${(t.profit || 0).toFixed(2)}</td>
+              <td><span className={`badge ${win ? 'badge-win' : 'badge-loss'}`}>{win ? 'WIN' : 'LOSS'}</span></td>
+            </tr>
+          );
+        })}
+      </tbody>
+    </table>
+  );
+}
+
+function StrategyTable({ strategies }) {
+  if (!strategies || strategies.length === 0) return <div className="empty">No strategy data yet</div>;
+  return (
+    <table>
+      <thead>
+        <tr><th>Strategy</th><th>Trades</th><th>Win Rate</th><th>P/L</th><th>ROI</th></tr>
+      </thead>
+      <tbody>
+        {strategies.map((s, i) => (
+          <tr key={i}>
+            <td style={{fontWeight:600}}>{s.strategy}</td>
+            <td>{s.trades}</td>
+            <td className={s.win_rate >= 50 ? 'green' : 'red'}>{s.win_rate}%</td>
+            <td className={s.total_pnl >= 0 ? 'green' : 'red'}>{s.total_pnl >= 0 ? '+' : ''}${s.total_pnl}</td>
+            <td className={s.roi >= 0 ? 'green' : 'red'}>{s.roi >= 0 ? '+' : ''}{s.roi}%</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
+function App() {
+  const { data, error } = useApi('/api/performance', 5000);
+  const [lastUpdated, setLastUpdated] = useState('');
+
+  useEffect(() => {
+    if (data) setLastUpdated(new Date().toLocaleTimeString());
+  }, [data]);
+
+  const summary = data?.summary || {};
+  const pnl = summary.total_pnl || 0;
+  const hasNoData = data?.note;
+
+  return (
+    <>
+      <div className="header">
+        <h1>Deriv ScalpBot Dashboard</h1>
+        <div className="header-right">
+          {error
+            ? <><span className="dot error"></span>Server offline — run dashboard_server.py</>
+            : <><span className="dot"></span>Live · refreshes every 5s</>
+          }
+          {lastUpdated && <span>Updated {lastUpdated}</span>}
+        </div>
+      </div>
+
+      <div className="main">
+        {hasNoData && <div className="no-data-banner">Bot has not traded yet — start main.py to begin collecting data</div>}
+
+        <div className="cards">
+          <StatCard label="Total Trades"  value={summary.total_trades ?? '—'} color="blue" />
+          <StatCard label="Win Rate"      value={summary.total_trades > 0 ? `${summary.win_rate}%` : '—'} color={summary.win_rate >= 50 ? 'green' : 'red'} sub={`${summary.wins ?? 0}W / ${summary.losses ?? 0}L`} />
+          <StatCard label="Total P/L"     value={summary.total_trades > 0 ? `$${pnl.toFixed(2)}` : '—'} color={pnl >= 0 ? 'green' : 'red'} />
+          <StatCard label="Symbol"        value="BOOM1000" color="purple" sub="Demo account" />
+          <StatCard label="Stake / Trade" value="$10.00"   color="yellow" sub="Max $10.00" />
+        </div>
+
+        <div className="grid2">
+          <div className="panel">
+            <div className="panel-title">Cumulative P/L</div>
+            <PnlChart trades={data?.recent_trades} />
+          </div>
+          <div className="panel">
+            <div className="panel-title">Win Rate by Strategy</div>
+            <WinRateBar strategies={data?.strategies} />
+          </div>
+        </div>
+
+        <div className="panel" style={{marginBottom:14}}>
+          <div className="panel-title">Recent Trades</div>
+          <TradesTable trades={data?.recent_trades} />
+          <div className="refresh-note">Showing last 30 trades · auto-refreshes</div>
+        </div>
+
+        <div className="grid2" style={{marginBottom:14}}>
+          <div className="panel">
+            <div className="panel-title">Strategy Performance</div>
+            <StrategyTable strategies={data?.strategies} />
+          </div>
+          <div className="panel">
+            <div className="panel-title">Symbol Performance</div>
+            <StrategyTable strategies={data?.symbols?.map(s => ({...s, strategy: s.symbol}))} />
+          </div>
+        </div>
+
+        <div className="panel">
+          <div className="panel-title">Live Bot Log</div>
+          <LogViewer />
+          <div className="refresh-note">Auto-scrolls · last 150 lines</div>
+        </div>
+      </div>
+    </>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>
