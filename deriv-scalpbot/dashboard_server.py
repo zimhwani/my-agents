@@ -38,7 +38,9 @@ class DashboardHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         path = urlparse(self.path).path
 
-        if path == '/api/performance':
+        if path in ('/', '/dashboard.html'):
+            self.handle_html()
+        elif path == '/api/performance':
             self.handle_performance()
         elif path == '/api/logs':
             self.handle_logs()
@@ -46,6 +48,19 @@ class DashboardHandler(BaseHTTPRequestHandler):
             self.handle_status()
         else:
             self.send_json({'error': 'Not found'}, 404)
+
+    def handle_html(self):
+        html_path = os.path.join(BASE_DIR, 'dashboard.html')
+        try:
+            with open(html_path, 'rb') as f:
+                body = f.read()
+            self.send_response(200)
+            self.send_header('Content-Type', 'text/html; charset=utf-8')
+            self.send_header('Content-Length', len(body))
+            self.end_headers()
+            self.wfile.write(body)
+        except FileNotFoundError:
+            self.send_json({'error': 'dashboard.html not found'}, 404)
 
     def handle_performance(self):
         try:
