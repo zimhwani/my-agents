@@ -4,35 +4,31 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Deriv ScalpBot Dashboard</title>
-  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-  <script src="https://unpkg.com/recharts@2.12.7/umd/Recharts.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body { background: #0f1117; color: #e2e8f0; font-family: 'Segoe UI', system-ui, sans-serif; font-size: 14px; }
     ::-webkit-scrollbar { width: 6px; } ::-webkit-scrollbar-track { background: #1a1d2e; } ::-webkit-scrollbar-thumb { background: #3a3f5c; border-radius: 3px; }
 
     .header { background: #1a1d2e; border-bottom: 1px solid #2d3148; padding: 14px 24px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 10; }
-    .header h1 { font-size: 18px; font-weight: 700; color: #a78bfa; letter-spacing: 0.5px; }
+    .header h1 { font-size: 18px; font-weight: 700; color: #a78bfa; }
     .header-right { display: flex; align-items: center; gap: 16px; font-size: 12px; color: #94a3b8; }
     .dot { width: 8px; height: 8px; border-radius: 50%; background: #22c55e; display: inline-block; margin-right: 6px; animation: pulse 2s infinite; }
     .dot.error { background: #ef4444; animation: none; }
     @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
 
     .main { padding: 20px 24px; max-width: 1400px; margin: 0 auto; }
-    .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; margin-bottom: 20px; }
+    .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 14px; margin-bottom: 20px; }
     .card { background: #1a1d2e; border: 1px solid #2d3148; border-radius: 10px; padding: 16px 18px; }
     .card-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.8px; color: #64748b; margin-bottom: 6px; }
     .card-value { font-size: 26px; font-weight: 700; }
     .card-sub { font-size: 11px; color: #64748b; margin-top: 4px; }
+
     .green { color: #22c55e; } .red { color: #ef4444; } .purple { color: #a78bfa; } .blue { color: #60a5fa; } .yellow { color: #fbbf24; }
 
     .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 20px; }
-    .grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; margin-bottom: 20px; }
-    @media(max-width:900px) { .grid2, .grid3 { grid-template-columns: 1fr; } }
+    @media(max-width:900px) { .grid2 { grid-template-columns: 1fr; } }
 
-    .panel { background: #1a1d2e; border: 1px solid #2d3148; border-radius: 10px; padding: 16px; }
+    .panel { background: #1a1d2e; border: 1px solid #2d3148; border-radius: 10px; padding: 16px; margin-bottom: 14px; }
     .panel-title { font-size: 13px; font-weight: 600; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 12px; }
 
     table { width: 100%; border-collapse: collapse; }
@@ -46,7 +42,7 @@
     .badge-win  { background: #14532d; color: #4ade80; }
     .badge-loss { background: #450a0a; color: #f87171; }
 
-    .log-box { background: #0d0f1a; border: 1px solid #2d3148; border-radius: 8px; height: 260px; overflow-y: auto; padding: 10px 12px; font-family: 'JetBrains Mono', 'Fira Code', monospace; font-size: 11px; line-height: 1.7; }
+    .log-box { background: #0d0f1a; border: 1px solid #2d3148; border-radius: 8px; height: 260px; overflow-y: auto; padding: 10px 12px; font-family: monospace; font-size: 11px; line-height: 1.7; }
     .log-line { white-space: pre-wrap; word-break: break-all; }
     .log-info  { color: #60a5fa; } .log-warn  { color: #fbbf24; } .log-error { color: #f87171; }
     .log-signal { color: #c084fc; } .log-trade { color: #34d399; } .log-status { color: #94a3b8; }
@@ -54,239 +50,245 @@
     .empty { color: #4b5563; text-align: center; padding: 28px; font-size: 13px; }
     .refresh-note { font-size: 11px; color: #4b5563; text-align: right; margin-top: 8px; }
     .no-data-banner { background: #1e2235; border: 1px solid #3a3f5c; border-radius: 8px; padding: 12px 16px; margin-bottom: 16px; color: #94a3b8; font-size: 13px; }
+
+    /* Mini sparkline chart */
+    .chart-wrap { width: 100%; overflow: hidden; }
+    svg text { font-size: 10px; fill: #64748b; }
+
+    /* Win rate bars */
+    .bar-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+    .bar-label { width: 110px; font-size: 12px; color: #94a3b8; text-align: right; flex-shrink: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .bar-track { flex: 1; background: #1e2235; border-radius: 4px; height: 18px; position: relative; }
+    .bar-fill { height: 100%; border-radius: 4px; background: #60a5fa; transition: width 0.4s; }
+    .bar-pct { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); font-size: 11px; color: #e2e8f0; font-weight: 600; }
   </style>
 </head>
 <body>
-<div id="root"></div>
-<script type="text/babel">
-const { useState, useEffect, useRef } = React;
-const { LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } = Recharts;
 
-const API = 'http://localhost:5001';
+<div class="header">
+  <h1>Deriv ScalpBot Dashboard</h1>
+  <div class="header-right">
+    <span id="status-indicator"><span class="dot error"></span>Connecting...</span>
+    <span id="last-updated"></span>
+  </div>
+</div>
 
-function useApi(endpoint, interval = 5000) {
-  const [data, setData] = useState(null);
-  const [error, setError] = useState(null);
-  useEffect(() => {
-    let active = true;
-    const fetch_data = () => {
-      fetch(API + endpoint)
-        .then(r => r.json())
-        .then(d => { if (active) { setData(d); setError(null); } })
-        .catch(e => { if (active) setError(e.message); });
-    };
-    fetch_data();
-    const id = setInterval(fetch_data, interval);
-    return () => { active = false; clearInterval(id); };
-  }, [endpoint, interval]);
-  return { data, error };
-}
+<div class="main">
+  <div id="no-data-banner" class="no-data-banner" style="display:none">
+    Bot has not traded yet — start main.py to begin collecting data
+  </div>
 
-function StatCard({ label, value, sub, color = 'white' }) {
-  return (
-    <div className="card">
-      <div className="card-label">{label}</div>
-      <div className={`card-value ${color}`}>{value}</div>
-      {sub && <div className="card-sub">{sub}</div>}
+  <div class="cards">
+    <div class="card"><div class="card-label">Total Trades</div><div class="card-value blue" id="c-trades">—</div></div>
+    <div class="card"><div class="card-label">Win Rate</div><div class="card-value" id="c-winrate">—</div><div class="card-sub" id="c-wl"></div></div>
+    <div class="card"><div class="card-label">Total P/L</div><div class="card-value" id="c-pnl">—</div></div>
+    <div class="card"><div class="card-label">Symbol</div><div class="card-value purple" id="c-symbol">BOOM1000</div><div class="card-sub">Demo account</div></div>
+    <div class="card"><div class="card-label">Stake / Trade</div><div class="card-value yellow">$10.00</div><div class="card-sub">Max $10.00</div></div>
+  </div>
+
+  <div class="grid2">
+    <div class="panel">
+      <div class="panel-title">Cumulative P/L</div>
+      <div class="chart-wrap" id="pnl-chart"><div class="empty">No trades yet</div></div>
     </div>
-  );
+    <div class="panel">
+      <div class="panel-title">Win Rate by Strategy</div>
+      <div id="winrate-bars"><div class="empty">No strategy data yet</div></div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-title">Recent Trades</div>
+    <div id="trades-table"><div class="empty">No trades yet</div></div>
+    <div class="refresh-note">Showing last 30 trades · auto-refreshes</div>
+  </div>
+
+  <div class="grid2">
+    <div class="panel">
+      <div class="panel-title">Strategy Performance</div>
+      <div id="strategy-table"><div class="empty">No strategy data yet</div></div>
+    </div>
+    <div class="panel">
+      <div class="panel-title">Symbol Performance</div>
+      <div id="symbol-table"><div class="empty">No symbol data yet</div></div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-title">Live Bot Log</div>
+    <div class="log-box" id="log-box"><span class="log-status">Waiting for logs...</span></div>
+    <div class="refresh-note">Auto-scrolls · last 150 lines</div>
+  </div>
+</div>
+
+<script>
+const API = 'http://localhost:5001';
+let serverOnline = false;
+
+function setStatus(online) {
+  const el = document.getElementById('status-indicator');
+  if (online) {
+    el.innerHTML = '<span class="dot"></span>Live · refreshes every 5s';
+  } else {
+    el.innerHTML = '<span class="dot error"></span>Server offline — run dashboard_server.py';
+  }
 }
 
-function PnlChart({ trades }) {
-  if (!trades || trades.length === 0) return <div className="empty">No trades yet</div>;
+function fmt(n, prefix='$') {
+  const v = parseFloat(n) || 0;
+  return (v >= 0 ? prefix : '-' + prefix) + Math.abs(v).toFixed(2);
+}
+
+function colorClass(v) { return parseFloat(v) >= 0 ? 'green' : 'red'; }
+
+/* ── P/L Sparkline (SVG) ── */
+function renderPnlChart(trades) {
+  const el = document.getElementById('pnl-chart');
+  if (!trades || trades.length === 0) { el.innerHTML = '<div class="empty">No trades yet</div>'; return; }
   let running = 0;
   const points = [...trades].reverse().map((t, i) => {
-    running += t.profit || 0;
-    return { i: i + 1, pnl: parseFloat(running.toFixed(2)) };
+    running += parseFloat(t.profit) || 0;
+    return { x: i, y: parseFloat(running.toFixed(2)) };
   });
-  return (
-    <ResponsiveContainer width="100%" height={160}>
-      <LineChart data={points}>
-        <CartesianGrid strokeDasharray="3 3" stroke="#2d3148" />
-        <XAxis dataKey="i" tick={{ fill: '#64748b', fontSize: 10 }} />
-        <YAxis tick={{ fill: '#64748b', fontSize: 10 }} tickFormatter={v => `$${v}`} />
-        <Tooltip contentStyle={{ background: '#1a1d2e', border: '1px solid #3a3f5c', borderRadius: 6 }} formatter={v => [`$${v}`, 'P/L']} />
-        <Line type="monotone" dataKey="pnl" stroke="#a78bfa" strokeWidth={2} dot={false} />
-      </LineChart>
-    </ResponsiveContainer>
-  );
+  const W = 500, H = 130, pad = { t: 10, r: 10, b: 24, l: 46 };
+  const xs = points.map(p => p.x), ys = points.map(p => p.y);
+  const minY = Math.min(...ys, 0), maxY = Math.max(...ys, 0);
+  const rangeY = maxY - minY || 1;
+  const sx = x => pad.l + (x / (xs.length - 1 || 1)) * (W - pad.l - pad.r);
+  const sy = y => pad.t + (1 - (y - minY) / rangeY) * (H - pad.t - pad.b);
+  const zero = sy(0);
+  const pathD = points.map((p, i) => (i === 0 ? 'M' : 'L') + sx(p.x).toFixed(1) + ' ' + sy(p.y).toFixed(1)).join(' ');
+  const areaD = pathD + ` L${sx(xs.length-1).toFixed(1)} ${zero.toFixed(1)} L${sx(0).toFixed(1)} ${zero.toFixed(1)} Z`;
+  // y-axis ticks
+  const ticks = [minY, (minY+maxY)/2, maxY].map(v => ({v, y: sy(v)}));
+  const tickLines = ticks.map(t => `<line x1="${pad.l}" y1="${t.y.toFixed(1)}" x2="${W-pad.r}" y2="${t.y.toFixed(1)}" stroke="#2d3148" stroke-dasharray="3 3"/><text x="${(pad.l-4).toFixed(0)}" y="${(t.y+3).toFixed(0)}" text-anchor="end">$${t.v.toFixed(0)}</text>`).join('');
+  el.innerHTML = `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:${H}px">
+    ${tickLines}
+    <path d="${areaD}" fill="#a78bfa22"/>
+    <path d="${pathD}" fill="none" stroke="#a78bfa" stroke-width="2"/>
+    <line x1="${pad.l}" y1="${zero.toFixed(1)}" x2="${W-pad.r}" y2="${zero.toFixed(1)}" stroke="#4b5563" stroke-dasharray="4 2"/>
+  </svg>`;
 }
 
-function WinRateBar({ strategies }) {
-  if (!strategies || strategies.length === 0) return <div className="empty">No strategy data yet</div>;
-  return (
-    <ResponsiveContainer width="100%" height={160}>
-      <BarChart data={strategies} layout="vertical">
-        <CartesianGrid strokeDasharray="3 3" stroke="#2d3148" />
-        <XAxis type="number" domain={[0, 100]} tick={{ fill: '#64748b', fontSize: 10 }} tickFormatter={v => `${v}%`} />
-        <YAxis dataKey="strategy" type="category" tick={{ fill: '#94a3b8', fontSize: 10 }} width={90} />
-        <Tooltip contentStyle={{ background: '#1a1d2e', border: '1px solid #3a3f5c', borderRadius: 6 }} formatter={v => [`${v}%`, 'Win Rate']} />
-        <Bar dataKey="win_rate" fill="#60a5fa" radius={[0, 4, 4, 0]} />
-      </BarChart>
-    </ResponsiveContainer>
-  );
-}
-
-function LogViewer() {
-  const { data } = useApi('/api/logs', 3000);
-  const ref = useRef(null);
-  useEffect(() => {
-    if (ref.current) ref.current.scrollTop = ref.current.scrollHeight;
-  }, [data]);
-
-  const classFor = (line) => {
-    if (line.includes('ERROR'))  return 'log-error';
-    if (line.includes('WARNING') || line.includes('WARN')) return 'log-warn';
-    if (line.includes('SIGNAL')) return 'log-signal';
-    if (line.includes('TRADE'))  return 'log-trade';
-    if (line.includes('STATUS')) return 'log-status';
-    return 'log-info';
-  };
-
-  const lines = data?.lines || [];
-  return (
-    <div className="log-box" ref={ref}>
-      {lines.length === 0
-        ? <span className="log-status">Waiting for logs...</span>
-        : lines.map((l, i) => <div key={i} className={`log-line ${classFor(l)}`}>{l}</div>)
-      }
-    </div>
-  );
-}
-
-function TradesTable({ trades }) {
-  if (!trades || trades.length === 0) return <div className="empty">No trades yet</div>;
-  return (
-    <table>
-      <thead>
-        <tr>
-          <th>Time</th>
-          <th>Symbol</th>
-          <th>Strategy</th>
-          <th>Type</th>
-          <th>Stake</th>
-          <th>P/L</th>
-          <th>Result</th>
-        </tr>
-      </thead>
-      <tbody>
-        {trades.slice(0, 30).map((t, i) => {
-          const win = (t.profit || 0) > 0;
-          const ts = t.timestamp ? new Date(t.timestamp).toLocaleTimeString() : '—';
-          return (
-            <tr key={i}>
-              <td style={{color:'#64748b'}}>{ts}</td>
-              <td style={{fontWeight:600}}>{t.symbol || '—'}</td>
-              <td style={{color:'#94a3b8'}}>{(t.strategy || '—').replace('Strategy', 'S')}</td>
-              <td><span className={`badge ${t.contract_type === 'CALL' ? 'badge-call' : 'badge-put'}`}>{t.contract_type || '—'}</span></td>
-              <td>${(t.stake || 0).toFixed(2)}</td>
-              <td className={win ? 'green' : 'red'}>{win ? '+' : ''}${(t.profit || 0).toFixed(2)}</td>
-              <td><span className={`badge ${win ? 'badge-win' : 'badge-loss'}`}>{win ? 'WIN' : 'LOSS'}</span></td>
-            </tr>
-          );
-        })}
-      </tbody>
-    </table>
-  );
-}
-
-function StrategyTable({ strategies }) {
-  if (!strategies || strategies.length === 0) return <div className="empty">No strategy data yet</div>;
-  return (
-    <table>
-      <thead>
-        <tr><th>Strategy</th><th>Trades</th><th>Win Rate</th><th>P/L</th><th>ROI</th></tr>
-      </thead>
-      <tbody>
-        {strategies.map((s, i) => (
-          <tr key={i}>
-            <td style={{fontWeight:600}}>{s.strategy}</td>
-            <td>{s.trades}</td>
-            <td className={s.win_rate >= 50 ? 'green' : 'red'}>{s.win_rate}%</td>
-            <td className={s.total_pnl >= 0 ? 'green' : 'red'}>{s.total_pnl >= 0 ? '+' : ''}${s.total_pnl}</td>
-            <td className={s.roi >= 0 ? 'green' : 'red'}>{s.roi >= 0 ? '+' : ''}{s.roi}%</td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
-  );
-}
-
-function App() {
-  const { data, error } = useApi('/api/performance', 5000);
-  const [lastUpdated, setLastUpdated] = useState('');
-
-  useEffect(() => {
-    if (data) setLastUpdated(new Date().toLocaleTimeString());
-  }, [data]);
-
-  const summary = data?.summary || {};
-  const pnl = summary.total_pnl || 0;
-  const hasNoData = data?.note;
-
-  return (
-    <>
-      <div className="header">
-        <h1>Deriv ScalpBot Dashboard</h1>
-        <div className="header-right">
-          {error
-            ? <><span className="dot error"></span>Server offline — run dashboard_server.py</>
-            : <><span className="dot"></span>Live · refreshes every 5s</>
-          }
-          {lastUpdated && <span>Updated {lastUpdated}</span>}
-        </div>
+/* ── Win Rate Bars ── */
+function renderWinRateBars(strategies) {
+  const el = document.getElementById('winrate-bars');
+  if (!strategies || strategies.length === 0) { el.innerHTML = '<div class="empty">No strategy data yet</div>'; return; }
+  el.innerHTML = strategies.map(s => `
+    <div class="bar-row">
+      <div class="bar-label" title="${s.strategy}">${s.strategy.replace('Strategy','S')}</div>
+      <div class="bar-track">
+        <div class="bar-fill" style="width:${s.win_rate}%"></div>
+        <span class="bar-pct">${s.win_rate}%</span>
       </div>
-
-      <div className="main">
-        {hasNoData && <div className="no-data-banner">Bot has not traded yet — start main.py to begin collecting data</div>}
-
-        <div className="cards">
-          <StatCard label="Total Trades"  value={summary.total_trades ?? '—'} color="blue" />
-          <StatCard label="Win Rate"      value={summary.total_trades > 0 ? `${summary.win_rate}%` : '—'} color={summary.win_rate >= 50 ? 'green' : 'red'} sub={`${summary.wins ?? 0}W / ${summary.losses ?? 0}L`} />
-          <StatCard label="Total P/L"     value={summary.total_trades > 0 ? `$${pnl.toFixed(2)}` : '—'} color={pnl >= 0 ? 'green' : 'red'} />
-          <StatCard label="Symbol"        value="BOOM1000" color="purple" sub="Demo account" />
-          <StatCard label="Stake / Trade" value="$10.00"   color="yellow" sub="Max $10.00" />
-        </div>
-
-        <div className="grid2">
-          <div className="panel">
-            <div className="panel-title">Cumulative P/L</div>
-            <PnlChart trades={data?.recent_trades} />
-          </div>
-          <div className="panel">
-            <div className="panel-title">Win Rate by Strategy</div>
-            <WinRateBar strategies={data?.strategies} />
-          </div>
-        </div>
-
-        <div className="panel" style={{marginBottom:14}}>
-          <div className="panel-title">Recent Trades</div>
-          <TradesTable trades={data?.recent_trades} />
-          <div className="refresh-note">Showing last 30 trades · auto-refreshes</div>
-        </div>
-
-        <div className="grid2" style={{marginBottom:14}}>
-          <div className="panel">
-            <div className="panel-title">Strategy Performance</div>
-            <StrategyTable strategies={data?.strategies} />
-          </div>
-          <div className="panel">
-            <div className="panel-title">Symbol Performance</div>
-            <StrategyTable strategies={data?.symbols?.map(s => ({...s, strategy: s.symbol}))} />
-          </div>
-        </div>
-
-        <div className="panel">
-          <div className="panel-title">Live Bot Log</div>
-          <LogViewer />
-          <div className="refresh-note">Auto-scrolls · last 150 lines</div>
-        </div>
-      </div>
-    </>
-  );
+    </div>`).join('');
 }
 
-ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+/* ── Trades Table ── */
+function renderTradesTable(trades) {
+  const el = document.getElementById('trades-table');
+  if (!trades || trades.length === 0) { el.innerHTML = '<div class="empty">No trades yet</div>'; return; }
+  const rows = trades.slice(0, 30).map(t => {
+    const win = (parseFloat(t.profit) || 0) > 0;
+    const ts = t.timestamp ? new Date(t.timestamp).toLocaleTimeString() : '—';
+    const plSign = win ? '+' : '';
+    return `<tr>
+      <td style="color:#64748b">${ts}</td>
+      <td style="font-weight:600">${t.symbol || '—'}</td>
+      <td style="color:#94a3b8">${(t.strategy || '—').replace('Strategy','S')}</td>
+      <td><span class="badge ${t.contract_type === 'CALL' ? 'badge-call' : 'badge-put'}">${t.contract_type || '—'}</span></td>
+      <td>$${(parseFloat(t.stake)||0).toFixed(2)}</td>
+      <td class="${win ? 'green' : 'red'}">${plSign}$${(parseFloat(t.profit)||0).toFixed(2)}</td>
+      <td><span class="badge ${win ? 'badge-win' : 'badge-loss'}">${win ? 'WIN' : 'LOSS'}</span></td>
+    </tr>`;
+  }).join('');
+  el.innerHTML = `<table><thead><tr><th>Time</th><th>Symbol</th><th>Strategy</th><th>Type</th><th>Stake</th><th>P/L</th><th>Result</th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+
+/* ── Generic Stats Table ── */
+function renderStatsTable(elId, rows) {
+  const el = document.getElementById(elId);
+  if (!rows || rows.length === 0) { el.innerHTML = '<div class="empty">No data yet</div>'; return; }
+  const bodyRows = rows.map(s => {
+    const pnl = parseFloat(s.total_pnl) || 0;
+    const roi = parseFloat(s.roi) || 0;
+    const wr = parseFloat(s.win_rate) || 0;
+    return `<tr>
+      <td style="font-weight:600">${s.strategy || s.symbol}</td>
+      <td>${s.trades}</td>
+      <td class="${wr >= 50 ? 'green' : 'red'}">${wr}%</td>
+      <td class="${pnl >= 0 ? 'green' : 'red'}">${pnl >= 0 ? '+' : ''}$${pnl.toFixed(2)}</td>
+      <td class="${roi >= 0 ? 'green' : 'red'}">${roi >= 0 ? '+' : ''}${roi}%</td>
+    </tr>`;
+  }).join('');
+  el.innerHTML = `<table><thead><tr><th>Name</th><th>Trades</th><th>Win Rate</th><th>P/L</th><th>ROI</th></tr></thead><tbody>${bodyRows}</tbody></table>`;
+}
+
+/* ── Logs ── */
+function classFor(line) {
+  if (line.includes('ERROR'))   return 'log-error';
+  if (line.includes('WARNING') || line.includes('WARN')) return 'log-warn';
+  if (line.includes('SIGNAL'))  return 'log-signal';
+  if (line.includes('TRADE'))   return 'log-trade';
+  if (line.includes('STATUS'))  return 'log-status';
+  return 'log-info';
+}
+
+let logPaused = false;
+function renderLogs(lines) {
+  const box = document.getElementById('log-box');
+  if (!lines || lines.length === 0) { box.innerHTML = '<span class="log-status">Waiting for logs...</span>'; return; }
+  box.innerHTML = lines.map(l => `<div class="log-line ${classFor(l)}">${escHtml(l)}</div>`).join('');
+  if (!logPaused) box.scrollTop = box.scrollHeight;
+}
+
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+/* ── Fetch Performance ── */
+function fetchPerformance() {
+  fetch(API + '/api/performance')
+    .then(r => r.json())
+    .then(data => {
+      setStatus(true);
+      document.getElementById('last-updated').textContent = 'Updated ' + new Date().toLocaleTimeString();
+
+      const s = data.summary || {};
+      const pnl = parseFloat(s.total_pnl) || 0;
+      const wr = parseFloat(s.win_rate) || 0;
+
+      document.getElementById('c-trades').textContent = s.total_trades ?? '—';
+      const wrEl = document.getElementById('c-winrate');
+      wrEl.textContent = s.total_trades > 0 ? wr + '%' : '—';
+      wrEl.className = 'card-value ' + (wr >= 50 ? 'green' : 'red');
+      document.getElementById('c-wl').textContent = `${s.wins ?? 0}W / ${s.losses ?? 0}L`;
+      const pnlEl = document.getElementById('c-pnl');
+      pnlEl.textContent = s.total_trades > 0 ? fmt(pnl) : '—';
+      pnlEl.className = 'card-value ' + colorClass(pnl);
+
+      document.getElementById('no-data-banner').style.display = data.note ? '' : 'none';
+
+      renderPnlChart(data.recent_trades);
+      renderWinRateBars(data.strategies);
+      renderTradesTable(data.recent_trades);
+      renderStatsTable('strategy-table', data.strategies);
+      renderStatsTable('symbol-table', (data.symbols || []).map(s => ({...s, strategy: s.symbol})));
+    })
+    .catch(() => setStatus(false));
+}
+
+function fetchLogs() {
+  fetch(API + '/api/logs')
+    .then(r => r.json())
+    .then(data => renderLogs(data.lines))
+    .catch(() => {});
+}
+
+fetchPerformance();
+fetchLogs();
+setInterval(fetchPerformance, 5000);
+setInterval(fetchLogs, 3000);
 </script>
 </body>
 </html>
