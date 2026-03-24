@@ -170,7 +170,7 @@ TELEGRAM_CHAT_ID = os.getenv('TELEGRAM_CHAT_ID')
 # ============================================================================
 ENABLE_RISK_ALERTS = os.getenv('ENABLE_RISK_ALERTS', 'true').lower() == 'true'
 DAILY_LOSS_LIMIT_PCT = float(os.getenv('DAILY_LOSS_LIMIT_PCT', '30.0'))  # Stop at -30%
-DAILY_LOSS_LIMIT_USD = float(os.getenv('DAILY_LOSS_LIMIT_USD', '2.75'))  # Hard USD limit
+DAILY_LOSS_LIMIT_USD = float(os.getenv('DAILY_LOSS_LIMIT_USD', '30.00'))  # Hard USD limit
 DRAWDOWN_LIMIT_PCT = float(os.getenv('DRAWDOWN_LIMIT_PCT', '15.0'))
 MARGIN_LEVEL_WARNING = float(os.getenv('MARGIN_LEVEL_WARNING', '150.0'))
 MARGIN_LEVEL_CRITICAL = float(os.getenv('MARGIN_LEVEL_CRITICAL', '100.0'))
