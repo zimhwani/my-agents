@@ -72,7 +72,7 @@ class DerivAPI:
             bool: True if connected and authorized successfully
         """
         try:
-            self.endpoint = f"wss://ws.binaryws.com/websockets/v3?app_id={self.app_id}"
+            self.endpoint = f"wss://ws.derivws.com/websockets/v3?app_id={self.app_id}"
 
             self.ws = websocket.WebSocketApp(
                 self.endpoint,
