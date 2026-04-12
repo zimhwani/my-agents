@@ -508,6 +508,92 @@
   border-color: #b37d00;
 }
 
+/* Wing Wave Card — branded visual with organic wave divider */
+.waveCard {
+  background: white;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+  max-width: 440px;
+}
+
+.waveCardTop {
+  background: linear-gradient(160deg, #e8b788 0%, #d1b147 40%, #b37d00 100%);
+  padding: 48px 32px 40px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.waveCardLogo {
+  width: 48px;
+  height: 48px;
+  opacity: 0.35;
+}
+
+.waveCardLogoImg {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  filter: brightness(0) invert(1);
+}
+
+.waveCardHook {
+  font-family: 'Playfair Display', serif;
+  font-style: italic;
+  color: white;
+  font-size: clamp(18px, 3.5vw, 24px);
+  line-height: 1.45;
+  max-width: 340px;
+}
+
+.waveCardSub {
+  font-family: 'Lato', sans-serif;
+  font-size: 11px;
+  color: rgba(255,255,255,0.7);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-top: 4px;
+}
+
+.waveCardDivider {
+  margin-top: -1px;
+  line-height: 0;
+  background: linear-gradient(160deg, #e8b788 0%, #d1b147 40%, #b37d00 100%);
+}
+
+.waveSvg {
+  display: block;
+  width: 100%;
+  height: 40px;
+}
+
+.waveCardBottom {
+  background: #fffff8;
+  padding: 20px 28px 24px;
+  text-align: center;
+}
+
+.waveCardCaption {
+  font-family: 'Lato', sans-serif;
+  font-size: 13px;
+  line-height: 1.65;
+  color: #444;
+  max-width: 340px;
+  margin: 0 auto 14px;
+}
+
+.waveCardBrand {
+  font-family: 'Lato', sans-serif;
+  font-size: 10px;
+  color: #b37d00;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-weight: 700;
+}
+
 /* Quote Card — standalone shareable quote graphic */
 .quoteCard {
   background: white;
