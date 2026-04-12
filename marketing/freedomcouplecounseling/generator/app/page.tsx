@@ -15,6 +15,7 @@ const CHANNELS = [
 ];
 
 const CONTENT_TYPES = [
+  { value: "quote_card", label: "Quote Card" },
   { value: "destigmatisation", label: "Destigmatisation" },
   { value: "testimonial", label: "Client Testimonial / Social Proof" },
   { value: "intercultural", label: "Intercultural Couples" },
@@ -26,11 +27,19 @@ const CONTENT_TYPES = [
 ];
 
 const GRADIENTS = [
-  "linear-gradient(135deg, #1A3C2A 0%, #4A7C5E 100%)",
-  "linear-gradient(135deg, #4A7C5E 0%, #7A9E85 100%)",
-  "linear-gradient(135deg, #C4714A 0%, #D4956E 100%)",
-  "linear-gradient(135deg, #1A3C2A 0%, #4A7C5E 60%, #7A9E85 100%)",
-  "linear-gradient(135deg, #2D2D2D 0%, #1A3C2A 100%)",
+  "linear-gradient(135deg, #b37d00 0%, #d1b147 100%)",
+  "linear-gradient(135deg, #d1b147 0%, #e8b788 100%)",
+  "linear-gradient(135deg, #b37d00 0%, #e8b788 100%)",
+  "linear-gradient(135deg, #9a6c00 0%, #b37d00 60%, #d1b147 100%)",
+  "linear-gradient(135deg, #131313 0%, #b37d00 100%)",
+];
+
+const QUOTE_GRADIENTS = [
+  "linear-gradient(135deg, #b37d00 0%, #d1b147 100%)",
+  "linear-gradient(135deg, #9a6c00 0%, #b37d00 100%)",
+  "linear-gradient(135deg, #d1b147 0%, #e8b788 100%)",
+  "linear-gradient(160deg, #131313 0%, #b37d00 100%)",
+  "linear-gradient(135deg, #b37d00 0%, #ccaed0 100%)",
 ];
 
 function extractHookLine(text: string): string {
@@ -68,9 +77,37 @@ function extractHashtags(text: string): string {
   return match ? match[0].trim() : "";
 }
 
+function extractQuote(text: string): { quote: string; attribution: string } {
+  const lines = text.split("\n").filter((l) => l.trim());
+  let quote = "";
+  let attribution = "Jill Dzadey — Freedom Couple Counselling";
+
+  for (const line of lines) {
+    const clean = line.replace(/^[\s*#>-]+/, "").trim();
+    // Look for quoted text
+    const quoteMatch = clean.match(/^[""\u201C](.+?)[""\u201D]$/);
+    if (quoteMatch && !quote) {
+      quote = quoteMatch[1];
+      continue;
+    }
+    // Look for attribution line
+    if (quote && (clean.startsWith("—") || clean.startsWith("-") || clean.startsWith("~"))) {
+      attribution = clean.replace(/^[—\-~]\s*/, "");
+      break;
+    }
+    // If no quoted text found, grab first substantial line as the quote
+    if (!quote && clean.length > 15 && clean.length < 150 && !clean.startsWith("[") && !clean.startsWith("QUOTE") && !clean.includes("IMAGE PROMPT")) {
+      quote = clean;
+    }
+  }
+
+  if (!quote) quote = "Every couple deserves a fulfilling, connected, and thriving relationship.";
+  return { quote, attribution };
+}
+
 export default function Home() {
   const [channel, setChannel] = useState("instagram_post");
-  const [contentType, setContentType] = useState("destigmatisation");
+  const [contentType, setContentType] = useState("quote_card");
   const [customContext, setCustomContext] = useState("");
   const [output, setOutput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -142,11 +179,21 @@ export default function Home() {
     setTimeout(() => setCopied(false), 2000);
   }
 
+  const [quoteCardCopied, setQuoteCardCopied] = useState(false);
+  async function copyQuoteText() {
+    const { quote, attribution } = extractQuote(copyPart);
+    const text = `"${quote}"\n— ${attribution}`;
+    await navigator.clipboard.writeText(text);
+    setQuoteCardCopied(true);
+    setTimeout(() => setQuoteCardCopied(false), 2000);
+  }
+
   const hasSections = output.includes("--- IMAGE PROMPT ---");
   const copyPart = hasSections ? output.split("--- IMAGE PROMPT ---")[0]?.trim() : output;
   const imagePart = hasSections ? output.split("--- IMAGE PROMPT ---")[1]?.trim() : "";
 
   const isInstagramPost = channel === "instagram_post";
+  const isQuoteCard = contentType === "quote_card";
   const gradientIndex = useMemo(
     () => Math.floor(Math.random() * GRADIENTS.length),
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -157,7 +204,7 @@ export default function Home() {
 
   return (
     <main className={styles.main}>
-      {/* Header — no Claude AI pill */}
+      {/* Header */}
       <header className={styles.header}>
         <div className={styles.headerInner}>
           <div className={styles.logo}>
@@ -254,8 +301,46 @@ export default function Home() {
 
           {(output || loading) && (
             <>
-              {/* Post-ready content card for Instagram posts */}
-              {isInstagramPost && hasSections && (
+              {/* Quote Card preview */}
+              {isQuoteCard && hasSections && (
+                <div className={styles.quoteCard}>
+                  <div
+                    className={styles.quoteCardInner}
+                    style={{ background: QUOTE_GRADIENTS[gradientIndex] }}
+                  >
+                    <div className={styles.quoteCardMark}>&ldquo;</div>
+                    <div className={styles.quoteCardText}>
+                      {extractQuote(copyPart).quote}
+                    </div>
+                    <div className={styles.quoteCardDivider} />
+                    <div className={styles.quoteCardAttrib}>
+                      {extractQuote(copyPart).attribution}
+                    </div>
+                    <div className={styles.quoteCardBrand}>
+                      freedomcouplecounselling.com
+                    </div>
+                  </div>
+                  <div className={styles.quoteCardCopyBar}>
+                    <button
+                      className={styles.quoteCardCopyBtn}
+                      onClick={copyQuoteText}
+                    >
+                      {quoteCardCopied ? "Copied!" : "Copy Quote"}
+                    </button>
+                    {imagePart && (
+                      <button
+                        className={styles.quoteCardCopyBtn}
+                        onClick={() => copySectionText("image")}
+                      >
+                        {copySection === "image" ? "Copied!" : "Copy Image Prompt"}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Instagram Post content card */}
+              {isInstagramPost && !isQuoteCard && hasSections && (
                 <div className={styles.contentCard}>
                   <div className={styles.contentCardHeader}>
                     <div className={styles.contentCardAvatar}>🌿</div>
@@ -286,7 +371,7 @@ export default function Home() {
                   </div>
                   <div className={styles.contentCardBody}>
                     <div className={styles.contentCardCaption}>
-                      <span className="handle" style={{ fontWeight: 700 }}>freedomcouplecounselling</span>{" "}
+                      <span style={{ fontWeight: 700 }}>freedomcouplecounselling</span>{" "}
                       {extractCaption(copyPart)}
                     </div>
                   </div>
@@ -320,7 +405,7 @@ export default function Home() {
                   <div className={styles.outputBlock}>
                     <div className={styles.outputBlockHeader}>
                       <span className={styles.outputBlockLabel}>
-                        {isInstagramPost ? "Full Caption" : "Marketing Copy"}
+                        {isQuoteCard ? "Quote Copy" : isInstagramPost ? "Full Caption" : "Marketing Copy"}
                       </span>
                       <button
                         className={styles.copyBtn}

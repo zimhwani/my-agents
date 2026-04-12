@@ -1,16 +1,17 @@
 @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400;1,600&family=Lato:wght@300;400;700&family=Cormorant+Garamond:ital,wght@0,400;1,400;1,500&display=swap');
 
 :root {
-  --forest: #1A3C2A;
-  --sage: #4A7C5E;
-  --cream: #F5F0E8;
-  --terra: #C4714A;
-  --moss: #7A9E85;
-  --charcoal: #2D2D2D;
-  --off-white: #FAFAF7;
-  --gradient-primary: linear-gradient(135deg, #1A3C2A 0%, #4A7C5E 50%, #7A9E85 100%);
-  --gradient-warm: linear-gradient(135deg, #F5F0E8 0%, #EDE5D8 100%);
-  --gradient-terra: linear-gradient(135deg, #C4714A 0%, #D4956E 100%);
+  --gold: #b37d00;
+  --gold-light: #d1b147;
+  --cream: #fffff8;
+  --peach: #e8b788;
+  --light-peach: #f4ebd7;
+  --lavender: #ccaed0;
+  --charcoal: #131313;
+  --off-white: #fffff8;
+  --gradient-primary: linear-gradient(135deg, #b37d00 0%, #d1b147 50%, #e8b788 100%);
+  --gradient-warm: linear-gradient(135deg, #f4ebd7 0%, #fffff8 100%);
+  --gradient-peach: linear-gradient(135deg, #e8b788 0%, #f4ebd7 100%);
 }
 
 * {

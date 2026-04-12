@@ -1,5 +1,6 @@
 /* =============================================
    FCC Marketing Generator — Page Styles
+   Golden/Warm brand palette
    ============================================= */
 
 .main {
@@ -13,7 +14,7 @@
 .header {
   background: var(--gradient-primary);
   padding: 20px 32px;
-  box-shadow: 0 2px 16px rgba(26, 60, 42, 0.25);
+  box-shadow: 0 2px 16px rgba(179, 125, 0, 0.25);
 }
 
 .headerInner {
@@ -35,9 +36,9 @@
 .logoMark {
   width: 44px;
   height: 44px;
-  background: rgba(255,255,255,0.15);
-  border: 1.5px solid rgba(196, 113, 74, 0.6);
-  border-radius: 10px;
+  background: rgba(255,255,255,0.2);
+  border: 1.5px solid rgba(255,255,255,0.4);
+  border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -53,7 +54,7 @@
 
 .logoSub {
   font-size: 12px;
-  color: rgba(255,255,255,0.7);
+  color: rgba(255,255,255,0.8);
   font-weight: 300;
   letter-spacing: 0.03em;
   margin-top: 2px;
@@ -66,8 +67,8 @@
 }
 
 .pill {
-  background: rgba(255,255,255,0.15);
-  border: 1px solid rgba(255,255,255,0.25);
+  background: rgba(255,255,255,0.2);
+  border: 1px solid rgba(255,255,255,0.35);
   color: #fff;
   padding: 4px 12px;
   border-radius: 20px;
@@ -91,7 +92,7 @@
   width: 340px;
   min-width: 300px;
   background: #fff;
-  border-right: 1px solid #e0ddd8;
+  border-right: 1px solid #ede5d8;
   padding: 32px 24px;
   display: flex;
   flex-direction: column;
@@ -106,7 +107,7 @@
   font-family: 'Playfair Display', serif;
   font-size: 20px;
   font-weight: 600;
-  color: var(--forest);
+  color: var(--gold);
   margin-bottom: 0;
 }
 
@@ -121,7 +122,7 @@
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--sage);
+  color: #b37d00;
 }
 
 .optional {
@@ -139,7 +140,7 @@
 
 .segment {
   background: var(--off-white);
-  border: 1.5px solid #e0ddd8;
+  border: 1.5px solid #ede5d8;
   border-radius: 8px;
   padding: 9px 14px;
   font-size: 13px;
@@ -152,25 +153,25 @@
 }
 
 .segment:hover {
-  border-color: var(--sage);
-  background: #f0ede8;
+  border-color: #d1b147;
+  background: #faf5e8;
 }
 
 .segmentActive {
-  background: var(--forest);
-  border-color: var(--forest);
+  background: #b37d00;
+  border-color: #b37d00;
   color: #fff;
   font-weight: 700;
 }
 
 .segmentActive:hover {
-  background: #153222;
-  border-color: #153222;
+  background: #9a6c00;
+  border-color: #9a6c00;
 }
 
 .textarea {
   width: 100%;
-  border: 1.5px solid #e0ddd8;
+  border: 1.5px solid #ede5d8;
   border-radius: 8px;
   padding: 10px 12px;
   font-size: 13px;
@@ -184,7 +185,7 @@
 
 .textarea:focus {
   outline: none;
-  border-color: var(--sage);
+  border-color: #d1b147;
   background: #fff;
 }
 
@@ -225,8 +226,8 @@
 
 .btnStop {
   background: #fff;
-  color: var(--terra);
-  border: 2px solid var(--terra);
+  color: #c44a4a;
+  border: 2px solid #c44a4a;
   border-radius: 10px;
   padding: 12px 20px;
   font-family: 'Lato', sans-serif;
@@ -240,13 +241,13 @@
 }
 
 .btnStop:hover {
-  background: #fdf5f0;
+  background: #fdf0f0;
 }
 
 .btnSecondary {
   background: transparent;
-  color: var(--forest);
-  border: 1.5px solid var(--sage);
+  color: #b37d00;
+  border: 1.5px solid #d1b147;
   border-radius: 8px;
   padding: 10px 20px;
   font-family: 'Lato', sans-serif;
@@ -258,8 +259,8 @@
 }
 
 .btnSecondary:hover {
-  background: var(--cream);
-  border-color: var(--forest);
+  background: #faf5e8;
+  border-color: #b37d00;
 }
 
 .hint {
@@ -293,14 +294,14 @@
 
 .emptyIcon {
   font-size: 36px;
-  color: var(--terra);
+  color: #b37d00;
   margin-bottom: 8px;
 }
 
 .emptyState h3 {
   font-family: 'Playfair Display', serif;
   font-size: 22px;
-  color: var(--forest);
+  color: #b37d00;
 }
 
 .emptyState p {
@@ -330,14 +331,14 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  border-bottom: 1px solid #f0ede8;
+  border-bottom: 1px solid #f4ebd7;
 }
 
 .contentCardAvatar {
   width: 36px;
   height: 36px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #1A3C2A, #4A7C5E);
+  background: linear-gradient(135deg, #b37d00, #d1b147);
   flex-shrink: 0;
   display: flex;
   align-items: center;
@@ -418,10 +419,6 @@
   word-break: break-word;
 }
 
-.contentCardCaption .handle {
-  font-weight: 700;
-}
-
 .contentCardHashtags {
   padding: 0 14px 10px;
   font-size: 12px;
@@ -433,13 +430,13 @@
   padding: 8px 14px 12px;
   display: flex;
   gap: 8px;
-  border-top: 1px solid #f0ede8;
+  border-top: 1px solid #f4ebd7;
 }
 
 .contentCardCopyBtn {
-  background: var(--cream);
-  border: 1px solid #e0ddd8;
-  color: var(--forest);
+  background: #f4ebd7;
+  border: 1px solid #ede5d8;
+  color: #b37d00;
   border-radius: 6px;
   padding: 6px 14px;
   font-size: 11px;
@@ -450,23 +447,114 @@
 }
 
 .contentCardCopyBtn:hover {
-  background: var(--forest);
+  background: #b37d00;
   color: #fff;
-  border-color: var(--forest);
+  border-color: #b37d00;
 }
 
-/* Raw output block (fallback for non-Instagram) */
-.outputBlock {
-  background: #fff;
-  border: 1.5px solid #e0ddd8;
+/* Quote Card — standalone shareable quote graphic */
+.quoteCard {
+  background: white;
   border-radius: 12px;
   overflow: hidden;
-  box-shadow: 0 2px 12px rgba(26, 60, 42, 0.06);
+  box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+  max-width: 440px;
+}
+
+.quoteCardInner {
+  width: 100%;
+  aspect-ratio: 1/1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 36px;
+  text-align: center;
+  position: relative;
+}
+
+.quoteCardMark {
+  font-family: 'Playfair Display', serif;
+  font-size: 64px;
+  line-height: 1;
+  color: rgba(255,255,255,0.25);
+  margin-bottom: 8px;
+}
+
+.quoteCardText {
+  font-family: 'Playfair Display', serif;
+  font-style: italic;
+  color: white;
+  font-size: clamp(18px, 3.5vw, 24px);
+  line-height: 1.5;
+  max-width: 320px;
+}
+
+.quoteCardDivider {
+  width: 40px;
+  height: 2px;
+  background: rgba(255,255,255,0.4);
+  margin: 16px auto;
+  border-radius: 1px;
+}
+
+.quoteCardAttrib {
+  font-family: 'Lato', sans-serif;
+  font-size: 12px;
+  color: rgba(255,255,255,0.75);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-weight: 400;
+}
+
+.quoteCardBrand {
+  font-family: 'Lato', sans-serif;
+  font-size: 10px;
+  color: rgba(255,255,255,0.45);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  position: absolute;
+  bottom: 20px;
+}
+
+.quoteCardCopyBar {
+  padding: 10px 14px;
+  display: flex;
+  gap: 8px;
+  border-top: 1px solid #f4ebd7;
+}
+
+.quoteCardCopyBtn {
+  background: #f4ebd7;
+  border: 1px solid #ede5d8;
+  color: #b37d00;
+  border-radius: 6px;
+  padding: 6px 14px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.quoteCardCopyBtn:hover {
+  background: #b37d00;
+  color: #fff;
+  border-color: #b37d00;
+}
+
+/* Raw output block */
+.outputBlock {
+  background: #fff;
+  border: 1.5px solid #ede5d8;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 2px 12px rgba(179, 125, 0, 0.06);
 }
 
 .outputBlockImage {
-  border-color: var(--terra);
-  background: #fdf9f4;
+  border-color: #d1b147;
+  background: #fdfaf4;
 }
 
 .outputBlockHeader {
@@ -474,13 +562,13 @@
   align-items: center;
   justify-content: space-between;
   padding: 12px 18px;
-  background: var(--cream);
-  border-bottom: 1px solid #e0ddd8;
+  background: #f4ebd7;
+  border-bottom: 1px solid #ede5d8;
 }
 
 .outputBlockImage .outputBlockHeader {
-  background: linear-gradient(135deg, #fdf5ee 0%, #fdf9f4 100%);
-  border-bottom-color: rgba(196, 113, 74, 0.3);
+  background: linear-gradient(135deg, #fdf5e2 0%, #fdfaf4 100%);
+  border-bottom-color: rgba(209, 177, 71, 0.3);
 }
 
 .outputBlockLabel {
@@ -488,17 +576,17 @@
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--sage);
+  color: #b37d00;
 }
 
 .outputBlockImage .outputBlockLabel {
-  color: #a06830;
+  color: #9a6c00;
 }
 
 .copyBtn {
   background: transparent;
-  border: 1px solid var(--sage);
-  color: var(--forest);
+  border: 1px solid #d1b147;
+  color: #b37d00;
   border-radius: 6px;
   padding: 4px 12px;
   font-size: 11px;
@@ -509,9 +597,9 @@
 }
 
 .copyBtn:hover {
-  background: var(--forest);
+  background: #b37d00;
   color: #fff;
-  border-color: var(--forest);
+  border-color: #b37d00;
 }
 
 .outputText {
@@ -528,7 +616,7 @@
   display: inline-block;
   width: 2px;
   height: 16px;
-  background: var(--terra);
+  background: #b37d00;
   border-radius: 1px;
   animation: blink 1s step-end infinite;
   vertical-align: middle;
@@ -558,7 +646,7 @@
     max-height: none;
     position: static;
     border-right: none;
-    border-bottom: 1px solid #e0ddd8;
+    border-bottom: 1px solid #ede5d8;
   }
 
   .outputSection {

@@ -58,15 +58,16 @@ Credentials: 12+ years experience, Master of Social Science (Couple Counselling)
 As heard on: ABC / Triple J "The Hook Up", My Daily Business Podcast, The Broke Generation Podcast.
 
 ## COLOUR PALETTE (for image prompt guidance)
-- Deep Forest Green: #1A3C2A (primary headings, CTAs)
-- Sage Green: #4A7C5E (secondary elements, accents)
-- Warm Cream: #F5F0E8 (backgrounds, cards)
-- Terracotta: #C4714A (warm accents, highlights)
-- Soft Moss: #7A9E85 (mid-tone, supporting)
-- Charcoal: #2D2D2D (body text)
+- Gold/Amber: #b37d00 (primary headings, CTAs, buttons)
+- Light Gold: #d1b147 (featured elements, accents)
+- Peach/Tan: #e8b788 (warm accents, headline backgrounds)
+- Light Peach: #f4ebd7 (menu backgrounds, soft sections)
+- Cream: #fffff8 (backgrounds, cards)
+- Lavender: #ccaed0 (services section, soft accent)
+- Dark: #131313 (body text)
 
 ## IMAGERY STYLE
-Real couples — diverse, multicultural, 25–55, in genuine moments of connection (not posed stock photography). Natural light, warm interiors, outdoor spaces, Melbourne lifestyle. Mood: safe, warm, hopeful, connected. Never clinical/cold, never sad/distressed couples.
+Real couples — diverse, multicultural, 25–55, in genuine moments of connection (not posed stock photography). Natural light, warm interiors, outdoor spaces, Melbourne lifestyle. Mood: safe, warm, hopeful, connected. Never clinical/cold, never sad/distressed couples. Use warm gold and cream tones in creative — NOT green.
 
 ## HASHTAGS
 #FreedomCoupleCounselling #CouplesCounselling #CouplesTherapy #RelationshipGoals #MelbourneCouples #InterculturalRelationships #ChristianCounselling #GottmanMethod #EFT #RelationshipHelp #HealingTogether #MelbourneTherapist
@@ -97,6 +98,7 @@ const channelInstructions: Record<string, string> = {
 };
 
 const contentTypeInstructions: Record<string, string> = {
+  quote_card: `This is a quote card — a standalone shareable graphic. Generate a powerful, concise quote (max 15 words) that captures Jill's philosophy about relationships, couples therapy, or love. The quote should feel warm, hopeful, and non-judgmental. Format: Start with the quote in quotation marks on its own line, then "— Attribution" on the next line (e.g. "— Jill Dzadey, Couples Counsellor"). Then add a short caption (2–3 sentences) for the social media post accompanying the quote card. The quote card will be rendered as a 1:1 square graphic with the FCC gold/cream brand palette.`,
   destigmatisation: `This is a destigmatisation piece. Normalise couples counselling — position it as proactive, not a last resort. Speak warmly to the reluctant partner. Use stats or common myths to bust stigma. Make therapy feel accessible and inviting.`,
   testimonial: `This is a testimonial/social proof piece. Lead with or weave in one of the client testimonials. Celebrate real outcomes — not clinical results, but human connection restored. Tie back to why couples should reach out to Jill.`,
   intercultural: `This is content focused on intercultural couples. Highlight the unique challenges of navigating different cultural values, family expectations, and communication styles within a relationship. Position Jill's Zambian background and lived experience as a genuine differentiator.`,
@@ -132,7 +134,7 @@ Content type focus: ${contentTypeInstructions[contentType] ?? "Create compelling
 
 ${customContext ? `Additional context from user: ${customContext}` : ""}
 
-After the marketing copy, add a section titled "--- IMAGE PROMPT ---" with a detailed image generation prompt (for Midjourney / DALL-E / Stable Diffusion) that fits this content. The image should reflect the Freedom Couple Counselling brand: Deep Forest Green (#1A3C2A), Sage Green (#4A7C5E), Warm Cream (#F5F0E8), Terracotta (#C4714A), warm and natural aesthetic, diverse couples 25–55, genuine connection, Melbourne lifestyle. Specify: subject, lighting, mood, colour palette, style references, aspect ratio.`;
+After the marketing copy, add a section titled "--- IMAGE PROMPT ---" with a detailed image generation prompt (for Midjourney / DALL-E / Stable Diffusion) that fits this content. The image should reflect the Freedom Couple Counselling brand: Gold (#b37d00), Light Gold (#d1b147), Peach (#e8b788), Cream (#fffff8), warm and golden aesthetic, diverse couples 25–55, genuine connection, Melbourne lifestyle. Do NOT use green tones. Specify: subject, lighting, mood, colour palette, style references, aspect ratio.`;
 
   const encoder = new TextEncoder();
 
