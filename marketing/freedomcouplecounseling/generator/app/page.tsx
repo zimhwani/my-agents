@@ -50,9 +50,20 @@ const QUOTE_GRADIENTS = [
 ];
 
 function extractHookLine(text: string): string {
+  // First try: find text wrapped in **bold** markers (the actual hook)
+  const boldMatch = text.match(/\*\*(.{10,120}?)\*\*/);
+  if (boldMatch) {
+    return boldMatch[1].replace(/[""\u201C\u201D]/g, "").trim();
+  }
+
+  // Second try: find a line that looks like real copy, skipping headers/labels
   const lines = text.split("\n").filter((l) => l.trim());
   for (const line of lines) {
     const clean = line.replace(/^[\s*#>-]+/, "").trim();
+    // Skip lines that look like labels (contain em dash with title case on both sides)
+    if (/^[A-Z][a-z]+ (Post|Story|Reel|Ad|Campaign|Thread)\s*[—\-]/.test(clean)) continue;
+    // Skip section headers
+    if (/^(HEADLINE|HOOK|CAPTION|SUBJECT|PRIMARY|CTA|SCRIPT)/i.test(clean)) continue;
     if (clean.length > 10 && clean.length < 120 && !clean.startsWith("[")) {
       return clean;
     }
@@ -67,6 +78,9 @@ function extractCaption(text: string): string {
 
   for (const line of lines) {
     const trimmed = line.trim();
+    // Skip label/header lines
+    if (!started && /^(HEADLINE|HOOK|CAPTION|SUBJECT|PRIMARY|CTA|SCRIPT)/i.test(trimmed)) continue;
+    if (!started && /^[A-Z][a-z]+ (Post|Story|Reel|Ad|Campaign|Thread)\s*[—\-]/.test(trimmed)) continue;
     if (!started && trimmed.length > 20 && !trimmed.startsWith("#") && !trimmed.startsWith("---")) {
       started = true;
     }
@@ -76,7 +90,8 @@ function extractCaption(text: string): string {
     }
   }
 
-  return captionLines.join("\n").trim().slice(0, 600);
+  // Strip markdown bold markers
+  return captionLines.join("\n").trim().replace(/\*\*/g, "").slice(0, 600);
 }
 
 function extractHashtags(text: string): string {
