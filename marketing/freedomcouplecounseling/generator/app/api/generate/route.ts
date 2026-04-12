@@ -125,7 +125,12 @@ export async function POST(request: NextRequest) {
   const channelLabel = channel.replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase());
   const contentLabel = contentType.replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase());
 
+  // Add variation seed so regenerations produce different content
+  const variationSeed = Math.floor(Math.random() * 10000);
+
   const userPrompt = `Generate ${contentLabel} content for the ${channelLabel} channel for Freedom Couple Counselling.
+
+IMPORTANT: Create a FRESH, UNIQUE variation. Use a different hook, angle, and opening line than you might have used before. Variation seed: ${variationSeed}
 
 Platform requirements: ${channelInstructions[channel] ?? "Follow best practices for the platform."}
 
@@ -143,6 +148,7 @@ After the marketing copy, add a section titled "--- IMAGE PROMPT ---" with a det
         const response = await client.messages.create({
           model: "claude-opus-4-6",
           max_tokens: 16000,
+          temperature: 1,
           thinking: {
             type: "enabled",
             budget_tokens: 8000,
