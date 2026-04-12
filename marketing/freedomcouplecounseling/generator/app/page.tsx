@@ -585,97 +585,260 @@ export default function Home() {
                     ))}
                   </div>
 
-                  {/* Visible preview */}
-                  <div className={styles.quoteCard}>
-                    <div
-                      className={styles.quoteCardInner}
-                      style={{
-                        background: activeGradient,
-                        aspectRatio: currentFormat.ratio,
-                      }}
+                  {/* Style toggle */}
+                  <div className={styles.cardStyleToggle}>
+                    <button
+                      className={`${styles.cardStyleBtn} ${cardStyle === "classic" ? styles.cardStyleBtnActive : ""}`}
+                      onClick={() => setCardStyle("classic")}
                     >
-                      <div className={styles.quoteCardLogo}>
-                        <img src="/logo.png" alt="" className={styles.quoteCardLogoImg} />
-                      </div>
-                      <div className={styles.quoteCardMark}>&ldquo;</div>
-                      <div className={styles.quoteCardText} style={{
-                        fontSize: currentFormat.value === "landscape" ? "clamp(16px, 3vw, 22px)" : "clamp(18px, 3.5vw, 24px)",
-                      }}>
-                        {editableQuote}
-                      </div>
-                      <div className={styles.quoteCardDivider} />
-                      <div className={styles.quoteCardAttrib}>
-                        {editableAttrib}
-                      </div>
-                      <div className={styles.quoteCardBrand}>
-                        freedomcouplecounselling.com
-                      </div>
-                    </div>
-                    <div className={styles.quoteCardCopyBar}>
-                      <button
-                        className={styles.quoteCardCopyBtn}
-                        onClick={copyQuoteText}
-                      >
-                        {quoteCardCopied ? "Copied!" : "Copy Quote"}
-                      </button>
-                      <button
-                        className={styles.quoteCardDownloadBtn}
-                        onClick={downloadQuoteCard}
-                        disabled={downloading}
-                      >
-                        {downloading ? "Downloading..." : `Download PNG (${currentFormat.dims})`}
-                      </button>
-                    </div>
+                      Classic
+                    </button>
+                    <button
+                      className={`${styles.cardStyleBtn} ${cardStyle === "wave" ? styles.cardStyleBtnActive : ""}`}
+                      onClick={() => setCardStyle("wave")}
+                    >
+                      Wave
+                    </button>
                   </div>
+
+                  {/* Classic quote card */}
+                  {cardStyle === "classic" && (
+                    <div className={styles.quoteCard}>
+                      <div
+                        className={styles.quoteCardInner}
+                        style={{
+                          background: activeGradient,
+                          aspectRatio: currentFormat.ratio,
+                        }}
+                      >
+                        <div className={styles.quoteCardLogo}>
+                          <img src="/logo.png" alt="" className={styles.quoteCardLogoImg} />
+                        </div>
+                        <div className={styles.quoteCardMark}>&ldquo;</div>
+                        <div className={styles.quoteCardText} style={{
+                          fontSize: currentFormat.value === "landscape" ? "clamp(16px, 3vw, 22px)" : "clamp(18px, 3.5vw, 24px)",
+                        }}>
+                          {editableQuote}
+                        </div>
+                        <div className={styles.quoteCardDivider} />
+                        <div className={styles.quoteCardAttrib}>
+                          {editableAttrib}
+                        </div>
+                        <div className={styles.quoteCardBrand}>
+                          freedomcouplecounselling.com
+                        </div>
+                      </div>
+                      <div className={styles.quoteCardCopyBar}>
+                        <button className={styles.quoteCardCopyBtn} onClick={copyQuoteText}>
+                          {quoteCardCopied ? "Copied!" : "Copy Quote"}
+                        </button>
+                        <button className={styles.quoteCardDownloadBtn} onClick={downloadQuoteCard} disabled={downloading}>
+                          {downloading ? "Downloading..." : `Download PNG (${currentFormat.dims})`}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Wave quote card */}
+                  {cardStyle === "wave" && (
+                    <div className={styles.waveCard} style={{ maxWidth: currentFormat.value === "landscape" ? "540px" : "440px" }}>
+                      <div className={styles.waveCardTop} style={{ aspectRatio: currentFormat.ratio, justifyContent: "center" }}>
+                        <div className={styles.waveCardLogo}>
+                          <img src="/logo.png" alt="" className={styles.waveCardLogoImg} />
+                        </div>
+                        <div className={styles.quoteCardMark} style={{ marginBottom: 4 }}>&ldquo;</div>
+                        <div className={styles.waveCardHook} style={{
+                          fontSize: currentFormat.value === "landscape" ? "clamp(16px, 3vw, 22px)" : "clamp(18px, 3.5vw, 24px)",
+                        }}>
+                          {editableQuote}
+                        </div>
+                        <div style={{ width: 40, height: 2, background: "rgba(255,255,255,0.4)", margin: "12px auto", borderRadius: 1 }} />
+                        <div className={styles.waveCardSub} style={{ fontSize: 12, letterSpacing: "0.1em" }}>
+                          {editableAttrib}
+                        </div>
+                        <div className={styles.quoteCardBrand} style={{ color: "rgba(255,255,255,0.45)" }}>
+                          freedomcouplecounselling.com
+                        </div>
+                      </div>
+                      <div className={styles.waveCardDivider}>
+                        <svg viewBox="0 0 440 60" preserveAspectRatio="none" className={styles.waveSvg}>
+                          <path d="M0,30 C80,55 160,0 220,30 C280,60 360,5 440,30 L440,60 L0,60 Z" fill="#fffff8" />
+                        </svg>
+                      </div>
+                      <div className={styles.waveCardBottom} style={{ paddingTop: 8, paddingBottom: 16 }}>
+                        <div className={styles.waveCardBrand}>
+                          freedomcouplecounselling.com
+                        </div>
+                      </div>
+                      <div className={styles.quoteCardCopyBar}>
+                        <button className={styles.quoteCardCopyBtn} onClick={copyQuoteText}>
+                          {quoteCardCopied ? "Copied!" : "Copy Quote"}
+                        </button>
+                        <button className={styles.quoteCardDownloadBtn} onClick={downloadQuoteCard} disabled={downloading}>
+                          {downloading ? "Downloading..." : `Download PNG (${currentFormat.dims})`}
+                        </button>
+                      </div>
+                    </div>
+                  )}
 
                   {/* Hidden high-res capture target */}
                   <div className={styles.captureTarget}>
                     <div
                       ref={captureRef}
-                      className={styles.captureInner}
                       style={{
                         width: currentFormat.width,
                         height: currentFormat.height,
-                        background: activeGradient,
-                        padding: captureStyles.padding,
+                        overflow: "hidden",
+                        position: "relative",
                       }}
                     >
-                      <div className={styles.captureLogo} style={{
-                        width: captureStyles.logo.width,
-                        height: captureStyles.logo.height,
-                        marginBottom: captureStyles.logo.height * 0.25,
-                      }}>
-                        <img src="/logo.png" alt="" className={styles.captureLogoImg} />
-                      </div>
-                      <div className={styles.captureMark} style={{
-                        fontSize: captureStyles.mark,
-                        marginBottom: captureStyles.mark * 0.12,
-                      }}>
-                        &ldquo;
-                      </div>
-                      <div className={styles.captureText} style={{
-                        fontSize: captureStyles.text,
-                      }}>
-                        {editableQuote}
-                      </div>
-                      <div className={styles.captureDivider} style={{
-                        width: captureStyles.dividerW,
-                        height: captureStyles.dividerH,
-                        margin: `${captureStyles.dividerW * 0.4}px auto`,
-                      }} />
-                      <div className={styles.captureAttrib} style={{
-                        fontSize: captureStyles.attrib,
-                        letterSpacing: captureStyles.letterSpacing,
-                      }}>
-                        {editableAttrib}
-                      </div>
-                      <div className={styles.captureBrand} style={{
-                        fontSize: captureStyles.brand,
-                        letterSpacing: captureStyles.letterSpacing * 1.2,
-                        bottom: captureStyles.brandBottom,
-                      }}>
-                        freedomcouplecounselling.com
-                      </div>
+                      {cardStyle === "classic" ? (
+                        /* Classic capture */
+                        <div
+                          className={styles.captureInner}
+                          style={{
+                            width: currentFormat.width,
+                            height: currentFormat.height,
+                            background: activeGradient,
+                            padding: captureStyles.padding,
+                          }}
+                        >
+                          <div className={styles.captureLogo} style={{
+                            width: captureStyles.logo.width,
+                            height: captureStyles.logo.height,
+                            marginBottom: captureStyles.logo.height * 0.25,
+                          }}>
+                            <img src="/logo.png" alt="" className={styles.captureLogoImg} />
+                          </div>
+                          <div className={styles.captureMark} style={{
+                            fontSize: captureStyles.mark,
+                            marginBottom: captureStyles.mark * 0.12,
+                          }}>
+                            &ldquo;
+                          </div>
+                          <div className={styles.captureText} style={{ fontSize: captureStyles.text }}>
+                            {editableQuote}
+                          </div>
+                          <div className={styles.captureDivider} style={{
+                            width: captureStyles.dividerW,
+                            height: captureStyles.dividerH,
+                            margin: `${captureStyles.dividerW * 0.4}px auto`,
+                          }} />
+                          <div className={styles.captureAttrib} style={{
+                            fontSize: captureStyles.attrib,
+                            letterSpacing: captureStyles.letterSpacing,
+                          }}>
+                            {editableAttrib}
+                          </div>
+                          <div className={styles.captureBrand} style={{
+                            fontSize: captureStyles.brand,
+                            letterSpacing: captureStyles.letterSpacing * 1.2,
+                            bottom: captureStyles.brandBottom,
+                          }}>
+                            freedomcouplecounselling.com
+                          </div>
+                        </div>
+                      ) : (
+                        /* Wave capture */
+                        <div style={{
+                          width: currentFormat.width,
+                          height: currentFormat.height,
+                          display: "flex",
+                          flexDirection: "column",
+                        }}>
+                          <div style={{
+                            flex: 1,
+                            background: "linear-gradient(160deg, #e8b788 0%, #d1b147 40%, #b37d00 100%)",
+                            display: "flex",
+                            flexDirection: "column",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            textAlign: "center",
+                            padding: captureStyles.padding,
+                            position: "relative",
+                          }}>
+                            <div style={{
+                              width: captureStyles.logo.width * 1.2,
+                              height: captureStyles.logo.height * 1.2,
+                              marginBottom: captureStyles.logo.height * 0.3,
+                            }}>
+                              <img src="/logo.png" alt="" style={{ width: "100%", height: "100%", objectFit: "contain" }} />
+                            </div>
+                            <div style={{
+                              fontFamily: "'Playfair Display', serif",
+                              fontSize: captureStyles.mark * 0.8,
+                              color: "rgba(255,255,255,0.25)",
+                              lineHeight: 1,
+                              marginBottom: captureStyles.mark * 0.1,
+                            }}>
+                              &ldquo;
+                            </div>
+                            <div style={{
+                              fontFamily: "'Playfair Display', serif",
+                              fontStyle: "italic",
+                              color: "white",
+                              fontSize: captureStyles.text,
+                              lineHeight: 1.5,
+                              maxWidth: "85%",
+                            }}>
+                              {editableQuote}
+                            </div>
+                            <div style={{
+                              width: captureStyles.dividerW,
+                              height: captureStyles.dividerH,
+                              background: "rgba(255,255,255,0.4)",
+                              margin: `${captureStyles.dividerW * 0.35}px auto`,
+                              borderRadius: 1,
+                            }} />
+                            <div style={{
+                              fontFamily: "'Lato', sans-serif",
+                              fontSize: captureStyles.attrib,
+                              color: "rgba(255,255,255,0.75)",
+                              textTransform: "uppercase" as const,
+                              letterSpacing: captureStyles.letterSpacing,
+                            }}>
+                              {editableAttrib}
+                            </div>
+                            <div style={{
+                              fontFamily: "'Lato', sans-serif",
+                              fontSize: captureStyles.brand,
+                              color: "rgba(255,255,255,0.45)",
+                              textTransform: "uppercase" as const,
+                              letterSpacing: captureStyles.letterSpacing * 1.2,
+                              position: "absolute" as const,
+                              bottom: captureStyles.brandBottom * 2.5,
+                            }}>
+                              freedomcouplecounselling.com
+                            </div>
+                          </div>
+                          {/* Wave SVG */}
+                          <div style={{
+                            marginTop: -1,
+                            lineHeight: 0,
+                            background: "linear-gradient(160deg, #e8b788 0%, #d1b147 40%, #b37d00 100%)",
+                          }}>
+                            <svg viewBox="0 0 440 60" preserveAspectRatio="none" style={{ display: "block", width: "100%", height: currentFormat.height * 0.04 }}>
+                              <path d="M0,30 C80,55 160,0 220,30 C280,60 360,5 440,30 L440,60 L0,60 Z" fill="#fffff8" />
+                            </svg>
+                          </div>
+                          <div style={{
+                            background: "#fffff8",
+                            padding: `${captureStyles.brandBottom}px`,
+                            textAlign: "center",
+                          }}>
+                            <div style={{
+                              fontFamily: "'Lato', sans-serif",
+                              fontSize: captureStyles.brand,
+                              color: "#b37d00",
+                              textTransform: "uppercase" as const,
+                              letterSpacing: captureStyles.letterSpacing * 1.2,
+                              fontWeight: 700,
+                            }}>
+                              freedomcouplecounselling.com
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
 
