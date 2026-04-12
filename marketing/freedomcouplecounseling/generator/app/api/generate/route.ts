@@ -98,7 +98,6 @@ const channelInstructions: Record<string, string> = {
 };
 
 const contentTypeInstructions: Record<string, string> = {
-  quote_card: `This is a quote card — a standalone shareable graphic. Generate a powerful, concise quote (max 15 words) that captures Jill's philosophy about relationships, couples therapy, or love. The quote should feel warm, hopeful, and non-judgmental. Format: Start with the quote in quotation marks on its own line, then "— Attribution" on the next line (e.g. "— Jill Dzadey, Couples Counsellor"). Then add a short caption (2–3 sentences) for the social media post accompanying the quote card. The quote card will be rendered as a 1:1 square graphic with the FCC gold/cream brand palette.`,
   destigmatisation: `This is a destigmatisation piece. Normalise couples counselling — position it as proactive, not a last resort. Speak warmly to the reluctant partner. Use stats or common myths to bust stigma. Make therapy feel accessible and inviting.`,
   testimonial: `This is a testimonial/social proof piece. Lead with or weave in one of the client testimonials. Celebrate real outcomes — not clinical results, but human connection restored. Tie back to why couples should reach out to Jill.`,
   intercultural: `This is content focused on intercultural couples. Highlight the unique challenges of navigating different cultural values, family expectations, and communication styles within a relationship. Position Jill's Zambian background and lived experience as a genuine differentiator.`,

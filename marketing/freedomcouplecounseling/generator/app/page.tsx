@@ -16,7 +16,6 @@ const CHANNELS = [
 ];
 
 const CONTENT_TYPES = [
-  { value: "quote_card", label: "Quote Card" },
   { value: "destigmatisation", label: "Destigmatisation" },
   { value: "testimonial", label: "Client Testimonial / Social Proof" },
   { value: "intercultural", label: "Intercultural Couples" },
@@ -28,10 +27,10 @@ const CONTENT_TYPES = [
 ];
 
 const FORMAT_PRESETS = [
-  { value: "square", label: "Square", dims: "1080×1080", width: 1080, height: 1080, ratio: "1/1" },
-  { value: "story", label: "Story", dims: "1080×1920", width: 1080, height: 1920, ratio: "9/16" },
-  { value: "portrait", label: "Portrait", dims: "1080×1350", width: 1080, height: 1350, ratio: "4/5" },
-  { value: "landscape", label: "Landscape", dims: "1920×1080", width: 1920, height: 1080, ratio: "16/9" },
+  { value: "square", label: "Square", dims: "1080\u00d71080", width: 1080, height: 1080, ratio: "1/1" },
+  { value: "story", label: "Story", dims: "1080\u00d71920", width: 1080, height: 1920, ratio: "9/16" },
+  { value: "portrait", label: "Portrait", dims: "1080\u00d71350", width: 1080, height: 1350, ratio: "4/5" },
+  { value: "landscape", label: "Landscape", dims: "1920\u00d71080", width: 1920, height: 1080, ratio: "16/9" },
 ];
 
 const GRADIENTS = [
@@ -85,32 +84,6 @@ function extractHashtags(text: string): string {
   return match ? match[0].trim() : "";
 }
 
-function extractQuote(text: string): { quote: string; attribution: string } {
-  const lines = text.split("\n").filter((l) => l.trim());
-  let quote = "";
-  let attribution = "Jill Dzadey — Freedom Couple Counselling";
-
-  for (const line of lines) {
-    const clean = line.replace(/^[\s*#>-]+/, "").trim();
-    const quoteMatch = clean.match(/^[""\u201C](.+?)[""\u201D]$/);
-    if (quoteMatch && !quote) {
-      quote = quoteMatch[1];
-      continue;
-    }
-    if (quote && (clean.startsWith("—") || clean.startsWith("-") || clean.startsWith("~"))) {
-      attribution = clean.replace(/^[—\-~]\s*/, "");
-      break;
-    }
-    if (!quote && clean.length > 15 && clean.length < 150 && !clean.startsWith("[") && !clean.startsWith("QUOTE") && !clean.includes("IMAGE PROMPT")) {
-      quote = clean;
-    }
-  }
-
-  if (!quote) quote = "Every couple deserves a fulfilling, connected, and thriving relationship.";
-  return { quote, attribution };
-}
-
-// Font sizes scaled for each format at full resolution
 function getCaptureStyles(format: typeof FORMAT_PRESETS[number]) {
   const base = format.width;
   const isStory = format.value === "story";
@@ -132,13 +105,19 @@ function getCaptureStyles(format: typeof FORMAT_PRESETS[number]) {
 
 export default function Home() {
   const [channel, setChannel] = useState("instagram_post");
-  const [contentType, setContentType] = useState("quote_card");
+  const [contentType, setContentType] = useState("destigmatisation");
   const [customContext, setCustomContext] = useState("");
   const [output, setOutput] = useState("");
   const [loading, setLoading] = useState(false);
   const [copied, setCopied] = useState(false);
   const [selectedFormat, setSelectedFormat] = useState("square");
   const [downloading, setDownloading] = useState(false);
+
+  // Quote card editor state
+  const [showQuoteCard, setShowQuoteCard] = useState(false);
+  const [editableQuote, setEditableQuote] = useState("");
+  const [editableAttrib, setEditableAttrib] = useState("Jill Dzadey \u2014 Freedom Couple Counselling");
+
   const abortRef = useRef<AbortController | null>(null);
   const captureRef = useRef<HTMLDivElement | null>(null);
 
@@ -149,6 +128,7 @@ export default function Home() {
     setOutput("");
     setLoading(true);
     setCopied(false);
+    setShowQuoteCard(false);
 
     abortRef.current = new AbortController();
 
@@ -211,11 +191,17 @@ export default function Home() {
 
   const [quoteCardCopied, setQuoteCardCopied] = useState(false);
   async function copyQuoteText() {
-    const { quote, attribution } = extractQuote(copyPart);
-    const text = `"${quote}"\n— ${attribution}`;
+    const text = `\u201C${editableQuote}\u201D\n\u2014 ${editableAttrib}`;
     await navigator.clipboard.writeText(text);
     setQuoteCardCopied(true);
     setTimeout(() => setQuoteCardCopied(false), 2000);
+  }
+
+  function openQuoteCardEditor() {
+    const hookLine = extractHookLine(copyPart);
+    setEditableQuote(hookLine);
+    setEditableAttrib("Jill Dzadey \u2014 Freedom Couple Counselling");
+    setShowQuoteCard(true);
   }
 
   const downloadQuoteCard = useCallback(async () => {
@@ -244,7 +230,6 @@ export default function Home() {
   const imagePart = hasSections ? output.split("--- IMAGE PROMPT ---")[1]?.trim() : "";
 
   const isInstagramPost = channel === "instagram_post";
-  const isQuoteCard = contentType === "quote_card";
   const gradientIndex = useMemo(
     () => Math.floor(Math.random() * GRADIENTS.length),
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -253,7 +238,6 @@ export default function Home() {
 
   const channelLabel = CHANNELS.find((c) => c.value === channel)?.label ?? "Content";
   const captureStyles = getCaptureStyles(currentFormat);
-  const quoteData = isQuoteCard && copyPart ? extractQuote(copyPart) : null;
   const activeGradient = QUOTE_GRADIENTS[gradientIndex];
 
   return (
@@ -267,7 +251,7 @@ export default function Home() {
             </div>
             <div>
               <div className={styles.logoTitle}>Marketing Generator</div>
-              <div className={styles.logoSub}>Freedom Couple Counselling — Jill Dzadey</div>
+              <div className={styles.logoSub}>Freedom Couple Counselling \u2014 Jill Dzadey</div>
             </div>
           </div>
           <div className={styles.headerMeta}>
@@ -338,7 +322,7 @@ export default function Home() {
           </div>
 
           <div className={styles.hint}>
-            Powered by AI with extended thinking. Copy is generated fresh each time — regenerate for variations.
+            Powered by AI with extended thinking. Copy is generated fresh each time \u2014 regenerate for variations.
           </div>
         </aside>
 
@@ -359,129 +343,8 @@ export default function Home() {
 
           {(output || loading) && (
             <>
-              {/* Quote Card — format selector + preview + download */}
-              {isQuoteCard && hasSections && quoteData && (
-                <>
-                  {/* Format selector */}
-                  <div className={styles.formatSelector}>
-                    {FORMAT_PRESETS.map((f) => (
-                      <button
-                        key={f.value}
-                        className={`${styles.formatBtn} ${selectedFormat === f.value ? styles.formatBtnActive : ""}`}
-                        onClick={() => setSelectedFormat(f.value)}
-                      >
-                        {f.label}
-                        <span className={styles.formatBtnDims}>{f.dims}</span>
-                      </button>
-                    ))}
-                  </div>
-
-                  {/* Visible preview */}
-                  <div className={styles.quoteCard}>
-                    <div
-                      className={styles.quoteCardInner}
-                      style={{
-                        background: activeGradient,
-                        aspectRatio: currentFormat.ratio,
-                      }}
-                    >
-                      <div className={styles.quoteCardLogo}>
-                        <img src="/logo.png" alt="" className={styles.quoteCardLogoImg} />
-                      </div>
-                      <div className={styles.quoteCardMark}>&ldquo;</div>
-                      <div className={styles.quoteCardText} style={{
-                        fontSize: currentFormat.value === "landscape" ? "clamp(16px, 3vw, 22px)" : "clamp(18px, 3.5vw, 24px)",
-                      }}>
-                        {quoteData.quote}
-                      </div>
-                      <div className={styles.quoteCardDivider} />
-                      <div className={styles.quoteCardAttrib}>
-                        {quoteData.attribution}
-                      </div>
-                      <div className={styles.quoteCardBrand}>
-                        freedomcouplecounselling.com
-                      </div>
-                    </div>
-                    <div className={styles.quoteCardCopyBar}>
-                      <button
-                        className={styles.quoteCardCopyBtn}
-                        onClick={copyQuoteText}
-                      >
-                        {quoteCardCopied ? "Copied!" : "Copy Quote"}
-                      </button>
-                      {imagePart && (
-                        <button
-                          className={styles.quoteCardCopyBtn}
-                          onClick={() => copySectionText("image")}
-                        >
-                          {copySection === "image" ? "Copied!" : "Copy Image Prompt"}
-                        </button>
-                      )}
-                      <button
-                        className={styles.quoteCardDownloadBtn}
-                        onClick={downloadQuoteCard}
-                        disabled={downloading}
-                      >
-                        {downloading ? "Downloading..." : `Download PNG (${currentFormat.dims})`}
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Hidden high-res capture target */}
-                  <div className={styles.captureTarget}>
-                    <div
-                      ref={captureRef}
-                      className={styles.captureInner}
-                      style={{
-                        width: currentFormat.width,
-                        height: currentFormat.height,
-                        background: activeGradient,
-                        padding: captureStyles.padding,
-                      }}
-                    >
-                      <div className={styles.captureLogo} style={{
-                        width: captureStyles.logo.width,
-                        height: captureStyles.logo.height,
-                        marginBottom: captureStyles.logo.height * 0.25,
-                      }}>
-                        <img src="/logo.png" alt="" className={styles.captureLogoImg} />
-                      </div>
-                      <div className={styles.captureMark} style={{
-                        fontSize: captureStyles.mark,
-                        marginBottom: captureStyles.mark * 0.12,
-                      }}>
-                        &ldquo;
-                      </div>
-                      <div className={styles.captureText} style={{
-                        fontSize: captureStyles.text,
-                      }}>
-                        {quoteData.quote}
-                      </div>
-                      <div className={styles.captureDivider} style={{
-                        width: captureStyles.dividerW,
-                        height: captureStyles.dividerH,
-                        margin: `${captureStyles.dividerW * 0.4}px auto`,
-                      }} />
-                      <div className={styles.captureAttrib} style={{
-                        fontSize: captureStyles.attrib,
-                        letterSpacing: captureStyles.letterSpacing,
-                      }}>
-                        {quoteData.attribution}
-                      </div>
-                      <div className={styles.captureBrand} style={{
-                        fontSize: captureStyles.brand,
-                        letterSpacing: captureStyles.letterSpacing * 1.2,
-                        bottom: captureStyles.brandBottom,
-                      }}>
-                        freedomcouplecounselling.com
-                      </div>
-                    </div>
-                  </div>
-                </>
-              )}
-
               {/* Instagram Post content card */}
-              {isInstagramPost && !isQuoteCard && hasSections && (
+              {isInstagramPost && hasSections && (
                 <div className={styles.contentCard}>
                   <div className={styles.contentCardHeader}>
                     <div className={styles.contentCardAvatar}>
@@ -491,7 +354,7 @@ export default function Home() {
                       <div className={styles.contentCardUsername}>freedomcouplecounselling</div>
                       <div className={styles.contentCardChannel}>Melbourne, Victoria</div>
                     </div>
-                    <div className={styles.contentCardMore}>···</div>
+                    <div className={styles.contentCardMore}>&middot;&middot;&middot;</div>
                   </div>
                   <div
                     className={styles.contentCardImage}
@@ -507,10 +370,10 @@ export default function Home() {
                     </div>
                   </div>
                   <div className={styles.contentCardActions}>
-                    <span className={styles.contentCardAction}>🤍</span>
-                    <span className={styles.contentCardAction}>💬</span>
-                    <span className={styles.contentCardAction}>✈️</span>
-                    <span className={`${styles.contentCardAction} ${styles.contentCardSave}`}>🔖</span>
+                    <span className={styles.contentCardAction}>{"\u{1F90D}"}</span>
+                    <span className={styles.contentCardAction}>{"\uD83D\uDCAC"}</span>
+                    <span className={styles.contentCardAction}>{"\u2708\uFE0F"}</span>
+                    <span className={`${styles.contentCardAction} ${styles.contentCardSave}`}>{"\uD83D\uDD16"}</span>
                   </div>
                   <div className={styles.contentCardBody}>
                     <div className={styles.contentCardCaption}>
@@ -548,7 +411,7 @@ export default function Home() {
                   <div className={styles.outputBlock}>
                     <div className={styles.outputBlockHeader}>
                       <span className={styles.outputBlockLabel}>
-                        {isQuoteCard ? "Quote Copy" : isInstagramPost ? "Full Caption" : "Marketing Copy"}
+                        {isInstagramPost ? "Full Caption" : "Marketing Copy"}
                       </span>
                       <button
                         className={styles.copyBtn}
@@ -592,12 +455,167 @@ export default function Home() {
                 </div>
               )}
 
-              {!loading && output && (
+              {/* Create Quote Card button — appears after generation */}
+              {!loading && output && !showQuoteCard && (
                 <div className={styles.regenBar}>
+                  <button className={styles.createQuoteBtn} onClick={openQuoteCardEditor}>
+                    Create Quote Card
+                  </button>
                   <button className={styles.btnSecondary} onClick={generate}>
                     Regenerate Variation
                   </button>
                 </div>
+              )}
+
+              {/* Quote Card Editor — editable fields + preview + download */}
+              {showQuoteCard && (
+                <>
+                  {/* Editable fields */}
+                  <div className={styles.quoteEditor}>
+                    <div className={styles.quoteEditorHeader}>
+                      <div className={styles.quoteEditorTitle}>Quote Card</div>
+                      <button
+                        className={styles.quoteEditorClose}
+                        onClick={() => setShowQuoteCard(false)}
+                      >
+                        &times;
+                      </button>
+                    </div>
+                    <div className={styles.quoteEditorField}>
+                      <label className={styles.quoteEditorLabel}>Quote Text</label>
+                      <textarea
+                        className={styles.quoteEditorTextarea}
+                        rows={3}
+                        value={editableQuote}
+                        onChange={(e) => setEditableQuote(e.target.value)}
+                      />
+                    </div>
+                    <div className={styles.quoteEditorField}>
+                      <label className={styles.quoteEditorLabel}>Attribution</label>
+                      <input
+                        className={styles.quoteEditorInput}
+                        type="text"
+                        value={editableAttrib}
+                        onChange={(e) => setEditableAttrib(e.target.value)}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Format selector */}
+                  <div className={styles.formatSelector}>
+                    {FORMAT_PRESETS.map((f) => (
+                      <button
+                        key={f.value}
+                        className={`${styles.formatBtn} ${selectedFormat === f.value ? styles.formatBtnActive : ""}`}
+                        onClick={() => setSelectedFormat(f.value)}
+                      >
+                        {f.label}
+                        <span className={styles.formatBtnDims}>{f.dims}</span>
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Visible preview */}
+                  <div className={styles.quoteCard}>
+                    <div
+                      className={styles.quoteCardInner}
+                      style={{
+                        background: activeGradient,
+                        aspectRatio: currentFormat.ratio,
+                      }}
+                    >
+                      <div className={styles.quoteCardLogo}>
+                        <img src="/logo.png" alt="" className={styles.quoteCardLogoImg} />
+                      </div>
+                      <div className={styles.quoteCardMark}>&ldquo;</div>
+                      <div className={styles.quoteCardText} style={{
+                        fontSize: currentFormat.value === "landscape" ? "clamp(16px, 3vw, 22px)" : "clamp(18px, 3.5vw, 24px)",
+                      }}>
+                        {editableQuote}
+                      </div>
+                      <div className={styles.quoteCardDivider} />
+                      <div className={styles.quoteCardAttrib}>
+                        {editableAttrib}
+                      </div>
+                      <div className={styles.quoteCardBrand}>
+                        freedomcouplecounselling.com
+                      </div>
+                    </div>
+                    <div className={styles.quoteCardCopyBar}>
+                      <button
+                        className={styles.quoteCardCopyBtn}
+                        onClick={copyQuoteText}
+                      >
+                        {quoteCardCopied ? "Copied!" : "Copy Quote"}
+                      </button>
+                      <button
+                        className={styles.quoteCardDownloadBtn}
+                        onClick={downloadQuoteCard}
+                        disabled={downloading}
+                      >
+                        {downloading ? "Downloading..." : `Download PNG (${currentFormat.dims})`}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Hidden high-res capture target */}
+                  <div className={styles.captureTarget}>
+                    <div
+                      ref={captureRef}
+                      className={styles.captureInner}
+                      style={{
+                        width: currentFormat.width,
+                        height: currentFormat.height,
+                        background: activeGradient,
+                        padding: captureStyles.padding,
+                      }}
+                    >
+                      <div className={styles.captureLogo} style={{
+                        width: captureStyles.logo.width,
+                        height: captureStyles.logo.height,
+                        marginBottom: captureStyles.logo.height * 0.25,
+                      }}>
+                        <img src="/logo.png" alt="" className={styles.captureLogoImg} />
+                      </div>
+                      <div className={styles.captureMark} style={{
+                        fontSize: captureStyles.mark,
+                        marginBottom: captureStyles.mark * 0.12,
+                      }}>
+                        &ldquo;
+                      </div>
+                      <div className={styles.captureText} style={{
+                        fontSize: captureStyles.text,
+                      }}>
+                        {editableQuote}
+                      </div>
+                      <div className={styles.captureDivider} style={{
+                        width: captureStyles.dividerW,
+                        height: captureStyles.dividerH,
+                        margin: `${captureStyles.dividerW * 0.4}px auto`,
+                      }} />
+                      <div className={styles.captureAttrib} style={{
+                        fontSize: captureStyles.attrib,
+                        letterSpacing: captureStyles.letterSpacing,
+                      }}>
+                        {editableAttrib}
+                      </div>
+                      <div className={styles.captureBrand} style={{
+                        fontSize: captureStyles.brand,
+                        letterSpacing: captureStyles.letterSpacing * 1.2,
+                        bottom: captureStyles.brandBottom,
+                      }}>
+                        freedomcouplecounselling.com
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Regenerate below quote card */}
+                  <div className={styles.regenBar}>
+                    <button className={styles.btnSecondary} onClick={generate}>
+                      Regenerate Variation
+                    </button>
+                  </div>
+                </>
               )}
             </>
           )}

@@ -635,6 +635,122 @@
   cursor: not-allowed;
 }
 
+/* Create Quote Card button */
+.createQuoteBtn {
+  background: transparent;
+  color: #b37d00;
+  border: 1.5px solid #d1b147;
+  border-radius: 8px;
+  padding: 10px 20px;
+  font-family: 'Lato', sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: all 0.15s;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.createQuoteBtn:hover {
+  background: #b37d00;
+  color: #fff;
+  border-color: #b37d00;
+}
+
+/* Quote Editor — editable fields */
+.quoteEditor {
+  background: #fff;
+  border: 1.5px solid #ede5d8;
+  border-radius: 12px;
+  padding: 20px;
+  max-width: 440px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.quoteEditorHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.quoteEditorTitle {
+  font-family: 'Playfair Display', serif;
+  font-size: 16px;
+  font-weight: 600;
+  color: #b37d00;
+}
+
+.quoteEditorClose {
+  background: transparent;
+  border: none;
+  color: #999;
+  font-size: 20px;
+  cursor: pointer;
+  padding: 0 4px;
+  line-height: 1;
+}
+
+.quoteEditorClose:hover {
+  color: #333;
+}
+
+.quoteEditorField {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.quoteEditorLabel {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #b37d00;
+}
+
+.quoteEditorTextarea {
+  width: 100%;
+  border: 1.5px solid #ede5d8;
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 15px;
+  font-family: 'Playfair Display', serif;
+  font-style: italic;
+  color: var(--charcoal);
+  background: var(--off-white);
+  resize: vertical;
+  line-height: 1.5;
+  transition: border-color 0.15s;
+}
+
+.quoteEditorTextarea:focus {
+  outline: none;
+  border-color: #d1b147;
+  background: #fff;
+}
+
+.quoteEditorInput {
+  width: 100%;
+  border: 1.5px solid #ede5d8;
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 13px;
+  font-family: 'Lato', sans-serif;
+  color: var(--charcoal);
+  background: var(--off-white);
+  transition: border-color 0.15s;
+}
+
+.quoteEditorInput:focus {
+  outline: none;
+  border-color: #d1b147;
+  background: #fff;
+}
+
 /* Hidden capture target for high-res download */
 .captureTarget {
   position: fixed;
