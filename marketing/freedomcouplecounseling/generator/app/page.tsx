@@ -127,6 +127,7 @@ export default function Home() {
   const [copied, setCopied] = useState(false);
   const [selectedFormat, setSelectedFormat] = useState("square");
   const [downloading, setDownloading] = useState(false);
+  const [cardStyle, setCardStyle] = useState<"classic" | "wave">("classic");
 
   // Quote card editor state
   const [showQuoteCard, setShowQuoteCard] = useState(false);
@@ -358,51 +359,120 @@ export default function Home() {
 
           {(output || loading) && (
             <>
-              {/* Wing Wave content card — branded visual */}
+              {/* Card style toggle + content cards */}
               {hasSections && (
-                <div className={styles.waveCard}>
-                  <div className={styles.waveCardTop}>
-                    <div className={styles.waveCardLogo}>
-                      <img src="/logo.png" alt="" className={styles.waveCardLogoImg} />
-                    </div>
-                    <div className={styles.waveCardHook}>
-                      {extractHookLine(copyPart)}
-                    </div>
-                    <div className={styles.waveCardSub}>
-                      Freedom Couple Counselling
-                    </div>
-                  </div>
-                  {/* Wing wave SVG divider */}
-                  <div className={styles.waveCardDivider}>
-                    <svg viewBox="0 0 440 60" preserveAspectRatio="none" className={styles.waveSvg}>
-                      <path d="M0,30 C80,55 160,0 220,30 C280,60 360,5 440,30 L440,60 L0,60 Z" fill="#fffff8" />
-                    </svg>
-                  </div>
-                  <div className={styles.waveCardBottom}>
-                    <div className={styles.waveCardCaption}>
-                      {extractCaption(copyPart).slice(0, 200)}
-                    </div>
-                    <div className={styles.waveCardBrand}>
-                      freedomcouplecounselling.com
-                    </div>
-                  </div>
-                  <div className={styles.contentCardCopyBar}>
+                <>
+                  <div className={styles.cardStyleToggle}>
                     <button
-                      className={styles.contentCardCopyBtn}
-                      onClick={() => copySectionText("copy")}
+                      className={`${styles.cardStyleBtn} ${cardStyle === "classic" ? styles.cardStyleBtnActive : ""}`}
+                      onClick={() => setCardStyle("classic")}
                     >
-                      {copySection === "copy" ? "Copied!" : "Copy Caption"}
+                      Classic
                     </button>
-                    {imagePart && (
-                      <button
-                        className={styles.contentCardCopyBtn}
-                        onClick={() => copySectionText("image")}
-                      >
-                        {copySection === "image" ? "Copied!" : "Copy Image Prompt"}
-                      </button>
-                    )}
+                    <button
+                      className={`${styles.cardStyleBtn} ${cardStyle === "wave" ? styles.cardStyleBtnActive : ""}`}
+                      onClick={() => setCardStyle("wave")}
+                    >
+                      Wave
+                    </button>
                   </div>
-                </div>
+
+                  {/* Classic card — Instagram-style */}
+                  {cardStyle === "classic" && (
+                    <div className={styles.contentCard}>
+                      <div className={styles.contentCardHeader}>
+                        <div className={styles.contentCardAvatar}>
+                          <img src="/logo.png" alt="FCC" className={styles.contentCardAvatarImg} />
+                        </div>
+                        <div>
+                          <div className={styles.contentCardUsername}>freedomcouplecounselling</div>
+                          <div className={styles.contentCardChannel}>Melbourne, Victoria</div>
+                        </div>
+                        <div className={styles.contentCardMore}>&middot;&middot;&middot;</div>
+                      </div>
+                      <div
+                        className={styles.contentCardImage}
+                        style={{ background: GRADIENTS[gradientIndex] }}
+                      >
+                        <div>
+                          <div className={styles.contentCardImageText}>
+                            {extractHookLine(copyPart)}
+                          </div>
+                          <div className={styles.contentCardImageSub}>
+                            Freedom Couple Counselling
+                          </div>
+                        </div>
+                      </div>
+                      <div className={styles.contentCardActions}>
+                        <span className={styles.contentCardAction}>{"\u{1F90D}"}</span>
+                        <span className={styles.contentCardAction}>{"\uD83D\uDCAC"}</span>
+                        <span className={styles.contentCardAction}>{"\u2708\uFE0F"}</span>
+                        <span className={`${styles.contentCardAction} ${styles.contentCardSave}`}>{"\uD83D\uDD16"}</span>
+                      </div>
+                      <div className={styles.contentCardBody}>
+                        <div className={styles.contentCardCaption}>
+                          <span style={{ fontWeight: 700 }}>freedomcouplecounselling</span>{" "}
+                          {extractCaption(copyPart)}
+                        </div>
+                      </div>
+                      {extractHashtags(copyPart) && (
+                        <div className={styles.contentCardHashtags}>
+                          {extractHashtags(copyPart)}
+                        </div>
+                      )}
+                      <div className={styles.contentCardCopyBar}>
+                        <button className={styles.contentCardCopyBtn} onClick={() => copySectionText("copy")}>
+                          {copySection === "copy" ? "Copied!" : "Copy Caption"}
+                        </button>
+                        {imagePart && (
+                          <button className={styles.contentCardCopyBtn} onClick={() => copySectionText("image")}>
+                            {copySection === "image" ? "Copied!" : "Copy Image Prompt"}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Wave card — branded visual with wing wave */}
+                  {cardStyle === "wave" && (
+                    <div className={styles.waveCard}>
+                      <div className={styles.waveCardTop}>
+                        <div className={styles.waveCardLogo}>
+                          <img src="/logo.png" alt="" className={styles.waveCardLogoImg} />
+                        </div>
+                        <div className={styles.waveCardHook}>
+                          {extractHookLine(copyPart)}
+                        </div>
+                        <div className={styles.waveCardSub}>
+                          Freedom Couple Counselling
+                        </div>
+                      </div>
+                      <div className={styles.waveCardDivider}>
+                        <svg viewBox="0 0 440 60" preserveAspectRatio="none" className={styles.waveSvg}>
+                          <path d="M0,30 C80,55 160,0 220,30 C280,60 360,5 440,30 L440,60 L0,60 Z" fill="#fffff8" />
+                        </svg>
+                      </div>
+                      <div className={styles.waveCardBottom}>
+                        <div className={styles.waveCardCaption}>
+                          {extractCaption(copyPart).slice(0, 200)}
+                        </div>
+                        <div className={styles.waveCardBrand}>
+                          freedomcouplecounselling.com
+                        </div>
+                      </div>
+                      <div className={styles.contentCardCopyBar}>
+                        <button className={styles.contentCardCopyBtn} onClick={() => copySectionText("copy")}>
+                          {copySection === "copy" ? "Copied!" : "Copy Caption"}
+                        </button>
+                        {imagePart && (
+                          <button className={styles.contentCardCopyBtn} onClick={() => copySectionText("image")}>
+                            {copySection === "image" ? "Copied!" : "Copy Image Prompt"}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </>
               )}
 
               {/* Raw output blocks */}

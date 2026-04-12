@@ -508,6 +508,47 @@
   border-color: #b37d00;
 }
 
+/* Card Style Toggle */
+.cardStyleToggle {
+  display: flex;
+  gap: 0;
+  border: 1.5px solid #ede5d8;
+  border-radius: 8px;
+  overflow: hidden;
+  max-width: 200px;
+}
+
+.cardStyleBtn {
+  flex: 1;
+  padding: 7px 16px;
+  font-size: 12px;
+  font-family: 'Lato', sans-serif;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  background: var(--off-white);
+  border: none;
+  color: var(--charcoal);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.cardStyleBtn:first-child {
+  border-right: 1px solid #ede5d8;
+}
+
+.cardStyleBtn:hover {
+  background: #faf5e8;
+}
+
+.cardStyleBtnActive {
+  background: #b37d00;
+  color: #fff;
+}
+
+.cardStyleBtnActive:hover {
+  background: #9a6c00;
+}
+
 /* Wing Wave Card — branded visual with organic wave divider */
 .waveCard {
   background: white;
@@ -528,16 +569,14 @@
 }
 
 .waveCardLogo {
-  width: 48px;
-  height: 48px;
-  opacity: 0.35;
+  width: 72px;
+  height: 72px;
 }
 
 .waveCardLogoImg {
   width: 100%;
   height: 100%;
   object-fit: contain;
-  filter: brightness(0) invert(1);
 }
 
 .waveCardHook {
