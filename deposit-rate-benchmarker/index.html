@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Bank First Rate Benchmarker</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="hdr">
+  <div class="hdr-inner">
+    <div>
+      <h1>Bank First <span class="accent">Rate Benchmarker</span></h1>
+      <p class="sub">vs Australian Market &mdash; Term Deposits &middot; Home Loans &middot; Savings</p>
+    </div>
+    <div class="hdr-right">
+      <span class="badge" id="cashBadge">RBA Cash Rate: <b>4.10%</b></span>
+      <span class="badge ts">Updated 14 Apr 2026</span>
+    </div>
+  </div>
+  <nav class="tabs" id="productTabs">
+    <button class="tab active" data-product="td">Term Deposits</button>
+    <button class="tab" data-product="hl">Home Loans</button>
+    <button class="tab" data-product="sa">Savings Accounts</button>
+  </nav>
+</header>
+
+<main id="app">
+  <!-- KPI row -->
+  <section class="kpis" id="kpis"></section>
+
+  <!-- Controls -->
+  <section class="controls" id="controls"></section>
+
+  <!-- Charts row -->
+  <section class="grid2" id="chartRow">
+    <div class="card"><div class="card-title" id="barTitle">Rate Comparison</div><div class="chart-wrap"><canvas id="barChart"></canvas></div></div>
+    <div class="card"><div class="card-title" id="curveTitle">Yield Curve</div><div class="chart-wrap"><canvas id="curveChart"></canvas></div></div>
+  </section>
+
+  <!-- Spread + Type -->
+  <section class="grid2" id="chartRow2">
+    <div class="card"><div class="card-title">Spread to Market (bps)</div><div class="chart-wrap"><canvas id="spreadChart"></canvas></div></div>
+    <div class="card"><div class="card-title">By Bank Type</div><div class="chart-wrap"><canvas id="radarChart"></canvas></div></div>
+  </section>
+
+  <!-- Heatmap -->
+  <section class="card full" id="heatSection">
+    <div class="card-title">Rate Heatmap &mdash; All Banks &times; All Terms</div>
+    <div class="scroll-x" id="heatmap"></div>
+  </section>
+
+  <!-- Table -->
+  <section class="card full">
+    <div class="tbl-hdr">
+      <div class="card-title" id="tblTitle">Full Comparison</div>
+      <input type="text" class="search" id="tblSearch" placeholder="Search banks..." oninput="filterTbl()">
+    </div>
+    <div class="scroll-x"><table class="tbl" id="mainTbl"><thead id="tblHead"></thead><tbody id="tblBody"></tbody></table></div>
+  </section>
+
+  <!-- Calculator -->
+  <section class="card full" id="calcSection">
+    <div class="card-title">Interest / Repayment Calculator</div>
+    <div class="calc-row" id="calcInputs"></div>
+    <div id="calcResults"></div>
+  </section>
+</main>
+
+<footer class="ftr">
+  <p>Data compiled from Canstar, Finder, Money.com.au, Savings.com.au, InfoChoice, RatePilot &mdash; April 2026. Rates indicative only.</p>
+</footer>
+
+<script src="data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
