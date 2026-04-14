@@ -1,0 +1,580 @@
+/* ===== Australian Term Deposit Rate Benchmarker ===== */
+
+:root {
+  --primary: #1a365d;
+  --primary-light: #2b6cb0;
+  --accent: #ed8936;
+  --accent-dark: #dd6b20;
+  --success: #38a169;
+  --danger: #e53e3e;
+  --warning: #d69e2e;
+  --bg: #f7fafc;
+  --card-bg: #ffffff;
+  --text: #2d3748;
+  --text-light: #718096;
+  --border: #e2e8f0;
+  --highlight-bg: #fffaf0;
+  --highlight-border: #ed8936;
+  --big4-color: #4299e1;
+  --challenger-color: #48bb78;
+  --mutual-color: #9f7aea;
+  --bankfirst-color: #ed8936;
+  --shadow: 0 1px 3px rgba(0, 0, 0, 0.12), 0 1px 2px rgba(0, 0, 0, 0.06);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.6;
+}
+
+/* ===== Header ===== */
+.header {
+  background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
+  color: white;
+  padding: 1.5rem 2rem;
+  box-shadow: var(--shadow-lg);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.header-content {
+  max-width: 1400px;
+  margin: 0 auto;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.header h1 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+}
+
+.header h1 span {
+  color: var(--accent);
+}
+
+.header-meta {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  font-size: 0.85rem;
+  opacity: 0.9;
+}
+
+.cash-rate-badge {
+  background: rgba(255, 255, 255, 0.2);
+  padding: 0.35rem 0.75rem;
+  border-radius: 20px;
+  font-weight: 600;
+  backdrop-filter: blur(4px);
+}
+
+.refresh-btn {
+  background: var(--accent);
+  color: white;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 600;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.refresh-btn:hover {
+  background: var(--accent-dark);
+  transform: translateY(-1px);
+}
+
+.refresh-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.refresh-btn .spinner {
+  display: none;
+  animation: spin 1s linear infinite;
+}
+
+.refresh-btn.loading .spinner {
+  display: inline-block;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ===== Main Layout ===== */
+.main {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 1.5rem;
+}
+
+/* ===== KPI Cards ===== */
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.kpi-card {
+  background: var(--card-bg);
+  border-radius: 10px;
+  padding: 1.25rem;
+  box-shadow: var(--shadow);
+  border-top: 3px solid var(--border);
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.kpi-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-lg);
+}
+
+.kpi-card.highlight {
+  border-top-color: var(--bankfirst-color);
+  background: var(--highlight-bg);
+}
+
+.kpi-card.positive {
+  border-top-color: var(--success);
+}
+
+.kpi-card.negative {
+  border-top-color: var(--danger);
+}
+
+.kpi-card.neutral {
+  border-top-color: var(--primary-light);
+}
+
+.kpi-label {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-light);
+  font-weight: 600;
+  margin-bottom: 0.25rem;
+}
+
+.kpi-value {
+  font-size: 2rem;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.kpi-value .unit {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-light);
+}
+
+.kpi-detail {
+  font-size: 0.8rem;
+  color: var(--text-light);
+  margin-top: 0.25rem;
+}
+
+.kpi-detail .positive { color: var(--success); font-weight: 600; }
+.kpi-detail .negative { color: var(--danger); font-weight: 600; }
+
+/* ===== Term Selector ===== */
+.controls-bar {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+  flex-wrap: wrap;
+}
+
+.term-tabs {
+  display: flex;
+  background: var(--card-bg);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.term-tab {
+  padding: 0.6rem 1.2rem;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-light);
+  transition: all 0.2s;
+  border-right: 1px solid var(--border);
+}
+
+.term-tab:last-child {
+  border-right: none;
+}
+
+.term-tab:hover {
+  background: #edf2f7;
+  color: var(--text);
+}
+
+.term-tab.active {
+  background: var(--primary);
+  color: white;
+}
+
+.filter-group {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.filter-group label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-light);
+}
+
+.filter-select {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 0.85rem;
+  background: var(--card-bg);
+  color: var(--text);
+}
+
+.deposit-input {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 0.85rem;
+  width: 130px;
+  background: var(--card-bg);
+}
+
+/* ===== Charts Grid ===== */
+.charts-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.chart-card {
+  background: var(--card-bg);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+  padding: 1.25rem;
+  transition: box-shadow 0.2s;
+}
+
+.chart-card:hover {
+  box-shadow: var(--shadow-lg);
+}
+
+.chart-card.full-width {
+  grid-column: 1 / -1;
+}
+
+.chart-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.chart-title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.chart-subtitle {
+  font-size: 0.8rem;
+  color: var(--text-light);
+}
+
+.chart-container {
+  position: relative;
+  height: 320px;
+}
+
+.chart-container.tall {
+  height: 420px;
+}
+
+/* ===== Rate Table ===== */
+.table-card {
+  background: var(--card-bg);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+  padding: 1.25rem;
+  margin-bottom: 1.5rem;
+  overflow-x: auto;
+}
+
+.table-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.table-title {
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+
+.table-search {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 0.85rem;
+  width: 250px;
+}
+
+.rate-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.rate-table th {
+  background: #f7fafc;
+  padding: 0.75rem 0.5rem;
+  text-align: left;
+  font-weight: 700;
+  color: var(--text-light);
+  text-transform: uppercase;
+  font-size: 0.75rem;
+  letter-spacing: 0.05em;
+  border-bottom: 2px solid var(--border);
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.rate-table th:hover {
+  color: var(--primary);
+}
+
+.rate-table th .sort-arrow {
+  margin-left: 0.25rem;
+  opacity: 0.3;
+}
+
+.rate-table th.sorted .sort-arrow {
+  opacity: 1;
+}
+
+.rate-table td {
+  padding: 0.75rem 0.5rem;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.rate-table tr:hover {
+  background: #f7fafc;
+}
+
+.rate-table tr.highlight-row {
+  background: var(--highlight-bg);
+  font-weight: 600;
+}
+
+.rate-table tr.highlight-row td {
+  border-bottom-color: var(--highlight-border);
+}
+
+.bank-name {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.bank-type-badge {
+  font-size: 0.65rem;
+  padding: 0.15rem 0.4rem;
+  border-radius: 3px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.badge-big4 { background: #ebf8ff; color: #2b6cb0; }
+.badge-challenger { background: #f0fff4; color: #276749; }
+.badge-mutual { background: #faf5ff; color: #6b46c1; }
+.badge-regional { background: #fffff0; color: #975a16; }
+.badge-credit-union { background: #fff5f5; color: #c53030; }
+
+.rate-cell {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.rate-cell.best {
+  color: var(--success);
+}
+
+.rate-cell.worst {
+  color: var(--danger);
+}
+
+.rate-bar {
+  display: inline-block;
+  height: 6px;
+  border-radius: 3px;
+  margin-left: 0.5rem;
+  vertical-align: middle;
+  transition: width 0.3s ease;
+}
+
+.vs-market {
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.vs-market.above { color: var(--success); }
+.vs-market.below { color: var(--danger); }
+.vs-market.equal { color: var(--text-light); }
+
+/* ===== Yield Curve Section ===== */
+.yield-section {
+  margin-bottom: 1.5rem;
+}
+
+/* ===== Footer ===== */
+.footer {
+  background: var(--primary);
+  color: white;
+  padding: 1.5rem 2rem;
+  text-align: center;
+  font-size: 0.8rem;
+  opacity: 0.9;
+}
+
+.footer a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.footer a:hover {
+  text-decoration: underline;
+}
+
+.sources-list {
+  display: flex;
+  justify-content: center;
+  gap: 1.5rem;
+  margin-top: 0.75rem;
+  flex-wrap: wrap;
+}
+
+/* ===== Tooltips ===== */
+.tooltip {
+  position: relative;
+}
+
+/* ===== Loading State ===== */
+.loading-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(247, 250, 252, 0.9);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  transition: opacity 0.3s;
+}
+
+.loading-overlay.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.loading-spinner {
+  text-align: center;
+}
+
+.loading-spinner .dot {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--primary);
+  margin: 0 4px;
+  animation: bounce 1.4s ease-in-out infinite;
+}
+
+.loading-spinner .dot:nth-child(2) { animation-delay: 0.16s; }
+.loading-spinner .dot:nth-child(3) { animation-delay: 0.32s; }
+
+@keyframes bounce {
+  0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
+  40% { transform: scale(1); opacity: 1; }
+}
+
+/* ===== Responsive ===== */
+@media (max-width: 1024px) {
+  .charts-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  .header-content {
+    flex-direction: column;
+    text-align: center;
+  }
+
+  .kpi-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .controls-bar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .term-tabs {
+    flex-wrap: wrap;
+  }
+
+  .table-search {
+    width: 100%;
+  }
+}
+
+@media (max-width: 480px) {
+  .kpi-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .main {
+    padding: 1rem;
+  }
+}

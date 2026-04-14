@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Term Deposit Rate Benchmarker | Bank First vs Market</title>
+  <link rel="stylesheet" href="/static/css/styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
+</head>
+<body>
+
+  <!-- Loading Overlay -->
+  <div class="loading-overlay" id="loadingOverlay">
+    <div class="loading-spinner">
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <p style="margin-top: 1rem; color: #718096; font-size: 0.9rem;">Loading rate data...</p>
+    </div>
+  </div>
+
+  <!-- Header -->
+  <header class="header">
+    <div class="header-content">
+      <div>
+        <h1>Term Deposit <span>Benchmarker</span></h1>
+        <p style="font-size: 0.85rem; opacity: 0.85; margin-top: 0.2rem;">Bank First vs Australian Market | Real-Time Comparison</p>
+      </div>
+      <div class="header-meta">
+        <div class="cash-rate-badge" id="cashRateBadge">
+          RBA Cash Rate: <strong>--</strong>
+        </div>
+        <div id="lastUpdated" style="font-size: 0.8rem;">Updated: --</div>
+        <button class="refresh-btn" id="refreshBtn" onclick="refreshData()">
+          <svg class="spinner" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <path d="M21 12a9 9 0 11-6.22-8.56"/>
+            <path d="M21 3v9h-9"/>
+          </svg>
+          Refresh Data
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="main">
+    <!-- KPI Cards -->
+    <section class="kpi-grid" id="kpiGrid">
+      <div class="kpi-card highlight">
+        <div class="kpi-label">Bank First 12M Rate</div>
+        <div class="kpi-value" id="kpiBankFirst">--<span class="unit">% p.a.</span></div>
+        <div class="kpi-detail" id="kpiBankFirstDetail">Loading...</div>
+      </div>
+      <div class="kpi-card neutral">
+        <div class="kpi-label">Market Average (12M)</div>
+        <div class="kpi-value" id="kpiMarketAvg">--<span class="unit">% p.a.</span></div>
+        <div class="kpi-detail" id="kpiMarketAvgDetail">Across all providers</div>
+      </div>
+      <div class="kpi-card neutral">
+        <div class="kpi-label">Big 4 Average (12M)</div>
+        <div class="kpi-value" id="kpiBig4Avg">--<span class="unit">% p.a.</span></div>
+        <div class="kpi-detail" id="kpiBig4AvgDetail">ANZ, CBA, NAB, Westpac</div>
+      </div>
+      <div class="kpi-card" id="kpiSpreadCard">
+        <div class="kpi-label">Bank First vs Market</div>
+        <div class="kpi-value" id="kpiSpread">--<span class="unit">bps</span></div>
+        <div class="kpi-detail" id="kpiSpreadDetail">Spread to market average</div>
+      </div>
+      <div class="kpi-card neutral">
+        <div class="kpi-label">Market Best (12M)</div>
+        <div class="kpi-value" id="kpiMarketBest">--<span class="unit">% p.a.</span></div>
+        <div class="kpi-detail" id="kpiMarketBestDetail">Highest available rate</div>
+      </div>
+      <div class="kpi-card" id="kpiRankCard">
+        <div class="kpi-label">Bank First Ranking</div>
+        <div class="kpi-value" id="kpiRank">--<span class="unit" id="kpiRankTotal"> / --</span></div>
+        <div class="kpi-detail" id="kpiRankDetail">Among all providers</div>
+      </div>
+    </section>
+
+    <!-- Term Selector & Filters -->
+    <section class="controls-bar">
+      <div class="term-tabs" id="termTabs">
+        <button class="term-tab" data-term="3m">3M</button>
+        <button class="term-tab" data-term="6m">6M</button>
+        <button class="term-tab active" data-term="12m">12M</button>
+        <button class="term-tab" data-term="24m">24M</button>
+        <button class="term-tab" data-term="36m">3Y</button>
+        <button class="term-tab" data-term="60m">5Y</button>
+      </div>
+      <div class="filter-group">
+        <label>Bank Type:</label>
+        <select class="filter-select" id="filterType" onchange="applyFilters()">
+          <option value="all">All Banks</option>
+          <option value="Big 4">Big 4 Only</option>
+          <option value="Challenger">Challengers</option>
+          <option value="Mutual Bank">Mutual Banks</option>
+          <option value="Regional">Regional</option>
+        </select>
+      </div>
+      <div class="filter-group">
+        <label>Deposit Amount: $</label>
+        <input type="number" class="deposit-input" id="depositAmount" value="10000" min="500" step="1000" onchange="applyFilters()">
+      </div>
+    </section>
+
+    <!-- Charts Row 1: Main Comparison -->
+    <section class="charts-grid">
+      <div class="chart-card">
+        <div class="chart-header">
+          <div>
+            <div class="chart-title">Rate Comparison by Bank</div>
+            <div class="chart-subtitle" id="chartBarSubtitle">12-month term deposit rates</div>
+          </div>
+        </div>
+        <div class="chart-container tall">
+          <canvas id="barChart"></canvas>
+        </div>
+      </div>
+
+      <div class="chart-card">
+        <div class="chart-header">
+          <div>
+            <div class="chart-title">Yield Curve Comparison</div>
+            <div class="chart-subtitle">Bank First vs Market across all terms</div>
+          </div>
+        </div>
+        <div class="chart-container tall">
+          <canvas id="yieldChart"></canvas>
+        </div>
+      </div>
+    </section>
+
+    <!-- Charts Row 2: Analysis -->
+    <section class="charts-grid">
+      <div class="chart-card">
+        <div class="chart-header">
+          <div>
+            <div class="chart-title">Bank Type Performance</div>
+            <div class="chart-subtitle">Average rates by institution type</div>
+          </div>
+        </div>
+        <div class="chart-container">
+          <canvas id="typeChart"></canvas>
+        </div>
+      </div>
+
+      <div class="chart-card">
+        <div class="chart-header">
+          <div>
+            <div class="chart-title">Spread Analysis</div>
+            <div class="chart-subtitle">Bank First spread to market avg (bps)</div>
+          </div>
+        </div>
+        <div class="chart-container">
+          <canvas id="spreadChart"></canvas>
+        </div>
+      </div>
+    </section>
+
+    <!-- Charts Row 3: RBA & Heatmap -->
+    <section class="charts-grid">
+      <div class="chart-card full-width">
+        <div class="chart-header">
+          <div>
+            <div class="chart-title">RBA Cash Rate History & Term Deposit Landscape</div>
+            <div class="chart-subtitle">Cash rate changes since 2024 overlaid with current best/avg term deposit rates</div>
+          </div>
+        </div>
+        <div class="chart-container tall">
+          <canvas id="rbaChart"></canvas>
+        </div>
+      </div>
+    </section>
+
+    <!-- Rate Heatmap -->
+    <section class="charts-grid">
+      <div class="chart-card full-width">
+        <div class="chart-header">
+          <div>
+            <div class="chart-title">Rate Heatmap - All Banks x All Terms</div>
+            <div class="chart-subtitle">Darker = higher rate. Bank First highlighted in orange border.</div>
+          </div>
+        </div>
+        <div style="overflow-x: auto;">
+          <div id="heatmapContainer" style="min-width: 700px;"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Full Rate Table -->
+    <section class="table-card">
+      <div class="table-header">
+        <div class="table-title">Complete Rate Comparison Table</div>
+        <input type="text" class="table-search" id="tableSearch" placeholder="Search banks..." oninput="filterTable()">
+      </div>
+      <table class="rate-table" id="rateTable">
+        <thead>
+          <tr>
+            <th onclick="sortTable(0)">Rank <span class="sort-arrow">&#9650;</span></th>
+            <th onclick="sortTable(1)">Bank <span class="sort-arrow">&#9650;</span></th>
+            <th onclick="sortTable(2)">Type <span class="sort-arrow">&#9650;</span></th>
+            <th onclick="sortTable(3)">3M <span class="sort-arrow">&#9650;</span></th>
+            <th onclick="sortTable(4)">6M <span class="sort-arrow">&#9650;</span></th>
+            <th onclick="sortTable(5)">12M <span class="sort-arrow">&#9650;</span></th>
+            <th onclick="sortTable(6)">24M <span class="sort-arrow">&#9650;</span></th>
+            <th onclick="sortTable(7)">3Y <span class="sort-arrow">&#9650;</span></th>
+            <th onclick="sortTable(8)">5Y <span class="sort-arrow">&#9650;</span></th>
+            <th onclick="sortTable(9)">Min Deposit <span class="sort-arrow">&#9650;</span></th>
+            <th>vs Market</th>
+          </tr>
+        </thead>
+        <tbody id="rateTableBody">
+        </tbody>
+      </table>
+    </section>
+
+    <!-- Interest Calculator -->
+    <section class="chart-card" style="margin-bottom: 1.5rem;">
+      <div class="chart-header">
+        <div>
+          <div class="chart-title">Interest Earnings Calculator</div>
+          <div class="chart-subtitle">Compare what you'd earn across providers</div>
+        </div>
+      </div>
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 1rem;">
+        <div>
+          <label style="display: block; font-size: 0.8rem; font-weight: 600; color: var(--text-light); margin-bottom: 0.25rem;">Deposit Amount ($)</label>
+          <input type="number" id="calcDeposit" value="50000" min="500" step="1000" style="width: 100%; padding: 0.5rem; border: 1px solid var(--border); border-radius: 6px; font-size: 0.9rem;">
+        </div>
+        <div>
+          <label style="display: block; font-size: 0.8rem; font-weight: 600; color: var(--text-light); margin-bottom: 0.25rem;">Term</label>
+          <select id="calcTerm" style="width: 100%; padding: 0.5rem; border: 1px solid var(--border); border-radius: 6px; font-size: 0.9rem;">
+            <option value="3m">3 Months</option>
+            <option value="6m">6 Months</option>
+            <option value="12m" selected>12 Months</option>
+            <option value="24m">24 Months</option>
+            <option value="36m">3 Years</option>
+            <option value="60m">5 Years</option>
+          </select>
+        </div>
+        <div style="display: flex; align-items: flex-end;">
+          <button onclick="calculateEarnings()" style="width: 100%; padding: 0.6rem; background: var(--primary); color: white; border: none; border-radius: 6px; font-weight: 600; cursor: pointer; font-size: 0.9rem;">Calculate</button>
+        </div>
+      </div>
+      <div id="calcResults" style="display: none;"></div>
+    </section>
+  </main>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <p>Data sourced from multiple Australian financial comparison sites. Rates are indicative and subject to change.</p>
+    <div class="sources-list" id="sourcesList"></div>
+    <p style="margin-top: 0.75rem; opacity: 0.7;">Last data refresh: <span id="footerLastUpdated">--</span> | Auto-refreshes every 6 hours</p>
+  </footer>
+
+  <script src="/static/js/app.js"></script>
+</body>
+</html>
