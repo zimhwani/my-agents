@@ -1,6 +1,7 @@
-# Generated scan/report/fix/portfolio output
+# Generated scan/report/fix/portfolio/outreach output
 out/
 out*/
 portfolio/
+outreach/
 __pycache__/
 *.pyc

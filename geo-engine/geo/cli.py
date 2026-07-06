@@ -19,7 +19,9 @@ import sys
 from .analyze import analyze
 from .batch import run_batch
 from .config import ClientProfile, default_model, load_profile
+from .digest import run_digest
 from .fixes import generate_fixes
+from .prospect import run_prospecting
 from .providers import build_providers
 from .report import render_html, render_markdown
 from .scan import run_scan
@@ -108,6 +110,31 @@ def cmd_batch(args) -> int:
     return 0
 
 
+def cmd_digest(args) -> int:
+    run_digest(
+        args.clients,
+        args.out,
+        args.providers.split(","),
+        email_to=args.email,
+        max_prompts=args.max_prompts,
+        model=args.model,
+        dry_run=args.dry_run,
+    )
+    return 0
+
+
+def cmd_prospect(args) -> int:
+    run_prospecting(
+        args.prospects,
+        args.out,
+        args.providers.split(","),
+        max_prompts=args.max_prompts,
+        model=args.model,
+        use_claude=not args.no_claude,
+    )
+    return 0
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(prog="geo", description="AI-answer visibility engine")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -153,6 +180,25 @@ def main(argv=None) -> int:
     p_batch.add_argument("--model", default=default_model())
     p_batch.add_argument("--out", default="portfolio", help="Output directory")
     p_batch.set_defaults(func=cmd_batch)
+
+    p_digest = sub.add_parser("digest", help="Weekly autopilot: scan portfolio + email a digest")
+    p_digest.add_argument("--clients", required=True, help="Directory of client profile JSONs")
+    p_digest.add_argument("--providers", default="mock")
+    p_digest.add_argument("--max-prompts", type=int, default=12)
+    p_digest.add_argument("--model", default=default_model())
+    p_digest.add_argument("--out", default="portfolio")
+    p_digest.add_argument("--email", help="Recipient for the digest (omit to just print)")
+    p_digest.add_argument("--dry-run", action="store_true", help="Print the email instead of sending")
+    p_digest.set_defaults(func=cmd_digest)
+
+    p_prospect = sub.add_parser("prospect", help="Scan a list of targets + draft outreach emails")
+    p_prospect.add_argument("--prospects", required=True, help="CSV of target businesses")
+    p_prospect.add_argument("--providers", default="mock")
+    p_prospect.add_argument("--max-prompts", type=int, default=8)
+    p_prospect.add_argument("--model", default=default_model())
+    p_prospect.add_argument("--no-claude", action="store_true", help="Template emails instead of AI-drafted")
+    p_prospect.add_argument("--out", default="outreach")
+    p_prospect.set_defaults(func=cmd_prospect)
 
     args = parser.parse_args(argv)
     try:

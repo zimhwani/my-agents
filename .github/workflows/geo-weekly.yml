@@ -1,0 +1,53 @@
+name: GEO weekly digest
+
+# Weekly autopilot: scan the client portfolio, refresh reports, email a digest.
+# Runs Mondays 13:00 UTC; also runnable on demand from the Actions tab.
+on:
+  schedule:
+    - cron: "0 13 * * 1"
+  workflow_dispatch:
+    inputs:
+      providers:
+        description: "Comma-separated providers (mock, anthropic, openai, ...)"
+        default: "mock"
+
+defaults:
+  run:
+    working-directory: geo-engine
+
+jobs:
+  digest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install deps
+        run: pip install -r requirements.txt
+
+      - name: Scan portfolio + send digest
+        env:
+          # Set these as repository secrets (Settings → Secrets → Actions).
+          # With no ANTHROPIC_API_KEY the run uses the offline mock provider.
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
+          DIGEST_TO: ${{ secrets.DIGEST_TO }}
+          PROVIDERS: ${{ github.event.inputs.providers || 'mock' }}
+        run: |
+          python -m geo digest \
+            --clients clients \
+            --providers "$PROVIDERS" \
+            --out portfolio \
+            ${DIGEST_TO:+--email "$DIGEST_TO"}
+
+      - name: Publish reports as a build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: geo-portfolio
+          path: geo-engine/portfolio

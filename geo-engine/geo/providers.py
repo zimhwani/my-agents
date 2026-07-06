@@ -15,6 +15,7 @@ Add OpenAI / Perplexity / Gemini providers here later; nothing else changes.
 from __future__ import annotations
 
 import hashlib
+import os
 import random
 from typing import List
 
@@ -102,7 +103,73 @@ class AnthropicProvider:
         return "".join(b.text for b in resp.content if b.type == "text")
 
 
+_DISCOVERY_SYSTEM = (
+    "You are a helpful assistant answering a consumer's question about local "
+    "businesses. Recommend specific, named providers as you normally would."
+)
+
+
+class OpenAIProvider:
+    """Answers from OpenAI (and OpenAI-compatible endpoints like Perplexity)."""
+
+    def __init__(self, name="openai", env_key="OPENAI_API_KEY",
+                 base_url=None, model_env="GEO_OPENAI_MODEL", default_model="gpt-4o-mini"):
+        self.name = name
+        self.env_key = env_key
+        self.base_url = base_url
+        self.model = os.environ.get(model_env, default_model)
+        self._client = None
+
+    def _ensure(self):
+        if self._client is None:
+            try:
+                from openai import OpenAI
+            except ImportError as exc:
+                raise RuntimeError(f"'openai' package required for {self.name}: pip install openai") from exc
+            key = os.environ.get(self.env_key)
+            if not key:
+                raise RuntimeError(f"{self.env_key} is not set for the {self.name} provider.")
+            self._client = OpenAI(api_key=key, base_url=self.base_url)
+        return self._client
+
+    def query(self, prompt: str) -> str:
+        resp = self._ensure().chat.completions.create(
+            model=self.model,
+            max_tokens=1024,
+            messages=[{"role": "system", "content": _DISCOVERY_SYSTEM},
+                      {"role": "user", "content": prompt}],
+        )
+        return resp.choices[0].message.content or ""
+
+
+class GeminiProvider:
+    """Answers from Google Gemini."""
+
+    def __init__(self, name="gemini"):
+        self.name = name
+        self.model = os.environ.get("GEO_GEMINI_MODEL", "gemini-1.5-flash")
+        self._model = None
+
+    def _ensure(self):
+        if self._model is None:
+            try:
+                import google.generativeai as genai
+            except ImportError as exc:
+                raise RuntimeError("'google-generativeai' required for gemini: pip install google-generativeai") from exc
+            key = os.environ.get("GEMINI_API_KEY")
+            if not key:
+                raise RuntimeError("GEMINI_API_KEY is not set for the gemini provider.")
+            genai.configure(api_key=key)
+            self._model = genai.GenerativeModel(self.model, system_instruction=_DISCOVERY_SYSTEM)
+        return self._model
+
+    def query(self, prompt: str) -> str:
+        return self._ensure().generate_content(prompt).text or ""
+
+
 def build_providers(profile: ClientProfile, names: List[str], model: str | None = None):
+    """Map provider names to instances. Real engines lazy-load their SDK/key so
+    the mock path stays dependency-free."""
     providers = []
     for raw in names:
         n = raw.strip().lower()
@@ -110,6 +177,16 @@ def build_providers(profile: ClientProfile, names: List[str], model: str | None 
             providers.append(MockProvider(profile, name=n))
         elif n == "anthropic":
             providers.append(AnthropicProvider(model=model))
+        elif n == "openai":
+            providers.append(OpenAIProvider())
+        elif n == "perplexity":
+            providers.append(OpenAIProvider(
+                name="perplexity", env_key="PERPLEXITY_API_KEY",
+                base_url="https://api.perplexity.ai",
+                model_env="GEO_PERPLEXITY_MODEL", default_model="sonar"))
+        elif n == "gemini":
+            providers.append(GeminiProvider())
         else:
-            raise ValueError(f"Unknown provider '{raw}' (expected 'mock' or 'anthropic')")
+            raise ValueError(
+                f"Unknown provider '{raw}' (expected: mock, anthropic, openai, perplexity, gemini)")
     return providers

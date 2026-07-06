@@ -137,6 +137,59 @@ Gemini is a new class in `providers.py` and nothing else changes.
   signal, not a revenue-attribution promise.
 - The mock provider is a simulator for demos and offline dev, not real data.
 
+## Answer engines (providers)
+
+Every provider is `.query(prompt) -> str`. Mix them with `--providers`:
+
+| Provider | Needs | Notes |
+|---|---|---|
+| `mock` | nothing | offline, deterministic — default |
+| `anthropic` | `ANTHROPIC_API_KEY` | Claude (default model `claude-opus-4-8`) |
+| `openai` | `OPENAI_API_KEY` | `GEO_OPENAI_MODEL` to override |
+| `perplexity` | `PERPLEXITY_API_KEY` | OpenAI-compatible; `GEO_PERPLEXITY_MODEL` |
+| `gemini` | `GEMINI_API_KEY` | `GEO_GEMINI_MODEL` |
+
+```bash
+python -m geo run --client clients/example-medspa.json --providers anthropic,openai,perplexity
+```
+
+Per-engine SDKs load lazily, so unused providers need nothing installed.
+
+## Weekly autopilot (digest)
+
+Scan the whole portfolio on a schedule and email an operator digest (at-risk
+accounts first). Email config is env-driven; without it, the digest prints.
+
+```bash
+python -m geo digest --clients clients --out portfolio \
+  --email you@co.com --dry-run          # drop --dry-run to actually send
+```
+
+Ships with a **GitHub Actions cron** (`.github/workflows/geo-weekly.yml`) that
+runs this every Monday. See [`DEPLOY.md`](DEPLOY.md).
+
+## Automated prospecting
+
+Turn a list of target businesses into personalized cold outreach: scan each,
+measure how invisible they are to AI assistants, and draft an email built
+around that finding (the free-audit hook). Hot leads (named in <15% of answers)
+float to the top.
+
+```bash
+python -m geo prospect --prospects prospects.example.csv --out outreach
+# → outreach/INDEX.md               (leads, hottest first)
+# → outreach/<prospect>/email.md    (drafted outreach)
+# → outreach/<prospect>/report.html (full audit, when competitors are known)
+```
+
+Prospects are a CSV (`business_name,vertical,location,services,competitors`;
+the last two optional, `;`-separated). Emails are Claude-drafted with a key,
+templates otherwise.
+
+> ⚠️ **Compliance is yours.** The tool *drafts*; a human sends. Only contact
+> businesses you have a lawful basis to email, honor opt-outs, and follow
+> CAN-SPAM / CASL / GDPR. Every draft carries a review + unsubscribe footer.
+
 ## Billing & payments (Stripe)
 
 Secrets are read from the environment — **never hardcode a key**. Develop
@@ -182,6 +235,10 @@ Operational end-to-end offline; upgrades to live Claude the moment a key is set.
 - [x] Verified live scan + AI-drafted fixes against a real Claude API key
 - [x] Stripe billing scaffold (catalog, payment links, webhook) — env-driven,
       test-mode-first; run live setup once against a test key + confirmed pricing
-- [ ] Additional providers (OpenAI, Perplexity, Gemini) for per-engine SoV
-- [ ] Weekly cron + client email digests
+- [x] Additional answer engines (OpenAI, Perplexity, Gemini) — pluggable
+- [x] Weekly cron autopilot (`digest`) + GitHub Actions workflow + email
+- [x] Automated prospecting (`prospect`) — scan targets → drafted outreach
+- [x] Deployment guide ([`DEPLOY.md`](DEPLOY.md)): static reports on Vercel/Pages,
+      scheduled scan on GitHub Actions
 - [ ] Historical tracking so clients see visibility move over time
+- [ ] Auto-discover competitors from AI answers (structured extraction)
