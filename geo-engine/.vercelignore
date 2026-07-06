@@ -1,0 +1,9 @@
+# Keep the Vercel build to just the static site (site/) + the one serverless
+# function (api/). Excluding the geo package removes the second Python handler
+# (geo/webhook.py) that confused entrypoint detection, and skips heavy installs.
+geo/
+clients/
+requirements.txt
+prospects.example.csv
+*.md
+__pycache__/
