@@ -137,6 +137,40 @@ Gemini is a new class in `providers.py` and nothing else changes.
   signal, not a revenue-attribution promise.
 - The mock provider is a simulator for demos and offline dev, not real data.
 
+## Billing & payments (Stripe)
+
+Secrets are read from the environment — **never hardcode a key**. Develop
+against a **test** key; live keys are refused unless you explicitly opt in.
+
+```bash
+pip install stripe
+export STRIPE_API_KEY=sk_test_...          # use a TEST key
+python -m geo.billing setup --dry-run      # preview the catalog, no API calls
+python -m geo.billing setup                # create products + prices
+python -m geo.billing link --plan growth   # → a shareable Stripe payment link
+```
+
+Default plans (edit `PLANS` in `geo/billing.py` before going live):
+
+| Plan | Price |
+|---|---|
+| `audit` | $299 one-time |
+| `starter` | $500 / month |
+| `growth` | $1,500 / month |
+
+**Live-key guard:** a `sk_live_`/`rk_live_` key is refused unless
+`GEO_STRIPE_ALLOW_LIVE=1` is set — creating catalog objects and charges is hard
+to reverse, so this is deliberate friction.
+
+**Fulfilment:** `geo/webhook.py` is a stdlib webhook receiver that verifies the
+Stripe signature (`STRIPE_WEBHOOK_SECRET`) and, on `checkout.session.completed`,
+provisions the customer (wire it to: create profile → run scan → send report).
+
+```bash
+export STRIPE_WEBHOOK_SECRET=whsec_...
+python -m geo.webhook          # listens on :4242/stripe
+```
+
 ## Status
 
 Operational end-to-end offline; upgrades to live Claude the moment a key is set.
@@ -145,8 +179,9 @@ Operational end-to-end offline; upgrades to live Claude the moment a key is set.
 - [x] Mock provider (offline demos) + Anthropic provider (real, via the SDK)
 - [x] Fix pipeline — schema/FAQ/comparison behind a human-approval gate
 - [x] Batch runner + portfolio dashboard (multi-client ops)
-- [ ] Verify a live billed scan with your `ANTHROPIC_API_KEY` (code-complete;
-      needs your key to run)
+- [x] Verified live scan + AI-drafted fixes against a real Claude API key
+- [x] Stripe billing scaffold (catalog, payment links, webhook) — env-driven,
+      test-mode-first; run live setup once against a test key + confirmed pricing
 - [ ] Additional providers (OpenAI, Perplexity, Gemini) for per-engine SoV
-- [ ] Ops glue: Stripe billing + weekly cron + client email digests
+- [ ] Weekly cron + client email digests
 - [ ] Historical tracking so clients see visibility move over time
