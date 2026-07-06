@@ -168,6 +168,20 @@ python -m geo digest --clients clients --out portfolio \
 Ships with a **GitHub Actions cron** (`.github/workflows/geo-weekly.yml`) that
 runs this every Monday. See [`DEPLOY.md`](DEPLOY.md).
 
+## Prospect sourcing (fill the funnel)
+
+Auto-pull target businesses for a vertical + city, then feed them straight into
+prospecting:
+
+```bash
+python -m geo find --vertical dental --location "San Diego, CA" --out leads.csv
+python -m geo prospect --prospects leads.csv
+```
+
+Default source is **OpenStreetMap** (Overpass API — free, no key). Use
+`--source mock` for offline testing. Verticals map to OSM tags in
+`geo/sources.py`.
+
 ## Automated prospecting
 
 Turn a list of target businesses into personalized cold outreach: scan each,
@@ -189,6 +203,15 @@ templates otherwise.
 > ⚠️ **Compliance is yours.** The tool *drafts*; a human sends. Only contact
 > businesses you have a lawful basis to email, honor opt-outs, and follow
 > CAN-SPAM / CASL / GDPR. Every draft carries a review + unsubscribe footer.
+
+## Landing page (inbound acquisition)
+
+`site/index.html` is a self-contained marketing page — hero, the shift, how it
+works, pricing — whose CTA form captures leads via a Vercel serverless function
+(`api/audit.py`, which emails you the lead and returns an instant teaser).
+Deploy it on Vercel with **Root Directory = `geo-engine`**; full steps in
+[`DEPLOY.md`](DEPLOY.md). Inbound (landing page) and outbound (`find` +
+`prospect`) feed the same pipeline.
 
 ## Billing & payments (Stripe)
 
@@ -240,5 +263,7 @@ Operational end-to-end offline; upgrades to live Claude the moment a key is set.
 - [x] Automated prospecting (`prospect`) — scan targets → drafted outreach
 - [x] Deployment guide ([`DEPLOY.md`](DEPLOY.md)): static reports on Vercel/Pages,
       scheduled scan on GitHub Actions
+- [x] Prospect sourcing (`find`) — auto-pull targets from OpenStreetMap
+- [x] Inbound landing page + Vercel serverless lead capture / instant teaser
 - [ ] Historical tracking so clients see visibility move over time
 - [ ] Auto-discover competitors from AI answers (structured extraction)

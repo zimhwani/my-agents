@@ -43,6 +43,28 @@ batch job and needs no extra account.)
    - keep the existing `vercel.json` and point its `outputDirectory` at the
      generated folder, building in CI.
 
+## The landing page (acquisition tool)
+
+`site/index.html` is a self-contained marketing page whose CTA form posts to a
+Vercel serverless function, `api/audit.py`, which captures the lead (emails you)
+and returns an instant teaser. `vercel.json` wires the static site + the Python
+function.
+
+**Deploy it via Vercel's Git integration (recommended — no tokens in CI):**
+
+1. In Vercel: **Add New → Project → import this GitHub repo**.
+2. Set **Root Directory = `geo-engine`** (so `vercel.json`, `site/`, `api/`,
+   and `requirements.txt` are the project root).
+3. Deploy. Every push then auto-deploys.
+4. Add env vars in the Vercel project (Settings → Environment Variables):
+   - `EMAIL_LEADS_TO` (+ `SMTP_HOST`/`SMTP_USER`/`SMTP_PASS`/`EMAIL_FROM`) — where leads go
+   - `ANTHROPIC_API_KEY` **and** `GEO_LIVE_AUDIT=1` — *only if* you want the form
+     to run a live teaser scan per submission (costs API tokens; leave off to
+     just capture the lead and send the audit offline via `geo prospect`).
+
+**Filling the funnel:** `geo find` pulls targets, `geo prospect` drafts outreach —
+so inbound (landing page) and outbound (prospecting) feed the same pipeline.
+
 ## Local / one-off
 
 Everything runs locally too:

@@ -23,6 +23,7 @@ from .digest import run_digest
 from .fixes import generate_fixes
 from .prospect import run_prospecting
 from .providers import build_providers
+from .sources import find_prospects, write_csv
 from .report import render_html, render_markdown
 from .scan import run_scan
 
@@ -123,6 +124,17 @@ def cmd_digest(args) -> int:
     return 0
 
 
+def cmd_find(args) -> int:
+    rows = find_prospects(args.vertical, args.location, source=args.source, limit=args.limit)
+    write_csv(rows, args.out)
+    print(f"Found {len(rows)} prospects → {args.out}")
+    for r in rows[:10]:
+        print(f"  · {r['business_name']}")
+    if rows:
+        print(f"\nNext: python -m geo prospect --prospects {args.out}")
+    return 0
+
+
 def cmd_prospect(args) -> int:
     run_prospecting(
         args.prospects,
@@ -190,6 +202,14 @@ def main(argv=None) -> int:
     p_digest.add_argument("--email", help="Recipient for the digest (omit to just print)")
     p_digest.add_argument("--dry-run", action="store_true", help="Print the email instead of sending")
     p_digest.set_defaults(func=cmd_digest)
+
+    p_find = sub.add_parser("find", help="Auto-pull target businesses for a vertical + city")
+    p_find.add_argument("--vertical", required=True, help="Vertical slug (e.g. dental, med_spa)")
+    p_find.add_argument("--location", required=True, help='City, e.g. "San Diego, CA"')
+    p_find.add_argument("--source", default="overpass", help="overpass (OpenStreetMap) or mock")
+    p_find.add_argument("--limit", type=int, default=20)
+    p_find.add_argument("--out", default="prospects.csv", help="Output CSV")
+    p_find.set_defaults(func=cmd_find)
 
     p_prospect = sub.add_parser("prospect", help="Scan a list of targets + draft outreach emails")
     p_prospect.add_argument("--prospects", required=True, help="CSV of target businesses")

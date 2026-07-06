@@ -51,3 +51,18 @@ jobs:
         with:
           name: geo-portfolio
           path: geo-engine/portfolio
+
+      # Optional: deploy the refreshed reports to Vercel. Runs only if the
+      # VERCEL_TOKEN secret is set; otherwise it's skipped. (The marketing site
+      # in site/ is best deployed via Vercel's native Git integration instead.)
+      - name: Deploy reports to Vercel
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_REPORTS_PROJECT_ID }}
+        run: |
+          if [ -n "$VERCEL_TOKEN" ]; then
+            npx --yes vercel@latest deploy portfolio --prod --yes --token "$VERCEL_TOKEN"
+          else
+            echo "VERCEL_TOKEN not set — skipping deploy (reports still uploaded as artifact)."
+          fi
