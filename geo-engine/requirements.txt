@@ -1,0 +1,4 @@
+# Only needed for the real (Anthropic) provider. The mock provider — and the
+# entire scan/analyze/report pipeline — runs on the Python standard library
+# with nothing installed.
+anthropic>=0.40

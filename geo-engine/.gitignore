@@ -1,0 +1,5 @@
+# Generated scan/report output
+out/
+out*/
+__pycache__/
+*.pyc

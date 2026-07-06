@@ -1,0 +1,20 @@
+{
+  "business_name": "Radiance Med Spa",
+  "vertical": "med_spa",
+  "location": "Austin, TX",
+  "services": [
+    "Botox",
+    "dermal fillers",
+    "laser hair removal",
+    "microneedling",
+    "chemical peels"
+  ],
+  "competitors": [
+    "Viva Day Spa",
+    "Milk + Honey",
+    "Skinney Medspa",
+    "Austin Aesthetics",
+    "Ella Aesthetics"
+  ],
+  "website": "https://radiance-medspa.example.com"
+}
