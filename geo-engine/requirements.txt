@@ -1,0 +1,11 @@
+# The mock provider — and the entire scan/analyze/report pipeline — runs on the
+# Python standard library with nothing installed. These are only needed for:
+#   anthropic — real scans + AI-drafted fixes (`--providers anthropic`, `fix`)
+#   stripe    — billing (`geo.billing`, `geo.webhook`)
+anthropic>=0.40
+stripe>=9
+# Extra answer engines (only if you use those providers):
+#   openai — `--providers openai` and `--providers perplexity`
+#   google-generativeai — `--providers gemini`
+openai>=1.40
+google-generativeai>=0.8

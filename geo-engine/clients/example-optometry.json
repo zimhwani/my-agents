@@ -1,0 +1,18 @@
+{
+  "business_name": "Clearview Eye Care",
+  "vertical": "optometry",
+  "location": "Portland, OR",
+  "services": [
+    "eye exams",
+    "contact lens fitting",
+    "dry eye treatment",
+    "pediatric eye care"
+  ],
+  "competitors": [
+    "Pacific Eye Associates",
+    "Rose City Optical",
+    "Bridgetown Vision",
+    "Cascade Eye Center"
+  ],
+  "website": "https://clearview-eye.example.com"
+}
