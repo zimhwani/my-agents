@@ -50,13 +50,28 @@ Vercel serverless function, `api/audit.py`, which captures the lead (emails you)
 and returns an instant teaser. `vercel.json` wires the static site + the Python
 function.
 
-**Deploy it via Vercel's Git integration (recommended — no tokens in CI):**
+### Path A — Vercel Git integration (simplest, zero secrets in GitHub)
 
 1. In Vercel: **Add New → Project → import this GitHub repo**.
 2. Set **Root Directory = `geo-engine`** (so `vercel.json`, `site/`, `api/`,
    and `requirements.txt` are the project root).
-3. Deploy. Every push then auto-deploys.
-4. Add env vars in the Vercel project (Settings → Environment Variables):
+3. Deploy. Vercel then auto-deploys on every push — no workflow needed.
+
+### Path B — GitHub Actions (`.github/workflows/vercel-deploy.yml`)
+
+Already in the repo. It deploys on push once you add three **GitHub Actions
+secrets** (Settings → Secrets and variables → Actions):
+
+- `VERCEL_TOKEN` — create at vercel.com/account/tokens
+- `VERCEL_ORG_ID` and `VERCEL_PROJECT_ID` — run `vercel link` once locally (writes
+  them to `.vercel/project.json`), or copy from the Vercel project settings.
+
+Until `VERCEL_TOKEN` is set the workflow safely no-ops. Use Path A **or** B, not
+both.
+
+### Then, either path — set env vars
+
+Add env vars in the Vercel project (Settings → Environment Variables):
    - `EMAIL_LEADS_TO` (+ `SMTP_HOST`/`SMTP_USER`/`SMTP_PASS`/`EMAIL_FROM`) — where leads go
    - `ANTHROPIC_API_KEY` **and** `GEO_LIVE_AUDIT=1` — *only if* you want the form
      to run a live teaser scan per submission (costs API tokens; leave off to
