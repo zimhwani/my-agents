@@ -1,5 +1,6 @@
-# Generated scan/report output
+# Generated scan/report/fix/portfolio output
 out/
 out*/
+portfolio/
 __pycache__/
 *.pyc

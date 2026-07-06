@@ -149,6 +149,45 @@ def render_html(analysis: dict, client: dict) -> str:
 </div></body></html>"""
 
 
+def render_portfolio_html(summaries: List[dict]) -> str:
+    """Operator dashboard: every client, their score, and a link to the report."""
+    rows = []
+    for s in sorted(summaries, key=lambda x: x["score"]):
+        band, color = _score_band(s["score"])
+        rows.append(
+            f"""<tr style="border-top:1px solid #eef1f5">
+  <td style="padding:12px 12px 12px 0"><a href="{html.escape(s['report'])}"
+      style="color:{INK};font-weight:600;text-decoration:none">{html.escape(s['name'])}</a>
+    <div style="color:{MUTED};font-size:13px">{html.escape(s['vertical'])} · {html.escape(s['location'])}</div></td>
+  <td style="padding:12px;text-align:center"><span style="display:inline-block;min-width:38px;
+      padding:3px 8px;border-radius:6px;background:{color}22;color:{color};font-weight:700">{s['score']}</span></td>
+  <td style="padding:12px;color:{MUTED};text-align:center">{s['presence_rate']:.0%}</td>
+  <td style="padding:12px;color:{MUTED}">{html.escape(s['top_competitor'] or '—')}</td>
+</tr>"""
+        )
+    body = "\n".join(rows)
+    return f"""<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GEO Portfolio</title></head>
+<body style="margin:0;background:#f6f7f9;color:{INK};
+  font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif">
+<div style="max-width:820px;margin:0 auto;padding:40px 24px">
+  <div style="color:{MUTED};font-size:13px;letter-spacing:.08em;text-transform:uppercase">GEO Engine</div>
+  <h1 style="margin:6px 0 24px;color:{INK}">Client portfolio · {len(summaries)} accounts</h1>
+  <table style="width:100%;border-collapse:collapse;font-size:15px">
+    <tr style="text-align:left;color:{MUTED};font-size:12px;text-transform:uppercase;letter-spacing:.04em">
+      <th style="padding:0 12px 8px 0;font-weight:600">Client</th>
+      <th style="padding:0 12px 8px;font-weight:600;text-align:center">Score</th>
+      <th style="padding:0 12px 8px;font-weight:600;text-align:center">Seen in</th>
+      <th style="padding:0 0 8px;font-weight:600">Top competitor</th>
+    </tr>
+    {body}
+  </table>
+  <p style="color:{MUTED};font-size:12px;margin-top:24px">Sorted by score — lowest first (most upside / most at risk).</p>
+</div></body></html>"""
+
+
 def render_markdown(analysis: dict, client: dict) -> str:
     name = analysis["client_name"]
     lines: List[str] = []

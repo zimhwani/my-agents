@@ -21,15 +21,21 @@ def run_scan(profile: ClientProfile, providers, max_prompts: int = 12) -> dict:
 
     for pr in prompt_records:
         for provider in providers:
-            answer = provider.query(pr["prompt"])
-            results.append(
-                {
-                    "prompt": pr["prompt"],
-                    "service": pr["service"],
-                    "provider": provider.name,
-                    "answer": answer,
-                }
-            )
+            error = ""
+            try:
+                answer = provider.query(pr["prompt"])
+            except Exception as exc:  # one bad query must not sink the scan
+                answer, error = "", str(exc)
+                print(f"  ! {provider.name} failed on a prompt: {exc}")
+            record = {
+                "prompt": pr["prompt"],
+                "service": pr["service"],
+                "provider": provider.name,
+                "answer": answer,
+            }
+            if error:
+                record["error"] = error
+            results.append(record)
 
     return {
         "generated_at": _dt.datetime.now(_dt.timezone.utc).isoformat(timespec="seconds"),

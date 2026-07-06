@@ -17,7 +17,9 @@ import os
 import sys
 
 from .analyze import analyze
-from .config import default_model, load_profile
+from .batch import run_batch
+from .config import ClientProfile, default_model, load_profile
+from .fixes import generate_fixes
 from .providers import build_providers
 from .report import render_html, render_markdown
 from .scan import run_scan
@@ -75,6 +77,37 @@ def cmd_run(args) -> int:
     return 0
 
 
+def cmd_fix(args) -> int:
+    if args.scan:
+        with open(args.scan, "r", encoding="utf-8") as fh:
+            scan = json.load(fh)
+    elif args.client:
+        scan = _do_scan(args)
+    else:
+        print("error: pass --scan <scan.json> or --client <profile.json>", file=sys.stderr)
+        return 1
+    profile = ClientProfile(**scan["client"])
+    result = analyze(scan)
+    out = os.path.join(args.out, "fixes")
+    print(f"Drafting fix package for {profile.business_name}...")
+    info = generate_fixes(profile, result, out, use_claude=not args.no_claude)
+    print(f"  source: {', '.join(info['sources']) or 'template'}")
+    for a in info["artifacts"]:
+        print(f"  wrote {os.path.join(out, a)}")
+    return 0
+
+
+def cmd_batch(args) -> int:
+    run_batch(
+        args.clients,
+        args.out,
+        args.providers.split(","),
+        max_prompts=args.max_prompts,
+        model=args.model,
+    )
+    return 0
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(prog="geo", description="AI-answer visibility engine")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -101,6 +134,25 @@ def main(argv=None) -> int:
     p_report.add_argument("--scan", required=True, help="Path to scan.json")
     add_common(p_report, need_client=False)
     p_report.set_defaults(func=cmd_report)
+
+    p_fix = sub.add_parser("fix", help="Draft the fix package (schema, FAQ, comparison)")
+    p_fix.add_argument("--scan", help="Path to an existing scan.json")
+    p_fix.add_argument("--client", help="Client profile JSON (scans first if no --scan)")
+    p_fix.add_argument("--providers", default="mock", help="Providers if scanning")
+    p_fix.add_argument("--max-prompts", type=int, default=12)
+    p_fix.add_argument("--model", default=default_model())
+    p_fix.add_argument("--no-claude", action="store_true",
+                       help="Force editable templates instead of AI drafting")
+    p_fix.add_argument("--out", default="out", help="Output directory")
+    p_fix.set_defaults(func=cmd_fix)
+
+    p_batch = sub.add_parser("batch", help="Scan a folder of clients + build a portfolio index")
+    p_batch.add_argument("--clients", required=True, help="Directory of client profile JSONs")
+    p_batch.add_argument("--providers", default="mock")
+    p_batch.add_argument("--max-prompts", type=int, default=12)
+    p_batch.add_argument("--model", default=default_model())
+    p_batch.add_argument("--out", default="portfolio", help="Output directory")
+    p_batch.set_defaults(func=cmd_batch)
 
     args = parser.parse_args(argv)
     try:

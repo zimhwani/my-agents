@@ -56,8 +56,43 @@ python -m geo run --client clients/example-medspa.json --providers anthropic
 | `run` | scan + analyze + report in one shot (usual path) |
 | `scan` | run the scan and persist `scan.json` only |
 | `report --scan out/scan.json` | rebuild the report from a saved scan (no re-querying) |
+| `fix` | draft the deliverables (schema, FAQ, comparison) behind a review gate |
+| `batch --clients clients/` | scan every client in a folder + build a portfolio dashboard |
 
 Common flags: `--client`, `--providers`, `--max-prompts`, `--model`, `--out`.
+
+## Fix pipeline (the deliverables you sell)
+
+```bash
+python -m geo fix --scan out/scan.json --out out       # from a saved scan
+python -m geo fix --client clients/example-medspa.json # scan then draft
+```
+
+Writes a review package to `out/fixes/`:
+
+- **`schema.jsonld`** — valid schema.org LocalBusiness + FAQPage structured
+  data, generated deterministically from the profile (business type mapped to
+  the right schema.org `@type`).
+- **`faq.md`** — an expert FAQ targeting the buyer questions where the client is
+  invisible.
+- **`comparison.md`** — an honest "{client} vs {top competitor}" page.
+- **`INDEX.md`** — the approval checklist.
+
+FAQ answers and the comparison are **drafted by Claude when an API key is set**,
+and fall back to editable `[REVIEW]` templates otherwise. Nothing is published —
+every file carries a "DRAFT — human review required" banner. Pass `--no-claude`
+to force templates.
+
+## Batch / portfolio (the ops autopilot layer)
+
+```bash
+python -m geo batch --clients clients --out portfolio
+# → portfolio/index.html          (operator dashboard, sorted by score)
+# → portfolio/<client>/report.html (per-client report)
+```
+
+Runs every `*.json` profile in the folder and builds a one-glance dashboard so a
+solo operator can watch many accounts. Wire this to a weekly cron for autopilot.
 
 ## Client profile
 
@@ -85,10 +120,12 @@ geo/
   config.py     client profiles, vertical labels, model default
   prompts.py    buyer discovery prompts per vertical/location/service
   providers.py  mock (offline) + anthropic (real); pluggable — add OpenAI etc.
-  scan.py       run prompts × providers → scan.json
+  scan.py       run prompts × providers → scan.json (resilient per-query)
   analyze.py    brand detection, share-of-voice, visibility score, fixes
-  report.py     client-ready HTML + Markdown
-  cli.py        `python -m geo run|scan|report`
+  fixes.py      schema.jsonld + FAQ + comparison drafts (Claude / templates)
+  report.py     client-ready HTML + Markdown + portfolio dashboard
+  batch.py      run a folder of clients → portfolio index
+  cli.py        `python -m geo run|scan|report|fix|batch`
 ```
 
 Every provider is just `.query(prompt) -> str`, so adding OpenAI, Perplexity, or
@@ -100,10 +137,16 @@ Gemini is a new class in `providers.py` and nothing else changes.
   signal, not a revenue-attribution promise.
 - The mock provider is a simulator for demos and offline dev, not real data.
 
-## Roadmap (post-MVP)
+## Status
 
-- Real multi-provider scans (OpenAI, Perplexity, Gemini) with per-engine SoV.
-- Fix pipeline: agents that draft schema, FAQ, and comparison pages behind a
-  human-approval gate.
-- Ops glue: Stripe billing + weekly cron scans + client email digests.
-- Historical tracking so clients see visibility move over time.
+Operational end-to-end offline; upgrades to live Claude the moment a key is set.
+
+- [x] Prompt engine, scanner, analyzer, client-ready report
+- [x] Mock provider (offline demos) + Anthropic provider (real, via the SDK)
+- [x] Fix pipeline — schema/FAQ/comparison behind a human-approval gate
+- [x] Batch runner + portfolio dashboard (multi-client ops)
+- [ ] Verify a live billed scan with your `ANTHROPIC_API_KEY` (code-complete;
+      needs your key to run)
+- [ ] Additional providers (OpenAI, Perplexity, Gemini) for per-engine SoV
+- [ ] Ops glue: Stripe billing + weekly cron + client email digests
+- [ ] Historical tracking so clients see visibility move over time
