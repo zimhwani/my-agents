@@ -14,10 +14,7 @@ on:
   push:
     branches: [main, claude/autopilot-business-idea-48xj3i]
     paths:
-      - "geo-engine/site/**"
-      - "geo-engine/api/**"
-      - "geo-engine/vercel.json"
-      - "geo-engine/requirements.txt"
+      - "geo-engine/web/**"
   workflow_dispatch:
 
 jobs:
@@ -40,7 +37,7 @@ jobs:
 
       - if: env.VERCEL_TOKEN != ''
         name: Build & deploy to Vercel (production)
-        working-directory: geo-engine
+        working-directory: geo-engine/web
         run: |
           npm i -g vercel@latest
           vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
