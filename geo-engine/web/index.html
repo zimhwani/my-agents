@@ -184,30 +184,37 @@
 </div></footer>
 
 <script>
+  // ── Lead capture (no backend) ──────────────────────────────────────────
+  // Get a FREE access key at https://web3forms.com (enter your email — no
+  // account needed) and paste it below. Leads are emailed straight to you.
+  const WEB3FORMS_KEY = 'YOUR_WEB3FORMS_ACCESS_KEY';
+
   const form = document.getElementById('audit');
   const result = document.getElementById('result');
   const submit = document.getElementById('submit');
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
-    submit.disabled = true; submit.textContent = 'Checking…';
+    submit.disabled = true; submit.textContent = 'Sending…';
     const payload = {
+      access_key: WEB3FORMS_KEY,
+      subject: 'New GEO audit lead: ' + form.business.value.trim(),
+      from_name: 'GEO Engine landing page',
       business: form.business.value.trim(),
       location: form.location.value.trim(),
       vertical: form.vertical.value,
       email: form.email.value.trim()
     };
     try {
-      const r = await fetch('/api/audit', {
-        method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify(payload)
-      });
-      const data = await r.json();
-      result.style.display = 'block';
-      result.textContent = data.message ||
-        "Thanks — we're preparing your full audit and will email it shortly.";
-    } catch (err) {
-      result.style.display = 'block';
-      result.textContent = "Thanks — we'll email your full audit shortly.";
-    }
+      if (WEB3FORMS_KEY && WEB3FORMS_KEY.indexOf('YOUR_') !== 0) {
+        await fetch('https://api.web3forms.com/submit', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+      }
+    } catch (err) { /* show success regardless; lead is best-effort */ }
+    result.style.display = 'block';
+    result.textContent = "Thanks — we're preparing your full AI-visibility audit and will email it shortly.";
     submit.textContent = 'Request received ✓';
   });
 </script>

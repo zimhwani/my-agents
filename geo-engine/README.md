@@ -206,11 +206,11 @@ templates otherwise.
 
 ## Landing page (inbound acquisition)
 
-`web/index.html` is a self-contained marketing page — hero, the shift, how it
-works, pricing — whose CTA form captures leads via a Vercel serverless function
-(`web/api/audit.py`, which emails you the lead). The web deploy lives in its own
-clean root, `geo-engine/web/`. Deploy on Vercel with **Root Directory =
-`geo-engine/web`**; full steps in
+`web/index.html` is a **pure static** marketing page — hero, the shift, how it
+works, pricing — whose CTA form captures leads via **Web3Forms** (a zero-backend
+form service; paste your free access key into the page). No server, no Python —
+Vercel just serves it. Deploy with **Root Directory = `geo-engine/web`**; full
+steps in
 [`DEPLOY.md`](DEPLOY.md). Inbound (landing page) and outbound (`find` +
 `prospect`) feed the same pipeline.
 

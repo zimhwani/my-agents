@@ -45,17 +45,22 @@ batch job and needs no extra account.)
 
 ## The landing page (acquisition tool)
 
-`web/index.html` is a self-contained marketing page whose CTA form posts to a
-Vercel serverless function, `web/api/audit.py`, which captures the lead (emails
-you). The web deploy lives in **`geo-engine/web/`** — a clean root with *only*
-the static page + the one `api/` function (no Python package alongside it), so
-Vercel's builder can't mis-detect it as a multi-entrypoint Python app.
+`web/index.html` is a **pure static** marketing page (no backend, no Python) —
+so Vercel just serves it, with nothing for the Python builder to mis-detect.
+Lead capture runs through **Web3Forms**, a zero-backend form service that emails
+submissions straight to you.
+
+**One-time: wire up lead capture (2 min)**
+1. Go to **web3forms.com**, enter your email → you get a free **access key** (no
+   account needed).
+2. In `web/index.html`, replace `YOUR_WEB3FORMS_ACCESS_KEY` with that key.
+3. Commit — leads from the form now arrive in your inbox.
 
 ### Path A — Vercel Git integration (simplest, zero secrets in GitHub)
 
 1. In Vercel: **Add New → Project → import this GitHub repo**.
-2. Set **Root Directory = `geo-engine/web`** (contains `index.html` + `api/`).
-3. Deploy. Vercel then auto-deploys on every push — no workflow needed.
+2. Set **Root Directory = `geo-engine/web`** (contains only `index.html`).
+3. Deploy. Vercel serves it as a static site and auto-deploys on every push.
 
 ### Path B — GitHub Actions (`.github/workflows/vercel-deploy.yml`)
 
@@ -69,13 +74,10 @@ secrets** (Settings → Secrets and variables → Actions):
 Until `VERCEL_TOKEN` is set the workflow safely no-ops. Use Path A **or** B, not
 both.
 
-### Then, either path — set env vars
-
-Add env vars in the Vercel project (Settings → Environment Variables):
-   - `EMAIL_LEADS_TO` (+ `SMTP_HOST`/`SMTP_USER`/`SMTP_PASS`/`EMAIL_FROM`) — where leads go
-   - `ANTHROPIC_API_KEY` **and** `GEO_LIVE_AUDIT=1` — *only if* you want the form
-     to run a live teaser scan per submission (costs API tokens; leave off to
-     just capture the lead and send the audit offline via `geo prospect`).
+The static site needs **no environment variables** — lead capture is handled by
+Web3Forms (above). (SMTP / `ANTHROPIC_API_KEY` env vars are only for the
+engine's own commands — `geo digest`, `geo prospect` — which run wherever you
+schedule them, not on Vercel.)
 
 **Filling the funnel:** `geo find` pulls targets, `geo prospect` drafts outreach —
 so inbound (landing page) and outbound (prospecting) feed the same pipeline.
