@@ -190,9 +190,9 @@
 
 <script>
   // ── Config ─────────────────────────────────────────────────────────────
-  // 1) Lead capture: get a FREE access key at https://web3forms.com (enter
-  //    your email, no account needed) and paste it here. Leads email to you.
-  const WEB3FORMS_KEY = 'YOUR_WEB3FORMS_ACCESS_KEY';
+  // 1) Lead delivery via Formspree. This endpoint is public (it lives in
+  //    client-side code) — safe to commit. Manage it at formspree.io.
+  const FORMSPREE_ENDPOINT = 'https://formspree.io/f/xkoleqkz';
 
   // 2) OPTIONAL — Stripe Payment Links per plan. Generate with
   //    `python -m geo.billing link --plan <plan>` (or the Stripe dashboard),
@@ -239,29 +239,33 @@
     submit.disabled = true; submit.textContent = 'Sending…';
     var plan = planField.value || 'audit';
     const payload = {
-      access_key: WEB3FORMS_KEY,
-      subject: 'New GEO lead (' + (PLAN_LABELS[plan] || 'Audit') + '): ' + form.business.value.trim(),
-      from_name: 'GEO Engine landing page',
+      _subject: 'New GEO lead (' + (PLAN_LABELS[plan] || 'Audit') + '): ' + form.business.value.trim(),
       plan: plan,
       business: form.business.value.trim(),
       location: form.location.value.trim(),
       vertical: form.vertical.value,
       email: form.email.value.trim()
     };
+    let ok = false;
     try {
-      if (WEB3FORMS_KEY && WEB3FORMS_KEY.indexOf('YOUR_') !== 0) {
-        await fetch('https://api.web3forms.com/submit', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-          body: JSON.stringify(payload)
-        });
-      }
-    } catch (err) { /* show success regardless; lead is best-effort */ }
+      const r = await fetch(FORMSPREE_ENDPOINT, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      ok = r.ok;
+    } catch (err) { ok = false; }
     result.style.display = 'block';
-    result.textContent = plan === 'audit'
-      ? "Thanks — we're preparing your full AI-visibility audit and will email it shortly."
-      : "Thanks — we've got your " + PLAN_LABELS[plan] + " request and will be in touch shortly.";
-    submit.textContent = 'Request received ✓';
+    if (ok) {
+      result.textContent = plan === 'audit'
+        ? "Thanks — we're preparing your full AI-visibility audit and will email it shortly."
+        : "Thanks — we've got your " + PLAN_LABELS[plan] + " request and will be in touch shortly.";
+      submit.textContent = 'Request received ✓';
+    } else {
+      result.textContent = "Sorry — that didn't go through. Please try again in a moment.";
+      submit.disabled = false;
+      submit.textContent = 'Check my visibility →';
+    }
   });
 </script>
 </body>
