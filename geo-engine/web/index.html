@@ -51,6 +51,9 @@
   .formnote{margin-top:10px;font-size:11.5px;color:var(--muted);text-align:center}
   #result{display:none;margin-top:14px;padding:14px 16px;border-radius:12px;background:var(--accent-wash);
     border:1px solid color-mix(in srgb,var(--accent) 26%,transparent);font-size:14px}
+  #planbadge{display:none;margin:0 0 14px;font-size:12.5px;font-weight:700;color:var(--accent-ink);
+    background:var(--accent-wash);border:1px solid color-mix(in srgb,var(--accent) 30%,transparent);
+    padding:5px 11px;border-radius:999px}
 
   .trust{display:flex;gap:10px;flex-wrap:wrap;margin-top:22px;font-size:13px;color:var(--muted)}
   .trust span{display:inline-flex;align-items:center;gap:6px}
@@ -111,8 +114,10 @@
     </div>
 
     <form class="audit card" id="audit" autocomplete="on">
-      <h3>Get your free visibility check</h3>
+      <h3 id="form-title">Get your free visibility check</h3>
       <p class="sub">See how often AI assistants name your business — and who's winning instead.</p>
+      <span id="planbadge"></span>
+      <input type="hidden" id="plan" name="plan" value="audit"/>
       <div class="field"><label for="business">Business name</label>
         <input id="business" name="business" required placeholder="e.g. Radiance Med Spa"/></div>
       <div class="field"><label for="location">City</label>
@@ -166,15 +171,15 @@
     <div class="plan card"><div class="name">Audit</div>
       <div class="price">$299<small> one-time</small></div>
       <ul><li>Full visibility report</li><li>Competitor share of voice</li><li>Prioritized fix roadmap</li></ul>
-      <a class="btn ghost" href="#audit">Start free</a></div>
+      <a class="btn ghost plan-cta" href="#audit" data-plan="audit">Start free</a></div>
     <div class="plan card feat"><div class="name">Starter</div>
       <div class="price">$500<small> / month</small></div>
       <ul><li>Everything in Audit</li><li>Monthly re-scan &amp; report</li><li>Visibility tracking over time</li></ul>
-      <a class="btn" href="#audit">Get started</a></div>
+      <a class="btn plan-cta" href="#audit" data-plan="starter">Get started</a></div>
     <div class="plan card"><div class="name">Growth</div>
       <div class="price">$1,500<small> / month</small></div>
       <ul><li>Everything in Starter</li><li>Done-for-you fixes each month</li><li>Schema, FAQ &amp; content shipped</li></ul>
-      <a class="btn ghost" href="#audit">Talk to us</a></div>
+      <a class="btn ghost plan-cta" href="#audit" data-plan="growth">Talk to us</a></div>
   </div>
 </div></section>
 
@@ -184,21 +189,60 @@
 </div></footer>
 
 <script>
-  // ── Lead capture (no backend) ──────────────────────────────────────────
-  // Get a FREE access key at https://web3forms.com (enter your email — no
-  // account needed) and paste it below. Leads are emailed straight to you.
+  // ── Config ─────────────────────────────────────────────────────────────
+  // 1) Lead capture: get a FREE access key at https://web3forms.com (enter
+  //    your email, no account needed) and paste it here. Leads email to you.
   const WEB3FORMS_KEY = 'YOUR_WEB3FORMS_ACCESS_KEY';
 
+  // 2) OPTIONAL — Stripe Payment Links per plan. Generate with
+  //    `python -m geo.billing link --plan <plan>` (or the Stripe dashboard),
+  //    then paste the https://buy.stripe.com/... URLs below. A plan with a
+  //    link sends the visitor straight to Stripe checkout; a blank plan
+  //    captures them as a lead through the form instead.
+  const PAYMENT_LINKS = { audit: '', starter: '', growth: '' };
+
+  const PLAN_LABELS = { audit: 'Audit', starter: 'Starter', growth: 'Growth' };
   const form = document.getElementById('audit');
   const result = document.getElementById('result');
   const submit = document.getElementById('submit');
+  const planField = document.getElementById('plan');
+  const planBadge = document.getElementById('planbadge');
+  const formTitle = document.getElementById('form-title');
+
+  function isLink(v) { return typeof v === 'string' && /^https?:\/\//.test(v); }
+
+  function choosePlan(plan) {
+    planField.value = plan;
+    if (plan === 'audit') {
+      formTitle.textContent = 'Get your free visibility check';
+      planBadge.style.display = 'none';
+    } else {
+      formTitle.textContent = 'Start with the ' + PLAN_LABELS[plan] + ' plan';
+      planBadge.textContent = '✓ ' + PLAN_LABELS[plan] + ' plan selected';
+      planBadge.style.display = 'inline-block';
+    }
+    document.getElementById('business').focus();
+  }
+
+  document.querySelectorAll('.plan-cta').forEach(function (el) {
+    el.addEventListener('click', function (e) {
+      e.preventDefault();
+      var plan = el.getAttribute('data-plan');
+      if (isLink(PAYMENT_LINKS[plan])) { window.location.href = PAYMENT_LINKS[plan]; return; }
+      choosePlan(plan);
+      document.getElementById('audit').scrollIntoView({ behavior: 'smooth' });
+    });
+  });
+
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     submit.disabled = true; submit.textContent = 'Sending…';
+    var plan = planField.value || 'audit';
     const payload = {
       access_key: WEB3FORMS_KEY,
-      subject: 'New GEO audit lead: ' + form.business.value.trim(),
+      subject: 'New GEO lead (' + (PLAN_LABELS[plan] || 'Audit') + '): ' + form.business.value.trim(),
       from_name: 'GEO Engine landing page',
+      plan: plan,
       business: form.business.value.trim(),
       location: form.location.value.trim(),
       vertical: form.vertical.value,
@@ -214,7 +258,9 @@
       }
     } catch (err) { /* show success regardless; lead is best-effort */ }
     result.style.display = 'block';
-    result.textContent = "Thanks — we're preparing your full AI-visibility audit and will email it shortly.";
+    result.textContent = plan === 'audit'
+      ? "Thanks — we're preparing your full AI-visibility audit and will email it shortly."
+      : "Thanks — we've got your " + PLAN_LABELS[plan] + " request and will be in touch shortly.";
     submit.textContent = 'Request received ✓';
   });
 </script>
