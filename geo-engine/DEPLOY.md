@@ -45,16 +45,16 @@ batch job and needs no extra account.)
 
 ## The landing page (acquisition tool)
 
-`site/index.html` is a self-contained marketing page whose CTA form posts to a
-Vercel serverless function, `api/audit.py`, which captures the lead (emails you)
-and returns an instant teaser. `vercel.json` wires the static site + the Python
-function.
+`web/index.html` is a self-contained marketing page whose CTA form posts to a
+Vercel serverless function, `web/api/audit.py`, which captures the lead (emails
+you). The web deploy lives in **`geo-engine/web/`** — a clean root with *only*
+the static page + the one `api/` function (no Python package alongside it), so
+Vercel's builder can't mis-detect it as a multi-entrypoint Python app.
 
 ### Path A — Vercel Git integration (simplest, zero secrets in GitHub)
 
 1. In Vercel: **Add New → Project → import this GitHub repo**.
-2. Set **Root Directory = `geo-engine`** (so `vercel.json`, `site/`, `api/`,
-   and `requirements.txt` are the project root).
+2. Set **Root Directory = `geo-engine/web`** (contains `index.html` + `api/`).
 3. Deploy. Vercel then auto-deploys on every push — no workflow needed.
 
 ### Path B — GitHub Actions (`.github/workflows/vercel-deploy.yml`)
