@@ -1,0 +1,778 @@
+<title>Caddie · Mt Derrimut</title>
+<style>
+  /* ---------- Reset / base ---------- */
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  button { font: inherit; color: inherit; background: none; border: none; cursor: pointer; }
+  input, select { font: inherit; color: inherit; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+
+  /* ---------- Design tokens ---------- */
+  :root {
+    /* light — "sunlight": high contrast for reading a phone on the course */
+    --ground:      #eef1ea;
+    --surface:     #ffffff;
+    --surface-2:   #f5f7f2;
+    --ink:         #16211a;
+    --muted:       #5b665e;
+    --faint:       #8a948c;
+    --line:        #dde2d9;
+    --line-strong: #c7cfc3;
+    --accent:      #1f7a4d;
+    --accent-ink:  #0f4e30;
+    --accent-soft: #e4f0e8;
+    --sand:        #b08a3e;
+    --sand-soft:   #f3e9d3;
+    --water:       #2f6f9e;
+    --water-soft:  #e0edf5;
+    --under:       #c0392b;  /* under par — birdie red (scorecard convention) */
+    --under-soft:  #f7e4e1;
+    --over:        #35618e;  /* over par — bogey blue */
+    --over-soft:   #e3ecf4;
+    --shadow:      0 1px 2px rgba(20,33,26,.06), 0 8px 24px rgba(20,33,26,.07);
+    --shadow-sm:   0 1px 2px rgba(20,33,26,.08);
+    --mono: ui-monospace, "SF Mono", "SFMono-Regular", Menlo, Consolas, "Liberation Mono", monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      /* dark — "twilight basalt" */
+      --ground:      #0e1310;
+      --surface:     #161d18;
+      --surface-2:   #1c241e;
+      --ink:         #eaf1ea;
+      --muted:       #9aa79f;
+      --faint:       #6f7c74;
+      --line:        #26302a;
+      --line-strong: #33413a;
+      --accent:      #45b57c;
+      --accent-ink:  #8fd9b0;
+      --accent-soft: #16281f;
+      --sand:        #d9b877;
+      --sand-soft:   #2a2416;
+      --water:       #5aa0d4;
+      --water-soft:  #142430;
+      --under:       #e97b6d;
+      --under-soft:  #2c1a17;
+      --over:        #6fa5d8;
+      --over-soft:   #14212e;
+      --shadow:      0 1px 2px rgba(0,0,0,.4), 0 10px 30px rgba(0,0,0,.45);
+      --shadow-sm:   0 1px 2px rgba(0,0,0,.4);
+    }
+  }
+  /* explicit toggle overrides (must beat the media query both ways) */
+  :root[data-theme="light"] {
+    --ground:#eef1ea; --surface:#fff; --surface-2:#f5f7f2; --ink:#16211a; --muted:#5b665e; --faint:#8a948c;
+    --line:#dde2d9; --line-strong:#c7cfc3; --accent:#1f7a4d; --accent-ink:#0f4e30; --accent-soft:#e4f0e8;
+    --sand:#b08a3e; --sand-soft:#f3e9d3; --water:#2f6f9e; --water-soft:#e0edf5;
+    --under:#c0392b; --under-soft:#f7e4e1; --over:#35618e; --over-soft:#e3ecf4;
+    --shadow:0 1px 2px rgba(20,33,26,.06),0 8px 24px rgba(20,33,26,.07); --shadow-sm:0 1px 2px rgba(20,33,26,.08);
+  }
+  :root[data-theme="dark"] {
+    --ground:#0e1310; --surface:#161d18; --surface-2:#1c241e; --ink:#eaf1ea; --muted:#9aa79f; --faint:#6f7c74;
+    --line:#26302a; --line-strong:#33413a; --accent:#45b57c; --accent-ink:#8fd9b0; --accent-soft:#16281f;
+    --sand:#d9b877; --sand-soft:#2a2416; --water:#5aa0d4; --water-soft:#142430;
+    --under:#e97b6d; --under-soft:#2c1a17; --over:#6fa5d8; --over-soft:#14212e;
+    --shadow:0 1px 2px rgba(0,0,0,.4),0 10px 30px rgba(0,0,0,.45); --shadow-sm:0 1px 2px rgba(0,0,0,.4);
+  }
+
+  body {
+    font-family: var(--sans);
+    color: var(--ink);
+    background: var(--ground);
+    -webkit-font-smoothing: antialiased;
+    line-height: 1.5;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .app { max-width: 520px; margin: 0 auto; min-height: 100dvh; display: flex; flex-direction: column; }
+
+  /* ---------- Header ---------- */
+  .top {
+    position: sticky; top: 0; z-index: 20;
+    background: color-mix(in srgb, var(--ground) 88%, transparent);
+    backdrop-filter: saturate(1.4) blur(10px);
+    border-bottom: 1px solid var(--line);
+  }
+  .top-row { display: flex; align-items: center; gap: 10px; padding: 12px 16px 10px; }
+  .brand { display: flex; align-items: center; gap: 9px; min-width: 0; }
+  .flag { width: 26px; height: 26px; flex: none; }
+  .brand-txt { min-width: 0; }
+  .brand-txt .k { font-size: 10px; letter-spacing: .16em; text-transform: uppercase; color: var(--muted); line-height: 1; }
+  .brand-txt select {
+    font-weight: 800; font-size: 16px; letter-spacing: -.01em; color: var(--ink);
+    background: none; border: none; padding: 1px 18px 1px 0; margin: 0; max-width: 100%;
+    appearance: none; -webkit-appearance: none; cursor: pointer;
+    background-image: var(--caret); background-repeat: no-repeat; background-position: right 2px center; background-size: 10px;
+  }
+  .to-par {
+    margin-left: auto; text-align: right; flex: none;
+    font-family: var(--mono); font-variant-numeric: tabular-nums;
+  }
+  .to-par .big { font-size: 20px; font-weight: 700; line-height: 1; }
+  .to-par .sub { font-size: 10px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); font-family: var(--sans); }
+
+  .tees { display: flex; gap: 6px; padding: 0 16px 12px; }
+  .tee {
+    flex: 1; padding: 7px 4px 6px; border-radius: 10px; border: 1px solid var(--line);
+    background: var(--surface); text-align: center; line-height: 1.15; transition: border-color .15s, background .15s;
+  }
+  .tee .nm { font-size: 11px; font-weight: 700; letter-spacing: .03em; }
+  .tee .yd { font-family: var(--mono); font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .tee[aria-pressed="true"] { border-color: var(--tee-c); background: var(--tee-bg); }
+  .tee[aria-pressed="true"] .nm { color: var(--tee-c); }
+  .tee[data-t="blue"]  { --tee-c: var(--over);  --tee-bg: var(--over-soft); }
+  .tee[data-t="white"] { --tee-c: var(--ink);   --tee-bg: var(--surface-2); }
+  .tee[data-t="red"]   { --tee-c: var(--under); --tee-bg: var(--under-soft); }
+
+  /* ---------- Main / views ---------- */
+  main { flex: 1; padding: 14px 16px 96px; }
+  .view { display: none; animation: rise .22s ease both; }
+  .view.on { display: block; }
+  @keyframes rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+  @media (prefers-reduced-motion: reduce) { .view, .view.on { animation: none; } .hole-body { animation: none !important; } }
+
+  /* ---------- Hole strip ---------- */
+  .strip { display: flex; gap: 5px; overflow-x: auto; padding: 2px 0 10px; scrollbar-width: none; }
+  .strip::-webkit-scrollbar { display: none; }
+  .pip {
+    flex: none; width: 30px; height: 34px; border-radius: 8px; border: 1px solid var(--line);
+    background: var(--surface); display: flex; flex-direction: column; align-items: center; justify-content: center;
+    font-family: var(--mono); font-variant-numeric: tabular-nums; line-height: 1;
+  }
+  .pip .n { font-size: 12px; font-weight: 700; }
+  .pip .d { width: 5px; height: 5px; border-radius: 50%; margin-top: 3px; background: var(--line-strong); }
+  .pip.scored .d { background: var(--accent); }
+  .pip[aria-current="true"] { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+
+  /* ---------- Hole card ---------- */
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 18px; box-shadow: var(--shadow); overflow: hidden; }
+  .hole-head { display: flex; align-items: stretch; }
+  .nav-btn { width: 46px; flex: none; display: grid; place-items: center; color: var(--muted); border-right: 1px solid var(--line); }
+  .nav-btn:last-child { border-right: none; border-left: 1px solid var(--line); }
+  .nav-btn:disabled { opacity: .28; cursor: default; }
+  .nav-btn svg { width: 22px; height: 22px; }
+  .hole-title { flex: 1; text-align: center; padding: 13px 6px 11px; }
+  .hole-title .lbl { font-size: 10px; letter-spacing: .18em; text-transform: uppercase; color: var(--muted); }
+  .hole-title .no { font-family: var(--mono); font-size: 30px; font-weight: 700; line-height: 1; letter-spacing: -.02em; }
+
+  .hole-body { padding: 4px 18px 20px; animation: rise .2s ease both; }
+
+  .readout { text-align: center; padding: 14px 0 6px; }
+  .readout .val {
+    font-family: var(--mono); font-variant-numeric: tabular-nums; font-weight: 700;
+    font-size: 68px; line-height: .92; letter-spacing: -.03em;
+  }
+  .readout .val .u { font-size: 20px; color: var(--muted); font-weight: 600; margin-left: 4px; letter-spacing: 0; }
+  .readout .est { font-size: 11px; color: var(--sand); font-weight: 600; letter-spacing: .04em; margin-top: 4px; min-height: 14px; }
+  .flight { height: 2px; width: 78%; margin: 6px auto 0; background: linear-gradient(90deg, transparent, var(--line-strong) 12%, var(--line-strong) 88%, transparent); position: relative; }
+  .flight::after { content: ""; position: absolute; right: 11%; top: 50%; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); transform: translateY(-50%); box-shadow: 0 0 0 3px var(--accent-soft); }
+
+  .chips { display: flex; justify-content: center; gap: 8px; margin: 14px 0 4px; flex-wrap: wrap; }
+  .chip {
+    display: inline-flex; align-items: baseline; gap: 6px; padding: 6px 12px; border-radius: 999px;
+    background: var(--surface-2); border: 1px solid var(--line); font-size: 12px;
+  }
+  .chip b { font-family: var(--mono); font-size: 14px; font-variant-numeric: tabular-nums; }
+  .chip .t { color: var(--muted); text-transform: uppercase; letter-spacing: .06em; font-size: 10px; }
+
+  .feature {
+    display: flex; gap: 10px; align-items: flex-start; margin-top: 16px; padding: 12px 14px;
+    border-radius: 12px; background: var(--sand-soft); border: 1px solid color-mix(in srgb, var(--sand) 30%, transparent);
+  }
+  .feature.water { background: var(--water-soft); border-color: color-mix(in srgb, var(--water) 30%, transparent); }
+  .feature .ic { flex: none; font-size: 14px; line-height: 1.3; }
+  .feature .tag { font-size: 10px; text-transform: uppercase; letter-spacing: .1em; font-weight: 700; color: var(--sand); }
+  .feature.water .tag { color: var(--water); }
+  .feature p { margin: 2px 0 0; font-size: 13px; }
+
+  .play {
+    margin-top: 16px; padding: 13px 15px; border-radius: 12px;
+    background: var(--accent-soft); border: 1px solid color-mix(in srgb, var(--accent) 26%, transparent);
+  }
+  .play .tag { font-size: 10px; text-transform: uppercase; letter-spacing: .12em; font-weight: 700; color: var(--accent-ink); }
+  .play p { margin: 3px 0 0; font-size: 14px; line-height: 1.5; }
+
+  /* ---------- Club matcher ---------- */
+  .matcher { margin-top: 16px; border-top: 1px dashed var(--line-strong); padding-top: 16px; }
+  .matcher .h { font-size: 11px; text-transform: uppercase; letter-spacing: .1em; color: var(--muted); font-weight: 700; margin-bottom: 10px; }
+  .mrow { display: flex; align-items: center; gap: 12px; }
+  .dist-in { display: flex; align-items: center; gap: 6px; background: var(--surface-2); border: 1px solid var(--line); border-radius: 10px; padding: 6px 10px; }
+  .dist-in input {
+    width: 62px; border: none; background: none; font-family: var(--mono); font-variant-numeric: tabular-nums;
+    font-size: 22px; font-weight: 700; text-align: right; padding: 0;
+  }
+  .dist-in input:focus { outline: none; }
+  .dist-in .u { color: var(--muted); font-family: var(--mono); font-size: 14px; }
+  .arrow { color: var(--faint); }
+  .rec { flex: 1; }
+  .rec .club { font-size: 21px; font-weight: 800; letter-spacing: -.01em; }
+  .rec .note { font-size: 12px; color: var(--muted); font-family: var(--mono); font-variant-numeric: tabular-nums; }
+  .rec .empty { font-size: 13px; color: var(--faint); }
+
+  /* ---------- Score stepper ---------- */
+  .scorer { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 18px; }
+  .scorer .h { font-size: 11px; text-transform: uppercase; letter-spacing: .1em; color: var(--muted); font-weight: 700; }
+  .step { display: flex; align-items: center; gap: 4px; }
+  .step button {
+    width: 42px; height: 42px; border-radius: 12px; border: 1px solid var(--line-strong); background: var(--surface);
+    font-size: 22px; font-weight: 700; color: var(--ink); display: grid; place-items: center; box-shadow: var(--shadow-sm);
+  }
+  .step button:active { transform: scale(.94); }
+  .score-box {
+    width: 74px; text-align: center; font-family: var(--mono); font-variant-numeric: tabular-nums;
+    font-size: 34px; font-weight: 700; line-height: 1;
+  }
+  .score-box .rel { display: block; font-size: 11px; font-weight: 700; letter-spacing: .04em; font-family: var(--sans); min-height: 14px; }
+  .rel.u { color: var(--under); } .rel.o { color: var(--over); } .rel.e { color: var(--muted); }
+
+  /* ---------- Scorecard ---------- */
+  .sc-wrap { border-radius: 16px; border: 1px solid var(--line); overflow: hidden; background: var(--surface); box-shadow: var(--shadow); }
+  table.sc { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  table.sc th, table.sc td { padding: 8px 4px; text-align: center; font-size: 13px; }
+  table.sc thead th { font-size: 10px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); font-weight: 700; background: var(--surface-2); }
+  table.sc th.h, table.sc td.h { text-align: left; padding-left: 14px; font-weight: 600; }
+  table.sc td.num, table.sc th.num { font-family: var(--mono); }
+  table.sc tbody tr { border-top: 1px solid var(--line); }
+  table.sc tr.sub td { background: var(--surface-2); font-weight: 700; }
+  table.sc tr.tot td { background: var(--accent-soft); font-weight: 800; }
+  .sc-score { display: inline-grid; place-items: center; width: 26px; height: 26px; font-family: var(--mono); font-weight: 700; }
+  .sc-score.u { color: var(--under); border-radius: 50%; box-shadow: inset 0 0 0 1.5px var(--under); }
+  .sc-score.uu { color: var(--under); border-radius: 50%; box-shadow: inset 0 0 0 1.5px var(--under), inset 0 0 0 4px var(--surface), inset 0 0 0 5.5px var(--under); }
+  .sc-score.o { color: var(--over); box-shadow: inset 0 0 0 1.5px var(--over); }
+  .sc-score.oo { color: var(--over); box-shadow: inset 0 0 0 1.5px var(--over), inset 0 0 0 4px var(--surface), inset 0 0 0 5.5px var(--over); }
+  .card-meta { display: flex; gap: 8px; margin-top: 14px; }
+  .metcard { flex: 1; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 11px 12px; }
+  .metcard .k { font-size: 10px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+  .metcard .v { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 22px; font-weight: 700; margin-top: 2px; }
+  .reset { margin: 16px auto 0; display: block; font-size: 13px; color: var(--muted); text-decoration: underline; text-underline-offset: 3px; }
+
+  /* ---------- Bag / settings ---------- */
+  .sec-h { font-size: 12px; text-transform: uppercase; letter-spacing: .1em; color: var(--muted); font-weight: 700; margin: 4px 2px 10px; }
+  .intro { font-size: 13px; color: var(--muted); margin: 0 2px 16px; line-height: 1.55; }
+  .bag { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; box-shadow: var(--shadow); overflow: hidden; }
+  .club-row { display: flex; align-items: center; gap: 12px; padding: 9px 14px; border-top: 1px solid var(--line); }
+  .club-row:first-child { border-top: none; }
+  .club-row .cn { flex: 1; font-weight: 600; font-size: 14px; }
+  .club-row .ci { display: flex; align-items: center; gap: 6px; background: var(--surface-2); border: 1px solid var(--line); border-radius: 9px; padding: 5px 10px; }
+  .club-row .ci input { width: 52px; border: none; background: none; text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 17px; font-weight: 700; padding: 0; }
+  .club-row .ci input:focus { outline: none; }
+  .club-row .ci .u { color: var(--muted); font-family: var(--mono); font-size: 13px; }
+  .del { color: var(--faint); width: 26px; height: 26px; display: grid; place-items: center; border-radius: 7px; font-size: 18px; }
+  .add-club { display: flex; gap: 8px; margin-top: 12px; }
+  .add-club input { flex: 1; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 9px 12px; }
+  .add-club .go { background: var(--accent); color: #fff; border-radius: 10px; padding: 9px 16px; font-weight: 700; }
+  :root[data-theme="dark"] .add-club .go, @media (prefers-color-scheme: dark) { }
+  .about { margin-top: 24px; font-size: 12px; color: var(--muted); line-height: 1.6; }
+  .about b { color: var(--ink); }
+  .theme-row { display: flex; gap: 8px; margin: 6px 2px 20px; }
+  .theme-row button { flex: 1; padding: 9px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); font-size: 13px; font-weight: 600; color: var(--muted); }
+  .theme-row button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+
+  /* ---------- Bottom nav ---------- */
+  .tabs {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;
+    background: color-mix(in srgb, var(--surface) 92%, transparent); backdrop-filter: blur(12px) saturate(1.3);
+    border-top: 1px solid var(--line); display: flex; padding-bottom: env(safe-area-inset-bottom);
+  }
+  .tabs .inner { max-width: 520px; margin: 0 auto; width: 100%; display: flex; }
+  .tab { flex: 1; padding: 9px 4px 8px; display: flex; flex-direction: column; align-items: center; gap: 3px; color: var(--muted); }
+  .tab svg { width: 22px; height: 22px; }
+  .tab span { font-size: 10px; letter-spacing: .04em; font-weight: 600; }
+  .tab[aria-current="true"] { color: var(--accent); }
+  .tab[aria-current="true"] span { color: var(--accent); }
+
+  .hidden { display: none !important; }
+</style>
+
+<div class="app">
+  <header class="top">
+    <div class="top-row">
+      <span class="brand">
+        <svg class="flag" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M6 3v18" stroke="var(--accent)" stroke-width="1.8" stroke-linecap="round"/>
+          <path d="M6 3.5c3.6-1.6 6.4 1.1 10 0V10c-3.6 1.1-6.4-1.6-10 0V3.5Z" fill="var(--accent)"/>
+          <circle cx="6" cy="21" r="1.6" fill="var(--sand)"/>
+        </svg>
+        <span class="brand-txt">
+          <span class="k">On-course caddie</span>
+          <select id="courseSel" aria-label="Select course"></select>
+        </span>
+      </span>
+      <span class="to-par">
+        <span class="big" id="toParBig">E</span>
+        <span class="sub" id="toParSub">thru 0</span>
+      </span>
+    </div>
+    <div class="tees" id="tees" role="group" aria-label="Tee selection"></div>
+  </header>
+
+  <main>
+    <!-- PLAY -->
+    <section class="view on" id="v-play">
+      <div class="strip" id="strip"></div>
+      <div class="card">
+        <div class="hole-head">
+          <button class="nav-btn" id="prevHole" aria-label="Previous hole">
+            <svg viewBox="0 0 24 24" fill="none"><path d="M15 5l-7 7 7 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+          <div class="hole-title">
+            <div class="lbl">Hole</div>
+            <div class="no" id="holeNo">1</div>
+          </div>
+          <button class="nav-btn" id="nextHole" aria-label="Next hole">
+            <svg viewBox="0 0 24 24" fill="none"><path d="M9 5l7 7-7 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+        </div>
+        <div class="hole-body" id="holeBody"><!-- filled by JS --></div>
+      </div>
+    </section>
+
+    <!-- SCORECARD -->
+    <section class="view" id="v-card">
+      <div class="sc-wrap">
+        <table class="sc" id="scTable"></table>
+      </div>
+      <div class="card-meta">
+        <div class="metcard"><div class="k">Score</div><div class="v" id="mScore">—</div></div>
+        <div class="metcard"><div class="k">To par</div><div class="v" id="mPar">E</div></div>
+        <div class="metcard"><div class="k">Holes</div><div class="v" id="mHoles">0</div></div>
+      </div>
+      <button class="reset" id="resetRound">Clear this round's scores</button>
+    </section>
+
+    <!-- BAG -->
+    <section class="view" id="v-bag">
+      <div class="sec-h">Appearance</div>
+      <div class="theme-row" id="themeRow">
+        <button data-theme-set="auto" aria-pressed="true">Auto</button>
+        <button data-theme-set="light">Light</button>
+        <button data-theme-set="dark">Dark</button>
+      </div>
+      <div class="sec-h">My bag · carry distances</div>
+      <p class="intro">Set your realistic <b>carry</b> for each club in metres. The caddie uses these to suggest a club from any distance — on the hole card and in the matcher.</p>
+      <div class="bag" id="bag"></div>
+      <div class="add-club">
+        <input id="newClubName" placeholder="Club (e.g. 4 iron)" aria-label="New club name" />
+        <input id="newClubDist" inputmode="numeric" placeholder="m" aria-label="New club distance" style="max-width:80px" />
+        <button class="go" id="addClub">Add</button>
+      </div>
+      <div class="about" id="about"></div>
+    </section>
+  </main>
+
+  <nav class="tabs">
+    <div class="inner">
+      <button class="tab" data-tab="play" aria-current="true">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M6 3v18" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/><path d="M6 4c3-1.3 5.5 1 9 0v5c-3.5 1-6-1.3-9 0V4Z" fill="currentColor"/></svg>
+        <span>Play</span>
+      </button>
+      <button class="tab" data-tab="card">
+        <svg viewBox="0 0 24 24" fill="none"><rect x="4" y="3" width="16" height="18" rx="2" stroke="currentColor" stroke-width="1.8"/><path d="M8 8h8M8 12h8M8 16h5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        <span>Card</span>
+      </button>
+      <button class="tab" data-tab="bag">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M8 8V6a2 2 0 0 1 2-2h1a2 2 0 0 1 2 2v2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><rect x="5" y="8" width="11" height="13" rx="2.5" stroke="currentColor" stroke-width="1.8"/><path d="M18 11l1.6.6a1.5 1.5 0 0 1 1 1.6l-.7 5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        <span>Bag</span>
+      </button>
+    </div>
+  </nav>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  /* =====================================================================
+     COURSE DATA
+     To add a course later: append an object to COURSES with the same shape.
+     Blue-tee distances (metres) are the official scorecard; white/red are
+     estimated by scaling the total (flagged with ≈ in the UI) until exact
+     per-hole numbers are added.
+     ===================================================================== */
+  var COURSES = [{
+    id: "mt-derrimut",
+    name: "Mt Derrimut",
+    location: "Derrimut, VIC",
+    par: 72,
+    designer: "Craig Parry & Pacific Coast Design (2007)",
+    address: "475 Mt Derrimut Rd, Derrimut VIC 3030",
+    tees: [
+      { id: "blue",  name: "Blue",  label: "Championship", total: 6776, rating: 73.0, slope: 127, factor: 1 },
+      { id: "white", name: "White", label: "Men's",        total: 6275, rating: 70.0, slope: 124, factor: 6275 / 6776 },
+      { id: "red",   name: "Red",   label: "Women's",       total: 5777, rating: 74.0, slope: 134, factor: 5777 / 6776 }
+    ],
+    // par, stroke index (si), official blue-tee metres (blue)
+    holes: [
+      { par: 4, si: 4,  blue: 406, play: "Tough opener and one of the harder holes on the card. Take enough club into a long approach and aim for the centre of the green — a par here is a good start." },
+      { par: 5, si: 14, blue: 519, play: "Reachable on paper but plays as a three-shotter for most. Keep the tee ball in play, then lay up to a comfortable wedge number rather than forcing the second." },
+      { par: 4, si: 12, blue: 375, play: "Mid-length two-shotter. A fairway finder leaves a short iron in; favour the centre of the green over flirting with a front pin." },
+      { par: 5, si: 13, blue: 540, play: "The longest of the front-nine par 5s — three good shots to get home. Advance the second sensibly and set up a full wedge for your third." },
+      { par: 4, si: 9,  blue: 391, play: "Solid par 4. Take enough club into the green; long is usually the safer miss here than short." },
+      { par: 3, si: 18, blue: 155, play: "Rated the easiest hole but still a mid-iron. Commit to your number, aim at the heart of the green, and walk off with par." },
+      { par: 4, si: 6,  blue: 424, play: "Long, demanding par 4 — the 6th-hardest. A well-struck drive is rewarded; if you miss the fairway, take your medicine and make five." },
+      { par: 4, si: 8,  blue: 384, play: "Mid-length par 4. Find the short grass and the approach is very makeable — this is a hole to be aggressive with a wedge or short iron." },
+      { par: 3, si: 16, blue: 150, play: "Signature par 3 — the green sits between two stone walls, so club selection is everything. Aim dead centre and take one more club if you're between.", feature: { type: "sand", tag: "Signature hole", text: "Green framed by two stone walls — miss the putting surface and the walls punish you. Middle of the green is the play." } },
+      { par: 4, si: 1,  blue: 413, play: "The hardest hole on the course. A long par 4 where par is a shot gained on the field. Play to the middle of the green and take your four gladly." },
+      { par: 4, si: 17, blue: 325, play: "Short, tempting par 4 — but a driver brings both hazards into play. Laying back to your favourite wedge distance is the percentage play.", feature: { type: "water", tag: "Water + wall", text: "Lake down the right, stone wall on the left. This is where the back-nine water starts to bite — take the risk out with a lay-up." } },
+      { par: 3, si: 10, blue: 189, play: "A long par 3 that plays every metre of its length. Take enough club — pin-high or slightly long beats coming up short." },
+      { par: 5, si: 5,  blue: 566, play: "The longest hole on the course and a genuine three-shotter. Stay patient, keep it dry, and wedge the third close for a birdie look." },
+      { par: 4, si: 3,  blue: 413, play: "Long, stern par 4 — the 3rd-hardest, with water in play on the back nine. Favour the safe side off the tee and aim for the centre of the green.", feature: { type: "water", tag: "Water in play", text: "Water comes into play on the back nine here — the safe side off the tee is worth the extra distance." } },
+      { par: 3, si: 7,  blue: 172, play: "Mid-length par 3 with water around on the back nine. Trust your yardage, aim at the middle, and avoid the short-side miss.", feature: { type: "water", tag: "Water carry", text: "Water guards this back-nine par 3. Take enough club to be sure of carrying it — the middle of the green is plenty." } },
+      { par: 5, si: 15, blue: 535, play: "A real birdie chance if you drive it well. Decide early whether to go for it; if not, lay up to a full number and attack with the wedge." },
+      { par: 4, si: 2,  blue: 444, play: "The bruiser — longest par 4 and the 2nd-hardest. A big drive is needed and anything on the green is a win. Don't force a hero approach." },
+      { par: 4, si: 11, blue: 375, play: "A reachable closing par 4. Find the fairway, hit a short iron in, and give yourself a chance to sign off with a par or better." }
+    ]
+  }];
+
+  /* ---------- club defaults (metres, carry) ---------- */
+  var DEFAULT_CLUBS = [
+    { name: "Driver", d: 215 }, { name: "3 wood", d: 200 }, { name: "5 wood", d: 185 },
+    { name: "4 hybrid", d: 172 }, { name: "5 iron", d: 160 }, { name: "6 iron", d: 150 },
+    { name: "7 iron", d: 140 }, { name: "8 iron", d: 130 }, { name: "9 iron", d: 120 },
+    { name: "Pitching wedge", d: 105 }, { name: "Gap wedge", d: 90 },
+    { name: "Sand wedge", d: 75 }, { name: "Lob wedge", d: 60 }
+  ];
+
+  /* ---------- persistent state ---------- */
+  var LS = "caddie.v2";
+  var state = load();
+  function load() {
+    var base = { courseId: COURSES[0].id, tee: "white", hole: 0, scores: {}, clubs: DEFAULT_CLUBS.slice(), theme: "auto", calc: {} };
+    try {
+      var s = JSON.parse(localStorage.getItem(LS));
+      if (s && typeof s === "object") return Object.assign(base, s);
+    } catch (e) {}
+    return base;
+  }
+  function save() { try { localStorage.setItem(LS, JSON.stringify(state)); } catch (e) {} }
+
+  function course() { return COURSES.find(function (c) { return c.id === state.courseId; }) || COURSES[0]; }
+  function tee() { var c = course(); return c.tees.find(function (t) { return t.id === state.tee; }) || c.tees[0]; }
+  function holeDist(h, t) {
+    if (t.id === "blue") return { m: h.blue, est: false };
+    return { m: Math.round(h.blue * t.factor), est: true };
+  }
+
+  /* =====================================================================
+     RENDER
+     ===================================================================== */
+  var $ = function (s, r) { return (r || document).querySelector(s); };
+
+  function renderCourseSel() {
+    var sel = $("#courseSel");
+    sel.innerHTML = COURSES.map(function (c) {
+      return '<option value="' + c.id + '">' + c.name + "</option>";
+    }).join("");
+    sel.value = state.courseId;
+  }
+
+  function renderTees() {
+    var c = course(), box = $("#tees");
+    box.innerHTML = c.tees.map(function (t) {
+      return '<button class="tee" data-t="' + t.id + '" data-tee="' + t.id + '" aria-pressed="' + (t.id === state.tee) + '">'
+        + '<div class="nm">' + t.name + "</div>"
+        + '<div class="yd">' + t.total.toLocaleString() + " m</div></button>";
+    }).join("");
+  }
+
+  function renderStrip() {
+    var c = course(), strip = $("#strip");
+    strip.innerHTML = c.holes.map(function (h, i) {
+      var scored = state.scores[i] != null;
+      return '<button class="pip' + (scored ? " scored" : "") + '" data-hole="' + i + '" aria-current="' + (i === state.hole) + '" aria-label="Hole ' + (i + 1) + '">'
+        + '<span class="n">' + (i + 1) + "</span><span class=\"d\"></span></button>";
+    }).join("");
+    var cur = strip.querySelector('[aria-current="true"]');
+    if (cur) cur.scrollIntoView({ inline: "center", block: "nearest", behavior: "smooth" });
+  }
+
+  function relClass(rel) { return rel < 0 ? "u" : rel > 0 ? "o" : "e"; }
+  function relText(rel) { return rel === 0 ? "par" : rel > 0 ? "+" + rel : String(rel); }
+
+  function nearestClub(target) {
+    if (!target || !state.clubs.length) return null;
+    var sorted = state.clubs.slice().sort(function (a, b) { return a.d - b.d; });
+    var best = sorted[0], bd = Math.abs(sorted[0].d - target);
+    sorted.forEach(function (c) { var d = Math.abs(c.d - target); if (d < bd) { bd = d; best = c; } });
+    var diff = target - best.d; // + => longer than club carry (into it), - => club carries past
+    return { club: best, diff: diff };
+  }
+
+  function renderHole() {
+    var c = course(), t = tee(), i = state.hole, h = c.holes[i];
+    $("#holeNo").textContent = i + 1;
+    $("#prevHole").disabled = i === 0;
+    $("#nextHole").disabled = i === c.holes.length - 1;
+
+    var d = holeDist(h, t);
+    var score = state.scores[i];
+    var rel = score != null ? score - h.par : null;
+
+    var featHtml = "";
+    if (h.feature) {
+      featHtml = '<div class="feature ' + (h.feature.type === "water" ? "water" : "") + '">'
+        + '<span class="ic">' + (h.feature.type === "water" ? "💧" : "🪨") + "</span>"
+        + '<div><div class="tag">' + h.feature.tag + "</div><p>" + h.feature.text + "</p></div></div>";
+    }
+
+    // club matcher default: par 3 => full distance to green
+    var calcVal = state.calc[i] != null ? state.calc[i] : (h.par === 3 ? d.m : "");
+    var rec = calcVal !== "" ? nearestClub(Number(calcVal)) : null;
+    var recHtml = rec
+      ? '<div class="rec"><div class="club">' + rec.club.name + "</div>"
+        + '<div class="note">' + rec.club.d + " m carry · "
+        + (Math.abs(rec.diff) <= 3 ? "dialled in" : rec.diff > 0 ? "+" + rec.diff + " m — club up / swing full" : Math.abs(rec.diff) + " m less — ease off") + "</div></div>"
+      : '<div class="rec"><div class="empty">Enter a distance to the pin for a club</div></div>';
+
+    $("#holeBody").innerHTML =
+      '<div class="readout">'
+      + '<div class="val">' + d.m + '<span class="u">m</span></div>'
+      + '<div class="est">' + (d.est ? "≈ estimated for " + t.name + " tee" : t.name + " tee · exact") + "</div>"
+      + '<div class="flight" aria-hidden="true"></div>'
+      + "</div>"
+      + '<div class="chips">'
+      + '<span class="chip"><span class="t">Par</span><b>' + h.par + "</b></span>"
+      + '<span class="chip"><span class="t">Index</span><b>' + h.si + "</b></span>"
+      + '<span class="chip"><span class="t">Plays</span><b>' + shape(h.par) + "</b></span>"
+      + "</div>"
+      + featHtml
+      + '<div class="play"><div class="tag">Caddie says</div><p>' + h.play + "</p></div>"
+      + '<div class="matcher"><div class="h">Distance to pin → club</div><div class="mrow">'
+      + '<div class="dist-in"><input id="calcIn" inputmode="numeric" value="' + calcVal + '" aria-label="Distance to pin" /><span class="u">m</span></div>'
+      + '<span class="arrow"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>'
+      + recHtml + "</div></div>"
+      + '<div class="scorer"><span class="h">Your score</span><div class="step">'
+      + '<button id="scoreDown" aria-label="Lower score">−</button>'
+      + '<div class="score-box">' + (score != null ? score : "–") + '<span class="rel ' + (rel != null ? relClass(rel) : "e") + '">' + (rel != null ? relText(rel) : "&nbsp;") + "</span></div>"
+      + '<button id="scoreUp" aria-label="Raise score">+</button>'
+      + "</div></div>";
+
+    // wire hole-scoped controls
+    $("#scoreUp").onclick = function () { setScore(i, (state.scores[i] || h.par - 1) + 1); };
+    $("#scoreDown").onclick = function () {
+      var cur = state.scores[i];
+      if (cur == null) { setScore(i, h.par); return; }
+      if (cur <= 1) { delete state.scores[i]; save(); renderHole(); renderStrip(); renderSummary(); return; }
+      setScore(i, cur - 1);
+    };
+    var calcIn = $("#calcIn");
+    calcIn.oninput = function () {
+      var v = calcIn.value.replace(/[^0-9]/g, "");
+      state.calc[i] = v === "" ? "" : Number(v);
+      save();
+      // re-render only the rec line for snappiness
+      var r = v !== "" ? nearestClub(Number(v)) : null;
+      var recEl = $(".rec");
+      recEl.innerHTML = r
+        ? '<div class="club">' + r.club.name + "</div><div class=\"note\">" + r.club.d + " m carry · "
+          + (Math.abs(r.diff) <= 3 ? "dialled in" : r.diff > 0 ? "+" + r.diff + " m — club up / swing full" : Math.abs(r.diff) + " m less — ease off") + "</div>"
+        : '<div class="empty">Enter a distance to the pin for a club</div>';
+    };
+  }
+
+  function shape(par) { return par === 3 ? "1-shot" : par === 4 ? "2-shot" : "3-shot"; }
+
+  function setScore(i, val) {
+    if (val < 1) val = 1;
+    if (val > 15) val = 15;
+    state.scores[i] = val;
+    save();
+    renderHole();
+    renderStrip();
+    renderSummary();
+  }
+
+  function summary() {
+    var c = course(), played = 0, strokes = 0, parPlayed = 0;
+    c.holes.forEach(function (h, i) {
+      if (state.scores[i] != null) { played++; strokes += state.scores[i]; parPlayed += h.par; }
+    });
+    return { played: played, strokes: strokes, rel: strokes - parPlayed };
+  }
+
+  function renderSummary() {
+    var s = summary();
+    $("#toParBig").textContent = s.played ? relText(s.rel).replace("par", "E") : "E";
+    $("#toParBig").style.color = s.played ? (s.rel < 0 ? "var(--under)" : s.rel > 0 ? "var(--over)" : "var(--ink)") : "var(--ink)";
+    $("#toParSub").textContent = "thru " + s.played;
+  }
+
+  function renderScorecard() {
+    var c = course(), t = tee();
+    function cell(i) {
+      var h = c.holes[i], sc = state.scores[i];
+      if (sc == null) return '<td class="num">–</td>';
+      var rel = sc - h.par, cls = rel <= -2 ? "uu" : rel === -1 ? "u" : rel === 1 ? "o" : rel >= 2 ? "oo" : "";
+      return '<td class="num"><span class="sc-score ' + cls + '">' + sc + "</span></td>";
+    }
+    function distOf(i) { return holeDist(c.holes[i], t).m; }
+    // header
+    var head = '<thead><tr><th class="h">Hole</th>';
+    for (var i = 0; i < 18; i++) { head += '<th class="num">' + (i + 1) + "</th>"; if (i === 8) head += '<th class="num">Out</th>'; }
+    head += '<th class="num">In</th><th class="num">Tot</th></tr></thead>';
+
+    // body rows use raw values; scorecard cells for score handled separately
+    function parCells() {
+      var out = "", sumO = 0, sumI = 0;
+      for (var i = 0; i < 18; i++) { out += '<td class="num">' + c.holes[i].par + "</td>"; if (i < 9) sumO += c.holes[i].par; else sumI += c.holes[i].par; if (i === 8) out += '<td class="num">' + sumO + "</td>"; }
+      out += '<td class="num">' + sumI + '</td><td class="num">' + (sumO + sumI) + "</td>";
+      return out;
+    }
+    function distCells() {
+      var out = "", sumO = 0, sumI = 0;
+      for (var i = 0; i < 18; i++) { var m = distOf(i); out += '<td class="num">' + m + "</td>"; if (i < 9) sumO += m; else sumI += m; if (i === 8) out += '<td class="num">' + sumO + "</td>"; }
+      out += '<td class="num">' + sumI + '</td><td class="num">' + (sumO + sumI) + "</td>";
+      return out;
+    }
+    function siCells() {
+      var out = "";
+      for (var i = 0; i < 18; i++) { out += '<td class="num">' + c.holes[i].si + "</td>"; if (i === 8) out += '<td class="num">–</td>'; }
+      out += '<td class="num">–</td><td class="num">–</td>';
+      return out;
+    }
+    function scoreCells() {
+      var out = "", sumO = 0, sumI = 0, anyO = false, anyI = false;
+      for (var i = 0; i < 18; i++) {
+        out += cell(i);
+        var sc = state.scores[i];
+        if (sc != null) { if (i < 9) { sumO += sc; anyO = true; } else { sumI += sc; anyI = true; } }
+        if (i === 8) out += '<td class="num">' + (anyO ? sumO : "–") + "</td>";
+      }
+      out += '<td class="num">' + (anyI ? sumI : "–") + '</td><td class="num">' + ((anyO || anyI) ? sumO + sumI : "–") + "</td>";
+      return out;
+    }
+
+    $("#scTable").innerHTML = head + "<tbody>"
+      + '<tr class="tot"><td class="h">' + t.name + " m</td>" + distCells() + "</tr>"
+      + '<tr class="sub"><td class="h">Par</td>' + parCells() + "</tr>"
+      + '<tr><td class="h">Index</td>' + siCells() + "</tr>"
+      + '<tr><td class="h">Score</td>' + scoreCells() + "</tr>"
+      + "</tbody>";
+
+    var s = summary();
+    $("#mScore").textContent = s.played ? s.strokes : "–";
+    $("#mPar").textContent = s.played ? relText(s.rel).replace("par", "E") : "E";
+    $("#mPar").style.color = s.played ? (s.rel < 0 ? "var(--under)" : s.rel > 0 ? "var(--over)" : "var(--ink)") : "var(--ink)";
+    $("#mHoles").textContent = s.played + "/18";
+  }
+
+  function renderBag() {
+    var bag = $("#bag");
+    bag.innerHTML = state.clubs.map(function (c, i) {
+      return '<div class="club-row"><span class="cn">' + c.name + "</span>"
+        + '<span class="ci"><input inputmode="numeric" data-club="' + i + '" value="' + c.d + '" aria-label="' + c.name + ' distance" /><span class="u">m</span></span>'
+        + '<button class="del" data-del="' + i + '" aria-label="Remove ' + c.name + '">×</button></div>';
+    }).join("");
+  }
+
+  function renderAbout() {
+    var c = course();
+    $("#about").innerHTML =
+      "<b>" + c.name + "</b> · " + c.location + "<br>"
+      + "Par " + c.par + " · designed by " + c.designer + ".<br>"
+      + c.address + "<br><br>"
+      + c.tees.map(function (t) { return t.name + " (" + t.label + "): " + t.total.toLocaleString() + " m · rating " + t.rating.toFixed(1) + " / slope " + t.slope; }).join("<br>")
+      + "<br><br><span style=\"color:var(--faint)\">Blue-tee distances are the official scorecard. White and red per-hole distances are estimated (≈) from the tee totals until exact figures are added. Confirm hazards and pin positions on the day. Scores and settings are saved on this device.</span>";
+  }
+
+  /* ---------- theme ---------- */
+  function applyTheme() {
+    var root = document.documentElement;
+    if (state.theme === "auto") root.removeAttribute("data-theme");
+    else root.setAttribute("data-theme", state.theme);
+    Array.prototype.forEach.call(document.querySelectorAll("[data-theme-set]"), function (b) {
+      b.setAttribute("aria-pressed", b.getAttribute("data-theme-set") === state.theme);
+    });
+  }
+
+  /* ---------- view switching ---------- */
+  function showView(name) {
+    ["play", "card", "bag"].forEach(function (v) {
+      $("#v-" + v).classList.toggle("on", v === name);
+    });
+    Array.prototype.forEach.call(document.querySelectorAll(".tab"), function (t) {
+      t.setAttribute("aria-current", t.getAttribute("data-tab") === name);
+    });
+    if (name === "card") renderScorecard();
+    if (name === "bag") { renderBag(); renderAbout(); }
+    window.scrollTo({ top: 0, behavior: "instant" in window ? "instant" : "auto" });
+  }
+
+  /* =====================================================================
+     EVENTS
+     ===================================================================== */
+  $("#courseSel").onchange = function (e) {
+    state.courseId = e.target.value; state.hole = 0; state.calc = {};
+    // note: scores are keyed per hole index; keep separate per course in future versions
+    save(); fullRender();
+  };
+  $("#tees").addEventListener("click", function (e) {
+    var b = e.target.closest("[data-tee]"); if (!b) return;
+    state.tee = b.getAttribute("data-tee"); save(); renderTees(); renderHole();
+    if ($("#v-card").classList.contains("on")) renderScorecard();
+  });
+  $("#strip").addEventListener("click", function (e) {
+    var b = e.target.closest("[data-hole]"); if (!b) return;
+    state.hole = Number(b.getAttribute("data-hole")); save(); renderStrip(); renderHole();
+  });
+  $("#prevHole").onclick = function () { if (state.hole > 0) { state.hole--; save(); renderStrip(); renderHole(); } };
+  $("#nextHole").onclick = function () { if (state.hole < course().holes.length - 1) { state.hole++; save(); renderStrip(); renderHole(); } };
+
+  document.querySelector(".tabs").addEventListener("click", function (e) {
+    var b = e.target.closest("[data-tab]"); if (!b) return;
+    showView(b.getAttribute("data-tab"));
+  });
+
+  $("#themeRow").addEventListener("click", function (e) {
+    var b = e.target.closest("[data-theme-set]"); if (!b) return;
+    state.theme = b.getAttribute("data-theme-set"); save(); applyTheme();
+  });
+
+  $("#bag").addEventListener("input", function (e) {
+    var inp = e.target.closest("[data-club]"); if (!inp) return;
+    var idx = Number(inp.getAttribute("data-club"));
+    var v = inp.value.replace(/[^0-9]/g, "");
+    state.clubs[idx].d = v === "" ? 0 : Number(v);
+    save();
+  });
+  $("#bag").addEventListener("click", function (e) {
+    var del = e.target.closest("[data-del]"); if (!del) return;
+    state.clubs.splice(Number(del.getAttribute("data-del")), 1); save(); renderBag();
+  });
+  $("#addClub").onclick = function () {
+    var nm = $("#newClubName").value.trim();
+    var d = Number($("#newClubDist").value.replace(/[^0-9]/g, ""));
+    if (!nm || !d) return;
+    state.clubs.push({ name: nm, d: d });
+    state.clubs.sort(function (a, b) { return b.d - a.d; });
+    $("#newClubName").value = ""; $("#newClubDist").value = "";
+    save(); renderBag();
+  };
+
+  $("#resetRound").onclick = function () {
+    if (!confirm("Clear all scores for this round?")) return;
+    state.scores = {}; save(); renderStrip(); renderHole(); renderSummary(); renderScorecard();
+  };
+
+  /* ---------- caret svg (theme-aware via CSS var) ---------- */
+  function setCaret() {
+    var col = getComputedStyle(document.documentElement).getPropertyValue("--muted").trim() || "#888";
+    var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="7" viewBox="0 0 10 7"><path d="M1 1l4 4 4-4" stroke="' + col + '" stroke-width="1.6" fill="none" stroke-linecap="round"/></svg>';
+    document.documentElement.style.setProperty("--caret", "url('data:image/svg+xml;utf8," + encodeURIComponent(svg) + "')");
+  }
+
+  function fullRender() {
+    renderCourseSel(); renderTees(); renderStrip(); renderHole(); renderSummary();
+  }
+
+  /* ---------- boot ---------- */
+  document.title = "Caddie · " + course().name;
+  applyTheme();
+  setCaret();
+  fullRender();
+  // keep caret colour in sync when OS theme flips while in auto
+  if (window.matchMedia) {
+    try { window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", setCaret); } catch (e) {}
+  }
+})();
+</script>
