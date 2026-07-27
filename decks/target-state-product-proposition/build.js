@@ -2,49 +2,48 @@ const pptxgen = require("pptxgenjs");
 
 // ============================================================
 // PALETTE — "Heritage Mutual": Forest-ink · Brass · Warm ivory
-// A member-owned bank is old, trusted, community-rooted — not a
-// fintech. The palette says heritage without saying "old-fashioned":
-// a deep forest-ink dominates (60-70%), warm ivory carries the
-// content, and a single brass accent does all the emphasis.
+// An education-sector mutual (teachers, nurses): trusted, patient,
+// purpose-led. Deep forest-ink dominates; warm ivory carries the
+// content; a single brass accent does all the emphasis.
 // ============================================================
-const INK      = "13221C"; // near-black forest — dominant dark
-const INK2     = "1C3227"; // tonal watermark on dark (ghost numerals)
-const BRASS    = "C69A5B"; // accent for display / dark grounds
-const BRASS_DK = "9C7538"; // accent for small text on ivory (contrast)
-const PAPER    = "F4F1EA"; // warm ivory — light content bg
+const INK      = "13221C";
+const INK2     = "1C3227"; // tonal watermark on dark
+const BRASS    = "C69A5B"; // accent on dark grounds
+const BRASS_DK = "9C7538"; // accent for small text on ivory
+const PAPER    = "F4F1EA";
 const PAPER2   = "EAE4D7"; // panel tint on paper
-const HAIR     = "D6CFBF"; // hairline on paper
-const HAIR_D   = "2E4438"; // hairline on ink
-const HEAD     = "16271F"; // headline on paper
-const BODY_C   = "31403A"; // body on paper
-const MUTED    = "78857C"; // muted on paper
-const IVORY    = "EFE9DA"; // text on ink
-const IVORY_M  = "A6B0A6"; // muted on ink
-const FOOT_D   = "6E7C74"; // footer on ink
+const HAIR     = "D6CFBF";
+const HAIR_D   = "2E4438";
+const HEAD     = "16271F";
+const BODY_C   = "31403A";
+const MUTED    = "78857C";
+const GREY_TO  = "9AA49C"; // "from/vanilla" muted serif
+const IVORY    = "EFE9DA";
+const IVORY_M  = "A6B0A6";
+const FOOT_D   = "6E7C74";
 
-const DISPLAY = "Century Schoolbook"; // safe-list serif (headlines, numerals)
-const BODY    = "Calibri";            // safe-list sans (body)
+const DISPLAY = "Century Schoolbook";
+const BODY    = "Calibri";
 
 const W = 13.333, H = 7.5, ML = 0.9;
 const P = new pptxgen();
 P.defineLayout({ name: "W", width: W, height: H });
 P.layout = "W";
 P.author = "[Bank Name]";
-P.title = "Target State Product & Proposition";
+P.title = "Core Banking Platform Transformation";
 const R = P.ShapeType;
 
 // ---------- helpers ----------
 function inkBg(s) { s.background = { color: INK }; }
 function paperBg(s) { s.background = { color: PAPER }; }
-
 function kicker(s, t, dark, y) {
-  s.addText(t.toUpperCase(), { x: ML, y: y == null ? 0.7 : y, w: 11, h: 0.3, fontFace: BODY, fontSize: 11.5, bold: true, color: dark ? BRASS : BRASS_DK, charSpacing: 4 });
+  s.addText(t.toUpperCase(), { x: ML, y: y == null ? 0.7 : y, w: 11.4, h: 0.3, fontFace: BODY, fontSize: 11.5, bold: true, color: dark ? BRASS : BRASS_DK, charSpacing: 4 });
 }
 function headline(s, t, dark, y, size) {
   s.addText(t, { x: ML - 0.03, y: y == null ? 1.12 : y, w: 11.7, h: 1.0, fontFace: DISPLAY, fontSize: size || 33, color: dark ? IVORY : HEAD, lineSpacingMultiple: 1.0 });
 }
 function subhead(s, t, y) {
-  s.addText(t, { x: ML, y: y, w: 11.4, h: 0.35, fontFace: BODY, fontSize: 13.5, italic: true, color: MUTED });
+  s.addText(t, { x: ML, y: y, w: 11.5, h: 0.4, fontFace: BODY, fontSize: 13.5, italic: true, color: MUTED, lineSpacingMultiple: 1.1 });
 }
 function hair(s, x, y, w, color) {
   s.addShape(R.rect, { x, y, w, h: 0.015, fill: { color: color || HAIR }, line: { type: "none" } });
@@ -53,495 +52,337 @@ function vrule(s, x, y, h, color) {
   s.addShape(R.rect, { x, y, w: 0.014, h, fill: { color: color || HAIR }, line: { type: "none" } });
 }
 function foot(s, n, dark) {
-  s.addText("[Bank Name]  ·  Target State Product & Proposition", { x: ML, y: 7.04, w: 8, h: 0.3, fontFace: BODY, fontSize: 9, color: dark ? FOOT_D : MUTED, charSpacing: 1 });
+  s.addText("[Bank Name]  ·  Core Banking Platform Transformation", { x: ML, y: 7.04, w: 8.5, h: 0.3, fontFace: BODY, fontSize: 9, color: dark ? FOOT_D : MUTED, charSpacing: 1 });
   s.addText(String(n).padStart(2, "0"), { x: 11.85, y: 7.0, w: 0.6, h: 0.32, fontFace: DISPLAY, fontSize: 12, color: dark ? BRASS : BRASS_DK, align: "right" });
 }
 function ghost(s, txt, x, w) {
   s.addText(txt, { x, y: 0.9, w, h: 5.7, fontFace: DISPLAY, fontSize: 400, bold: true, color: INK2, align: "right", valign: "middle" });
 }
-function fresh(o) { return Object.assign({}, o); }
 
 // ============================================================
-// S1 — Title (ink)  · SETUP begins
+// S1 — Title (dark)  · the transformation
 // ============================================================
 function s1() {
   const s = P.addSlide(); inkBg(s);
-  s.addText("&", { x: 6.6, y: 0.1, w: 6.7, h: 7.3, fontFace: DISPLAY, fontSize: 460, color: INK2, align: "right", valign: "middle" });
-  kicker(s, "Target State  ·  Executive Briefing", true, 0.9);
-  s.addText("The target state\nfor product\n& proposition", { x: 0.86, y: 2.5, w: 9.2, h: 2.7, fontFace: DISPLAY, fontSize: 50, color: IVORY, lineSpacingMultiple: 1.02 });
-  s.addText("Where our retail product suite stands today — and how we intend to show up in the market as a member-owned bank.", { x: 0.9, y: 5.4, w: 8.1, h: 0.8, fontFace: BODY, fontSize: 15, color: IVORY_M, lineSpacingMultiple: 1.2 });
+  s.addText("→", { x: 7.7, y: 0.1, w: 5.55, h: 7.3, fontFace: BODY, fontSize: 300, color: INK2, align: "right", valign: "middle" });
+  kicker(s, "Executive Briefing  ·  [Bank Name]", true, 0.9);
+  s.addText("Core Banking\nPlatform\nTransformation", { x: 0.86, y: 2.15, w: 9.6, h: 2.9, fontFace: DISPLAY, fontSize: 48, color: IVORY, lineSpacingMultiple: 1.02 });
+  s.addText("Reshaping the product portfolio — from a product-led catalogue to a proposition-led architecture, delivered on the new Infosys core platform.", { x: 0.9, y: 5.15, w: 8.4, h: 0.9, fontFace: BODY, fontSize: 15, color: IVORY_M, lineSpacingMultiple: 1.2 });
   s.addText([
     { text: "01", options: { fontFace: DISPLAY, fontSize: 15, color: BRASS, bold: true } },
-    { text: "   The retail product suite", options: { fontFace: BODY, fontSize: 13.5, color: IVORY } },
-  ], { x: 0.9, y: 6.42, w: 5.4, h: 0.35 });
+    { text: "   Current state — a broad, product-led catalogue", options: { fontFace: BODY, fontSize: 13, color: IVORY } },
+  ], { x: 0.9, y: 6.35, w: 8.2, h: 0.32 });
   s.addText([
     { text: "02", options: { fontFace: DISPLAY, fontSize: 15, color: BRASS, bold: true } },
-    { text: "   How we show up in the market", options: { fontFace: BODY, fontSize: 13.5, color: IVORY } },
-  ], { x: 0.9, y: 6.78, w: 6.6, h: 0.35 });
+    { text: "   Target state — a simplified, proposition-led architecture", options: { fontFace: BODY, fontSize: 13, color: IVORY } },
+  ], { x: 0.9, y: 6.72, w: 9.0, h: 0.32 });
   s.addText("Prepared for the Executive & Leadership Team  ·  [Month Year]", { x: 8.9, y: 7.02, w: 3.55, h: 0.3, fontFace: BODY, fontSize: 10, color: FOOT_D, align: "right" });
-  s.addNotes("Opening frame. This is a target-state view, not a project plan. The whole story is two elements: (1) the retail product suite we sell, and (2) how we show up in the market. Everything today builds to a single decision for leaders.");
+  s.addNotes("Opening frame. This is about the product portfolio dimension of the core platform transformation. The whole story is one shift: from a product-led catalogue to a proposition-led architecture, enabled by the new Infosys platform. Everything today leads to four executive decisions.");
 }
 
 // ============================================================
-// S2 — Executive summary  · where we are -> where we're headed
+// S2 — Executive summary (light)  · the 48 / 10 stat moment
 // ============================================================
 function s2() {
   const s = P.addSlide(); paperBg(s);
   kicker(s, "Executive summary", false);
-  headline(s, "Where we are, and where we're headed", false);
+  headline(s, "From a product-led catalogue to a proposition-led architecture", false, 1.12, 28);
+  subhead(s, "The shift reduces product complexity, improves member clarity, and creates flexibility for segment-based propositions.", 1.78);
 
-  const y0 = 2.05;
-  s.addText("TODAY", { x: ML, y: y0, w: 5, h: 0.3, fontFace: BODY, fontSize: 11, bold: true, color: MUTED, charSpacing: 3 });
-  s.addText("A sound but largely undifferentiated retail bank — competing on rate and feature parity, with a suite that covers the basics.", { x: ML, y: y0 + 0.4, w: 5.05, h: 1.5, fontFace: DISPLAY, fontSize: 19, color: HEAD, lineSpacingMultiple: 1.12 });
+  const y0 = 2.45;
+  s.addText("CURRENT PORTFOLIO", { x: ML, y: y0, w: 5, h: 0.3, fontFace: BODY, fontSize: 11, bold: true, color: MUTED, charSpacing: 3 });
+  s.addText("Broad and product-led — a catalogue built to differentiate through the number and variety of products we offer.", { x: ML, y: y0 + 0.4, w: 5.05, h: 1.55, fontFace: DISPLAY, fontSize: 18.5, color: HEAD, lineSpacingMultiple: 1.12 });
 
-  s.addShape(R.roundRect, { x: 6.55, y: y0 - 0.25, w: 5.9, h: 2.5, rectRadius: 0.06, fill: { color: INK }, line: { type: "none" } });
+  s.addShape(R.roundRect, { x: 6.55, y: y0 - 0.25, w: 5.9, h: 2.35, rectRadius: 0.06, fill: { color: INK }, line: { type: "none" } });
   s.addText("THE TARGET STATE", { x: 6.95, y: y0 + 0.05, w: 5, h: 0.3, fontFace: BODY, fontSize: 11, bold: true, color: BRASS, charSpacing: 3 });
-  s.addText("A member-led bank with a complete, digitally-native suite and a proposition that is unmistakably ours — value returned to members, not extracted from them.", { x: 6.95, y: y0 + 0.45, w: 5.1, h: 1.7, fontFace: DISPLAY, fontSize: 19, color: IVORY, lineSpacingMultiple: 1.12 });
+  s.addText("A simplified, proposition-led architecture — fewer core products, far greater configurability, and clearer member propositions.", { x: 6.95, y: y0 + 0.45, w: 5.1, h: 1.5, fontFace: DISPLAY, fontSize: 18.5, color: IVORY, lineSpacingMultiple: 1.12 });
 
-  hair(s, ML, 4.75, 11.53);
+  hair(s, ML, 4.8, 11.53);
   const stats = [
-    { n: "2", l: "elements frame the target state — the product suite, and how we show up in the market" },
-    { n: "5", l: "member types served across the full life-stage journey" },
-    { n: "3", l: "horizons to move from vanilla banking to a differentiated leader" },
+    { n: "48", l: "owned, on-sale products in the current catalogue" },
+    { n: "10", l: "third-party products, adding further complexity" },
+    { n: "4",  l: "executive decisions required to move forward" },
   ];
   const cw = 3.84;
   stats.forEach((st, i) => {
     const x = ML + i * cw;
-    if (i > 0) vrule(s, x - 0.02, 5.15, 1.35);
-    s.addText(st.n, { x: x, y: 5.0, w: 1.2, h: 1.35, fontFace: DISPLAY, fontSize: 66, bold: true, color: BRASS_DK, valign: "middle" });
-    s.addText(st.l, { x: x + 1.25, y: 5.12, w: cw - 1.45, h: 1.3, fontFace: BODY, fontSize: 12.5, color: BODY_C, lineSpacingMultiple: 1.1, valign: "middle" });
+    if (i > 0) vrule(s, x - 0.02, 5.15, 1.2);
+    s.addText(st.n, { x: x, y: 5.0, w: 1.55, h: 1.25, fontFace: DISPLAY, fontSize: 58, bold: true, color: BRASS_DK, valign: "middle" });
+    s.addText(st.l, { x: x + 1.6, y: 5.08, w: cw - 1.8, h: 1.12, fontFace: BODY, fontSize: 12, color: BODY_C, lineSpacingMultiple: 1.1, valign: "middle" });
   });
   foot(s, 2, false);
-  s.addNotes("The setup. Left is honest about today: sound, trusted, but undifferentiated. Right is the destination. The three numerals preview the architecture of the whole deck — two elements, five members, three horizons.");
+  s.addNotes("The setup, and the stat that lands it: 48 owned on-sale products plus 10 third-party products is the scale of today's complexity. Left is where we are; the ink panel is the destination. The 4 previews the executive decisions on the closing slide — product consolidation, migration treatment, member impact, and Infosys platform capability.");
 }
 
 // ============================================================
-// S3 — The framework  · two elements, two lenses
-// ============================================================
-function s3() {
-  const s = P.addSlide(); paperBg(s);
-  kicker(s, "The framework", false);
-  headline(s, "Two elements, seen through two lenses", false);
-
-  const els = [
-    { n: "01", h: "The retail product suite", d: "What we look like as a product house — the on-sale catalogue, and how completely it serves each member type." },
-    { n: "02", h: "How we show up in the market", d: "Our proposition — moving from vanilla, basic banking to a distinctive, member-owned point of view." },
-  ];
-  const y0 = 2.2;
-  els.forEach((e, i) => {
-    const x = ML + i * 6.0;
-    s.addText(e.n, { x: x - 0.05, y: y0, w: 1.9, h: 1.2, fontFace: DISPLAY, fontSize: 74, bold: true, color: BRASS, valign: "top" });
-    s.addText(e.h, { x: x + 0.02, y: y0 + 1.35, w: 5.2, h: 0.6, fontFace: DISPLAY, fontSize: 22, color: HEAD });
-    s.addText(e.d, { x: x + 0.02, y: y0 + 2.0, w: 5.15, h: 1.0, fontFace: BODY, fontSize: 13.5, color: BODY_C, lineSpacingMultiple: 1.15 });
-  });
-  vrule(s, ML + 5.7, y0 + 0.05, 3.05);
-
-  hair(s, ML, 5.7, 11.53);
-  s.addText("SEEN THROUGH TWO LENSES", { x: ML, y: 5.9, w: 11, h: 0.3, fontFace: BODY, fontSize: 11, bold: true, color: MUTED, charSpacing: 3 });
-  s.addText([
-    { text: "On-sale products", options: { fontFace: DISPLAY, fontSize: 16, color: HEAD, bold: true } },
-    { text: "   the catalogue as it stands today", options: { fontFace: BODY, fontSize: 13, color: MUTED, italic: true } },
-  ], { x: ML, y: 6.28, w: 6.0, h: 0.35 });
-  s.addText([
-    { text: "Member types", options: { fontFace: DISPLAY, fontSize: 16, color: HEAD, bold: true } },
-    { text: "   how it serves each life stage", options: { fontFace: BODY, fontSize: 13, color: MUTED, italic: true } },
-  ], { x: 6.9, y: 6.28, w: 5.5, h: 0.35 });
-  foot(s, 3, false);
-  s.addNotes("The map for the rest of the deck. Two elements down the page; two lenses across the bottom. Inside Element 1 we look first at the on-sale products, then re-read the same suite through the five member types.");
-}
-
-// ============================================================
-// Divider (ink)
+// Divider (dark)
 // ============================================================
 function divider(num, word1, word2, blurb, pageN, note) {
   const s = P.addSlide(); inkBg(s);
   ghost(s, num, 6.0, 7.0);
   kicker(s, "Element " + (num === "01" ? "One" : "Two"), true, 2.35);
-  s.addText(word1 + "\n" + word2, { x: 0.86, y: 2.8, w: 9.5, h: 2.1, fontFace: DISPLAY, fontSize: 48, color: IVORY, lineSpacingMultiple: 1.0 });
-  s.addText(blurb, { x: 0.9, y: 4.95, w: 8.3, h: 1.0, fontFace: BODY, fontSize: 15.5, color: IVORY_M, lineSpacingMultiple: 1.2 });
+  s.addText(word1 + "\n" + word2, { x: 0.86, y: 2.8, w: 11.5, h: 2.1, fontFace: DISPLAY, fontSize: 46, color: IVORY, lineSpacingMultiple: 1.0 });
+  s.addText(blurb, { x: 0.9, y: 5.05, w: 8.6, h: 1.0, fontFace: BODY, fontSize: 15.5, color: IVORY_M, lineSpacingMultiple: 1.2 });
   foot(s, pageN, true);
   s.addNotes(note);
 }
 
 // ============================================================
-// S5 — On-sale catalogue (editorial two-column list)
+// S4 — Current state: product-led portfolio (2x2 grid)
 // ============================================================
-function s5() {
+function s4() {
   const s = P.addSlide(); paperBg(s);
-  kicker(s, "Element 01  ·  The product suite", false);
-  headline(s, "Our on-sale product catalogue today", false);
-  subhead(s, "Everything a member can buy from us right now, grouped by need — the starting point for the target state.", 1.72);
+  kicker(s, "Current state  ·  The portfolio", false);
+  headline(s, "A broad, product-led portfolio", false);
+  subhead(s, "Breadth built to differentiate through product variety — across lending, deposits, transaction accounts, cards, education-sector banking and third-party offers.", 1.72);
 
-  const cats = [
-    { n: "01", h: "Everyday banking", d: "Transaction accounts · Offset · Debit & digital wallet" },
-    { n: "02", h: "Savings & deposits", d: "Bonus saver · Term deposits · Kids & goal saver" },
-    { n: "03", h: "Home lending", d: "Owner-occupier · Investor · Construction · Guarantor" },
-    { n: "04", h: "Personal lending", d: "Personal & car loans · Green / EV loan · Overdraft" },
-    { n: "05", h: "Cards & protection", d: "Low-rate & rewards cards · Insurance · CCI" },
-    { n: "06", h: "Digital & servicing", d: "App & online banking · PayTo / Osko · Open banking" },
+  const items = [
+    { n: "01", h: "A broad catalogue", d: "Lending, deposits, transaction accounts, credit cards, education-sector banking and third-party offers." },
+    { n: "02", h: "Concentrated complexity", d: "Most visible in home lending, savings, term deposits and education-sector products." },
+    { n: "03", h: "Product-based differentiation", d: "Differentiation comes from products, not from segment, behaviour, relationship or life stage." },
+    { n: "04", h: "Limited-value products", d: "Some products carry low usage, limited strategic value or overlapping propositions." },
   ];
-  const colW = 5.35, gap = 0.83, y0 = 2.45, rowH = 1.35;
-  cats.forEach((c, i) => {
-    const col = i % 2, row = Math.floor(i / 2);
-    const x = ML + col * (colW + gap), y = y0 + row * rowH;
-    hair(s, x, y - 0.16, colW);
-    s.addText(c.n, { x: x, y: y + 0.02, w: 0.62, h: 0.5, fontFace: DISPLAY, fontSize: 17, bold: true, color: BRASS_DK });
-    s.addText(c.h, { x: x + 0.62, y: y - 0.05, w: colW - 0.62, h: 0.5, fontFace: DISPLAY, fontSize: 19.5, color: HEAD });
-    s.addText(c.d, { x: x + 0.62, y: y + 0.5, w: colW - 0.62, h: 0.5, fontFace: BODY, fontSize: 12.5, color: BODY_C });
-  });
-  s.addText("Illustrative — replace category contents with the current on-sale product list.", { x: ML, y: 6.7, w: 11, h: 0.3, fontFace: BODY, fontSize: 10.5, italic: true, color: MUTED });
-  foot(s, 5, false);
-  s.addNotes("The inventory. Six need-based groups covering everything on sale today. Grouping by member need (not product type) is deliberate — it sets up the coverage read a few slides on. Replace the illustrative contents with the live catalogue.");
-}
-
-// ============================================================
-// S6 — Strengths vs gaps  · first tension surfaces
-// ============================================================
-function s6() {
-  const s = P.addSlide(); paperBg(s);
-  kicker(s, "Element 01  ·  The product suite", false);
-  headline(s, "Strong on the basics, thin at the edges", false);
-
-  const colW = 5.35, y0 = 2.15;
-  s.addText("STRONG TODAY", { x: ML, y: y0, w: colW, h: 0.35, fontFace: BODY, fontSize: 12, bold: true, color: BRASS_DK, charSpacing: 3 });
-  const strong = [
-    "Core deposit and everyday banking at competitive rates",
-    "A credible home-lending range for mainstream borrowers",
-    "Digital banking parity for day-to-day servicing",
-    "A trusted, member-owned brand with high satisfaction",
-  ];
-  strong.forEach((t, i) => {
-    const y = y0 + 0.6 + i * 1.02;
-    s.addText(String(i + 1).padStart(2, "0"), { x: ML, y: y, w: 0.55, h: 0.4, fontFace: DISPLAY, fontSize: 15, bold: true, color: MUTED });
-    s.addText(t, { x: ML + 0.55, y: y - 0.05, w: colW - 0.55, h: 0.9, fontFace: DISPLAY, fontSize: 16.5, color: HEAD, lineSpacingMultiple: 1.05 });
-  });
-
-  const gx = 6.6;
-  s.addShape(R.roundRect, { x: gx - 0.35, y: y0 - 0.3, w: colW + 0.7, h: 4.75, rectRadius: 0.06, fill: { color: PAPER2 }, line: { type: "none" } });
-  s.addText("GAPS TO CLOSE", { x: gx, y: y0, w: colW, h: 0.35, fontFace: BODY, fontSize: 12, bold: true, color: BRASS_DK, charSpacing: 3 });
-  const gaps = [
-    "Segment-specific products (first home buyer, small business) are limited",
-    "Wealth, advice and protection are referral-only, not integrated",
-    "Sustainability and values-based products are early and narrow",
-    "Onboarding and origination lag digital-first challengers",
-  ];
-  gaps.forEach((t, i) => {
-    const y = y0 + 0.6 + i * 1.02;
-    s.addText(String(i + 1).padStart(2, "0"), { x: gx, y: y, w: 0.55, h: 0.4, fontFace: DISPLAY, fontSize: 15, bold: true, color: BRASS_DK });
-    s.addText(t, { x: gx + 0.55, y: y - 0.05, w: colW - 0.55, h: 0.9, fontFace: DISPLAY, fontSize: 16.5, color: HEAD, lineSpacingMultiple: 1.05 });
-  });
-  foot(s, 6, false);
-  s.addNotes("The conflict inside Element 1. We are genuinely strong on the basics — say so with confidence. But the edges are thin: segment products, integrated wealth and advice, values-based lending, and origination speed. The tint panel gives the gaps quiet weight without alarm.");
-}
-
-// ============================================================
-// S7 — Member types (5-column numeral rhythm)
-// ============================================================
-function s7() {
-  const s = P.addSlide(); paperBg(s);
-  kicker(s, "Element 01  ·  The member lens", false);
-  headline(s, "The member types we serve", false);
-  subhead(s, "The same catalogue must work across the whole life-stage journey. Each segment has a different centre of gravity.", 1.72);
-
-  const segs = [
-    { h: "Starting out", d: "Young transactors and savers building their first relationship" },
-    { h: "First home buyers", d: "Deposit-builders and new borrowers entering the market" },
-    { h: "Families & builders", d: "Home owners growing wealth, borrowing and protecting" },
-    { h: "Established members", d: "Pre-retirees consolidating, de-risking and seeking advice" },
-    { h: "Community & business", d: "Cause-aligned members and small-business owners" },
-  ];
-  const cw = 2.3, y0 = 2.55;
-  segs.forEach((sg, i) => {
-    const x = ML + i * cw;
-    if (i > 0) vrule(s, x - 0.06, y0 + 0.1, 3.1);
-    s.addText(String(i + 1).padStart(2, "0"), { x: x, y: y0, w: cw - 0.2, h: 0.9, fontFace: DISPLAY, fontSize: 46, bold: true, color: BRASS, valign: "top" });
-    s.addText(sg.h, { x: x, y: y0 + 1.15, w: cw - 0.25, h: 0.9, fontFace: DISPLAY, fontSize: 18, color: HEAD, lineSpacingMultiple: 1.0 });
-    s.addText(sg.d, { x: x, y: y0 + 2.1, w: cw - 0.3, h: 1.3, fontFace: BODY, fontSize: 12, color: BODY_C, lineSpacingMultiple: 1.12 });
-  });
-  s.addText("Illustrative segmentation — align to your member taxonomy.", { x: ML, y: 6.55, w: 11, h: 0.3, fontFace: BODY, fontSize: 10.5, italic: true, color: MUTED });
-  foot(s, 7, false);
-  s.addNotes("The second lens. Same suite, now read through five life stages. Each segment's centre of gravity differs, which is exactly why a one-size catalogue leaves gaps. This slide sets up the coverage matrix that follows.");
-}
-
-// ============================================================
-// S8 — Coverage matrix (elegant hairline table + data viz)
-// ============================================================
-function s8() {
-  const s = P.addSlide(); paperBg(s);
-  kicker(s, "Element 01  ·  Suite × members", false);
-  headline(s, "How completely the suite serves each member", false);
-
-  const segNames = ["Starting out", "First home", "Families", "Established", "Community"];
-  const rows = [
-    ["Everyday banking",  "F", "F", "F", "F", "P"],
-    ["Savings & deposits", "F", "F", "F", "F", "P"],
-    ["Home lending",       "N", "P", "F", "F", "N"],
-    ["Personal lending",   "P", "P", "F", "P", "P"],
-    ["Cards & protection", "P", "P", "P", "F", "P"],
-    ["Wealth & advice",    "N", "N", "P", "P", "N"],
-  ];
-  const sym  = { F: "●", P: "◐", N: "○" };
-  const symC = { F: BRASS_DK, P: "8A948C", N: "BEB6A5" };
-  const score = { F: 1, P: 0.5, N: 0 };
-  const tX = ML, tY = 1.95, labelW = 2.75, colW = 1.755, rowH = 0.495;
-
-  segNames.forEach((nm, c) => {
-    const x = tX + labelW + c * colW;
-    s.addText(nm.toUpperCase(), { x, y: tY, w: colW, h: 0.4, fontFace: BODY, fontSize: 9.5, bold: true, color: MUTED, align: "center", charSpacing: 1 });
-  });
-  hair(s, tX, tY + 0.42, labelW + 5 * colW, INK);
-  rows.forEach((r, ri) => {
-    const y = tY + 0.52 + ri * rowH;
-    s.addText(r[0], { x: tX, y, w: labelW - 0.1, h: rowH, fontFace: DISPLAY, fontSize: 14, color: HEAD, valign: "middle" });
-    for (let c = 0; c < 5; c++) {
-      const x = tX + labelW + c * colW;
-      const code = r[c + 1];
-      s.addText(sym[code], { x, y, w: colW, h: rowH, fontFace: BODY, fontSize: 15, color: symC[code], align: "center", valign: "middle" });
-    }
-    if (ri < rows.length - 1) hair(s, tX, y + rowH, labelW + 5 * colW);
-  });
-
-  // Data-viz payoff: completeness read per segment (share of "full")
-  const barY = tY + 0.52 + rows.length * rowH + 0.12;
-  hair(s, tX, barY, labelW + 5 * colW, INK);
-  s.addText("COVERAGE", { x: tX, y: barY + 0.14, w: labelW - 0.1, h: 0.5, fontFace: BODY, fontSize: 9.5, bold: true, color: MUTED, charSpacing: 2, valign: "middle" });
-  for (let c = 0; c < 5; c++) {
-    let sum = 0; rows.forEach(r => sum += score[r[c + 1]]);
-    const pct = sum / rows.length; // 0..1
-    const x = tX + labelW + c * colW;
-    const barMaxW = colW - 0.5;
-    const bx = x + 0.25;
-    const by = barY + 0.28;
-    s.addShape(R.rect, { x: bx, y: by, w: barMaxW, h: 0.09, fill: { color: HAIR }, line: { type: "none" } });
-    s.addShape(R.rect, { x: bx, y: by, w: Math.max(0.04, barMaxW * pct), h: 0.09, fill: { color: BRASS_DK }, line: { type: "none" } });
-    s.addText(Math.round(pct * 100) + "%", { x: x, y: barY + 0.41, w: colW, h: 0.28, fontFace: DISPLAY, fontSize: 12, bold: true, color: HEAD, align: "center" });
-  }
-
-  // legend
-  const ly = barY + 0.78;
-  const leg = [["●", BRASS_DK, "Full — competitive, integrated"], ["◐", "8A948C", "Partial — exists but thin"], ["○", "BEB6A5", "Gap — referral-only or absent"]];
-  leg.forEach((l, i) => {
-    const x = tX + i * 3.9;
-    s.addText([{ text: l[0] + "   ", options: { color: l[1], fontSize: 13 } }, { text: l[2], options: { color: BODY_C, fontSize: 11.5 } }], { x, y: ly, w: 3.8, h: 0.3, fontFace: BODY, valign: "middle" });
-  });
-  s.addText("Illustrative coverage assessment — replace with your product-to-segment mapping.", { x: ML, y: 6.72, w: 11, h: 0.28, fontFace: BODY, fontSize: 9.5, italic: true, color: MUTED });
-  foot(s, 8, false);
-  s.addNotes("The evidence slide. Read down a column to see how completely we serve one member; read across a row to see a product's reach. The coverage bars at the foot turn the pattern into a number — Community and the early life stages are least well served, and wealth & advice is the weakest row. This is the case for closing the gaps.");
-}
-
-// ============================================================
-// S9 — What a complete suite looks like (2x2 grid)  · resolution of Element 1
-// ============================================================
-function s9() {
-  const s = P.addSlide(); paperBg(s);
-  kicker(s, "Element 01  ·  Target state", false);
-  headline(s, "What a complete suite looks like", false);
-
-  const pil = [
-    { n: "01", h: "Complete", d: "Every core need met in-house across all five member types — no structural gaps." },
-    { n: "02", h: "Connected", d: "Wealth, advice and protection integrated into banking, not bolted on by referral." },
-    { n: "03", h: "Digital-native", d: "Originate, service and switch in-app, at parity with the best challengers." },
-    { n: "04", h: "Purpose-built", d: "Values-based and sustainable options only a member-owned bank can lead on." },
-  ];
-  const colW = 5.35, gap = 0.83, y0 = 2.35, rowH = 2.1;
-  pil.forEach((p, i) => {
+  const colW = 5.35, gap = 0.83, y0 = 2.55, rowH = 2.02;
+  items.forEach((p, i) => {
     const col = i % 2, row = Math.floor(i / 2);
     const x = ML + col * (colW + gap), y = y0 + row * rowH;
     hair(s, x, y - 0.2, colW);
     s.addText(p.n, { x: x, y: y, w: 1.0, h: 0.9, fontFace: DISPLAY, fontSize: 40, bold: true, color: BRASS });
-    s.addText(p.h, { x: x + 1.05, y: y + 0.02, w: colW - 1.05, h: 0.55, fontFace: DISPLAY, fontSize: 21, color: HEAD });
-    s.addText(p.d, { x: x + 1.05, y: y + 0.62, w: colW - 1.05, h: 1.0, fontFace: BODY, fontSize: 13, color: BODY_C, lineSpacingMultiple: 1.14 });
+    s.addText(p.h, { x: x + 1.05, y: y + 0.02, w: colW - 1.05, h: 0.55, fontFace: DISPLAY, fontSize: 20, color: HEAD });
+    s.addText(p.d, { x: x + 1.05, y: y + 0.62, w: colW - 1.05, h: 1.05, fontFace: BODY, fontSize: 13, color: BODY_C, lineSpacingMultiple: 1.14 });
   });
-  foot(s, 9, false);
-  s.addNotes("Resolution of Element 1. Four tests a complete suite must pass: complete, connected, digital-native, purpose-built. The last two are where a mutual can genuinely lead rather than follow. This closes the product half of the story.");
+  foot(s, 4, false);
+  s.addNotes("The diagnosis of today. The catalogue is broad and built to differentiate through product count. Complexity concentrates in home lending, savings, term deposits and education-sector products. Crucially, differentiation is product-based rather than member-based — and some products earn their keep only marginally.");
 }
 
 // ============================================================
-// S11 — Vanilla banking (pull-quote)  · CONFLICT of Element 2
+// S5 — Current state challenges (asymmetric: thesis + 5 rows)
+// ============================================================
+function s5() {
+  const s = P.addSlide(); paperBg(s);
+  kicker(s, "Current state  ·  The challenges", false);
+  headline(s, "Why the product-led model holds us back", false);
+
+  s.addText("Breadth has become a barrier — to clarity, to focus, and to serving our core members well.", { x: ML, y: 2.35, w: 3.35, h: 3.0, fontFace: DISPLAY, fontSize: 22, color: HEAD, lineSpacingMultiple: 1.14 });
+  vrule(s, 4.55, 2.2, 4.25);
+
+  const pts = [
+    "Limited differentiation for our core segments — teachers, nurses, education-sector organisations and early-career members.",
+    "Product proliferation drives operational complexity and a member proposition that is harder to explain.",
+    "Savings and deposit pricing are largely product-led, rather than relationship- or behaviour-led.",
+    "Gaps in rewards, financial wellbeing, salary packaging, partner benefits, everyday features and life-stage propositions.",
+    "Some capabilities are better suited to Day 2, once the new platform and partner ecosystem are established.",
+  ];
+  const px = 4.85, pw = 7.58, y0 = 2.2, rowH = 0.88;
+  pts.forEach((t, i) => {
+    const y = y0 + i * rowH;
+    hair(s, px, y - 0.02, pw);
+    s.addText(String(i + 1).padStart(2, "0"), { x: px, y: y + 0.14, w: 0.55, h: 0.4, fontFace: DISPLAY, fontSize: 15, bold: true, color: BRASS_DK });
+    s.addText(t, { x: px + 0.6, y: y + 0.12, w: pw - 0.6, h: 0.72, fontFace: DISPLAY, fontSize: 14.5, color: HEAD, valign: "middle", lineSpacingMultiple: 1.05 });
+  });
+  foot(s, 5, false);
+  s.addNotes("The conflict. Five challenges, anchored by the thesis on the left: breadth has become a barrier. Note the member framing — teachers, nurses, education-sector organisations, early-career members. Point five sets up the Day 1 / Day 2 sequencing: some value is deliberately deferred until the platform and partner ecosystem mature.");
+}
+
+// ============================================================
+// S7 — Target state ambition (thesis banner + 4 columns)
+// ============================================================
+function s7() {
+  const s = P.addSlide(); paperBg(s);
+  kicker(s, "Target state  ·  The ambition", false);
+  headline(s, "From product-led to proposition-led", false);
+
+  s.addText([
+    { text: "Fewer core products. ", options: { color: HEAD } },
+    { text: "Greater configurability. ", options: { color: BRASS_DK } },
+    { text: "Clearer propositions.", options: { color: HEAD } },
+  ], { x: ML, y: 1.95, w: 11.5, h: 0.7, fontFace: DISPLAY, fontSize: 25, valign: "middle" });
+  hair(s, ML, 2.85, 11.53);
+
+  const cols = [
+    { n: "01", h: "Fewer core products", d: "Supported by configurable features, pricing, eligibility, controls and communications." },
+    { n: "02", h: "Clearer propositions", d: "Built for priority segments and life stages — not product variety." },
+    { n: "03", h: "Day 1 ready", d: "Platform capability preserved for proposition-led design, with room for Day 2 evolution." },
+    { n: "04", h: "No legacy replication", d: "Avoid re-creating unnecessary legacy product structures on the new platform." },
+  ];
+  const cw = 2.88, y0 = 3.2;
+  cols.forEach((c, i) => {
+    const x = ML + i * cw;
+    if (i > 0) vrule(s, x - 0.06, y0 + 0.1, 3.15);
+    s.addText(c.n, { x: x, y: y0, w: cw - 0.2, h: 0.85, fontFace: DISPLAY, fontSize: 42, bold: true, color: BRASS, valign: "top" });
+    s.addText(c.h, { x: x, y: y0 + 1.0, w: cw - 0.3, h: 0.75, fontFace: DISPLAY, fontSize: 17, color: HEAD, lineSpacingMultiple: 1.0 });
+    s.addText(c.d, { x: x, y: y0 + 1.75, w: cw - 0.35, h: 1.4, fontFace: BODY, fontSize: 12, color: BODY_C, lineSpacingMultiple: 1.14 });
+  });
+  foot(s, 7, false);
+  s.addNotes("The ambition, in one line: fewer core products, greater configurability, clearer propositions. The four columns make it concrete. Day 1 ready is the key platform message — configurability is preserved from launch, with Day 2 evolution intentional, not accidental. And we will not replicate legacy complexity on the new core.");
+}
+
+// ============================================================
+// S8 — Target state product architecture (hairline table, 6 rows)
+// ============================================================
+function s8() {
+  const s = P.addSlide(); paperBg(s);
+  kicker(s, "Target state  ·  Product architecture", false);
+  headline(s, "Fewer core products, configured to the member", false);
+
+  const rows = [
+    ["Home lending", "Core owner-occupier and investor products, with basic and offset variants."],
+    ["Personal lending", "Secured and unsecured lending; pricing and policy attributes replace product proliferation."],
+    ["Transaction accounts", "Everyday Account and Pension Account, with segment-based features and controls."],
+    ["Savings", "A smaller product set, with configurable pricing, eligibility and campaign settings."],
+    ["Term deposits", "Consolidated around configurable terms, rates and interest-payment frequencies."],
+    ["Education-sector banking", "Repositioned onto core products, with additional controls and service-model settings."],
+  ];
+  const tX = ML, tY = 2.05, aW = 3.4, bW = 8.13, rowH = 0.68;
+  s.addText("PRODUCT FAMILY", { x: tX, y: tY, w: aW, h: 0.35, fontFace: BODY, fontSize: 11, bold: true, color: MUTED, charSpacing: 2 });
+  s.addText("TARGET-STATE SIMPLIFICATION", { x: tX + aW, y: tY, w: bW, h: 0.35, fontFace: BODY, fontSize: 11, bold: true, color: BRASS_DK, charSpacing: 2 });
+  hair(s, tX, tY + 0.44, aW + bW, INK);
+  rows.forEach((r, i) => {
+    const y = tY + 0.56 + i * rowH;
+    s.addText(r[0], { x: tX, y, w: aW - 0.15, h: rowH, fontFace: DISPLAY, fontSize: 15.5, color: HEAD, valign: "middle" });
+    s.addText(r[1], { x: tX + aW, y, w: bW - 0.1, h: rowH, fontFace: BODY, fontSize: 13.5, color: BODY_C, valign: "middle", lineSpacingMultiple: 1.05 });
+    if (i < rows.length - 1) hair(s, tX, y + rowH, aW + bW);
+  });
+  s.addText("Illustrative target-state architecture — subject to confirmed product decisions.", { x: ML, y: 6.75, w: 11, h: 0.28, fontFace: BODY, fontSize: 9.5, italic: true, color: MUTED });
+  foot(s, 8, false);
+  s.addNotes("The architecture. Read left as the product family; right as how it simplifies. The pattern is consistent: what used to be separate products becomes configurable attributes — variants, pricing, eligibility, controls and service settings — on a smaller core. Education-sector banking is repositioned onto core products rather than kept as a separate product set. Illustrative, pending confirmed decisions.");
+}
+
+// ============================================================
+// S9 — Proposition-led model (layered stack diagram + focus)
+// ============================================================
+function s9() {
+  const s = P.addSlide(); paperBg(s);
+  kicker(s, "Target state  ·  The operating model", false);
+  headline(s, "Propositions sit above the product catalogue", false);
+
+  // ---- left: layered stack ----
+  const bx = ML, bw = 5.3;
+  // Propositions (top, ink)
+  s.addShape(R.roundRect, { x: bx, y: 2.2, w: bw, h: 1.02, rectRadius: 0.05, fill: { color: INK }, line: { type: "none" } });
+  s.addText("PROPOSITIONS", { x: bx + 0.35, y: 2.36, w: bw - 0.7, h: 0.34, fontFace: BODY, fontSize: 13, bold: true, color: BRASS, charSpacing: 2 });
+  s.addText("Segment & life-stage propositions", { x: bx + 0.35, y: 2.72, w: bw - 0.7, h: 0.32, fontFace: BODY, fontSize: 11.5, color: IVORY_M });
+  // Configurable layer (middle, tint)
+  s.addShape(R.roundRect, { x: bx, y: 3.42, w: bw, h: 1.35, rectRadius: 0.05, fill: { color: PAPER2 }, line: { type: "none" } });
+  s.addText("CONFIGURABLE LAYER", { x: bx + 0.35, y: 3.56, w: bw - 0.7, h: 0.34, fontFace: BODY, fontSize: 13, bold: true, color: BRASS_DK, charSpacing: 2 });
+  s.addText("Features · Pricing · Eligibility\nControls · Communications", { x: bx + 0.35, y: 3.92, w: bw - 0.7, h: 0.78, fontFace: BODY, fontSize: 12.5, color: BODY_C, lineSpacingMultiple: 1.12 });
+  // Core products (bottom, outlined)
+  s.addShape(R.roundRect, { x: bx, y: 4.97, w: bw, h: 1.02, rectRadius: 0.05, fill: { color: PAPER }, line: { color: HAIR, width: 1.25 } });
+  s.addText("CORE PRODUCTS", { x: bx + 0.35, y: 5.13, w: bw - 0.7, h: 0.34, fontFace: BODY, fontSize: 13, bold: true, color: HEAD, charSpacing: 2 });
+  s.addText("Fewer, standardised, on the new core platform", { x: bx + 0.35, y: 5.49, w: bw - 0.7, h: 0.32, fontFace: BODY, fontSize: 11.5, color: MUTED });
+
+  // ---- right: focus areas + future ----
+  vrule(s, 6.5, 2.25, 3.85);
+  const rx = 6.85, rw = 5.55;
+  s.addText("PRIORITY FOCUS AREAS", { x: rx, y: 2.2, w: rw, h: 0.32, fontFace: BODY, fontSize: 11, bold: true, color: BRASS_DK, charSpacing: 2 });
+  const focus = ["Teachers", "Nurses & healthcare workers", "Education-sector organisations", "Youth & early-career members"];
+  focus.forEach((f, i) => {
+    const y = 2.62 + i * 0.5;
+    s.addText(String(i + 1).padStart(2, "0"), { x: rx, y: y, w: 0.5, h: 0.4, fontFace: DISPLAY, fontSize: 14, bold: true, color: BRASS });
+    s.addText(f, { x: rx + 0.55, y: y - 0.02, w: rw - 0.55, h: 0.42, fontFace: DISPLAY, fontSize: 15.5, color: HEAD, valign: "middle" });
+  });
+  s.addText("FUTURE PROPOSITIONS", { x: rx, y: 4.78, w: rw, h: 0.32, fontFace: BODY, fontSize: 11, bold: true, color: MUTED, charSpacing: 2 });
+  s.addText("First home buyers, family builders, wealth builders, pre-retirement members — and deeper relationship-based propositions.", { x: rx, y: 5.12, w: rw, h: 0.85, fontFace: BODY, fontSize: 12.5, color: BODY_C, lineSpacingMultiple: 1.15 });
+
+  s.addText("Partner benefits, Doshi financial wellbeing and salary packaging extend value beyond core banking products.", { x: ML, y: 6.5, w: 11.5, h: 0.4, fontFace: DISPLAY, fontSize: 14, italic: true, color: HEAD });
+  foot(s, 9, false);
+  s.addNotes("The conceptual model, and the heart of the shift. Read the stack bottom-up: fewer standardised core products, wrapped in a configurable layer of features, pricing, eligibility, controls and communications, with propositions sitting on top. Propositions — not products — are what members experience. Priority focus is our core membership; future propositions extend by life stage; and partner benefits, Doshi and salary packaging widen value beyond banking.");
+}
+
+// ============================================================
+// S10 — Current -> Target shift (From/To table, 5 rows)
+// ============================================================
+function s10() {
+  const s = P.addSlide(); paperBg(s);
+  kicker(s, "The shift  ·  Current to target", false);
+  headline(s, "The same balance sheet, reframed", false);
+
+  const rows = [
+    ["Differentiation", "Many products create differentiation", "Fewer products with configurable value"],
+    ["Conversations", "Product-led member conversations", "Segment and life-stage propositions"],
+    ["Pricing", "Broad headline pricing and product variants", "Relationship, behavioural and eligibility-based pricing"],
+    ["Migration", "Legacy migration as lift-and-shift", "Migration as simplification and member value"],
+    ["Operating model", "A complex operating model", "Reduced operational and system complexity"],
+  ];
+  const tX = ML, tY = 2.2, aW = 2.7, bW = 4.4, cW = 4.43, rowH = 0.78;
+  s.addText("FROM — TODAY", { x: tX + aW, y: tY, w: bW, h: 0.35, fontFace: BODY, fontSize: 11.5, bold: true, color: MUTED, charSpacing: 2 });
+  s.addText("TO — TARGET STATE", { x: tX + aW + bW, y: tY, w: cW, h: 0.35, fontFace: BODY, fontSize: 11.5, bold: true, color: BRASS_DK, charSpacing: 2 });
+  hair(s, tX, tY + 0.46, aW + bW + cW, INK);
+  rows.forEach((r, i) => {
+    const y = tY + 0.58 + i * rowH;
+    s.addText(r[0], { x: tX, y, w: aW - 0.1, h: rowH, fontFace: BODY, fontSize: 12, bold: true, color: MUTED, valign: "middle", charSpacing: 1 });
+    s.addText(r[1], { x: tX + aW, y, w: bW - 0.2, h: rowH, fontFace: DISPLAY, fontSize: 15.5, color: GREY_TO, valign: "middle", lineSpacingMultiple: 1.02 });
+    s.addText(r[2], { x: tX + aW + bW, y, w: cW - 0.15, h: rowH, fontFace: DISPLAY, fontSize: 15.5, color: HEAD, valign: "middle", lineSpacingMultiple: 1.02 });
+    if (i < rows.length - 1) hair(s, tX, y + rowH, aW + bW + cW);
+  });
+  s.addText("The shift is in architecture and proposition — not in the products members hold today.", { x: ML, y: 6.72, w: 11.5, h: 0.3, fontFace: BODY, fontSize: 11.5, italic: true, color: MUTED });
+  foot(s, 10, false);
+  s.addNotes("The pivot, dimension by dimension. Left is where we are, right is where we're going, across differentiation, conversations, pricing, migration and operating model. The caption is the reassurance for members: this is an architecture and proposition change, not a disruption to the products people hold today.");
+}
+
+// ============================================================
+// S11 — Legacy migration principles (full-width, 5 rows)
 // ============================================================
 function s11() {
   const s = P.addSlide(); paperBg(s);
-  kicker(s, "Element 02  ·  The market view", false);
-  headline(s, "Today we show up as vanilla banking", false);
+  kicker(s, "The path  ·  Legacy migration", false);
+  headline(s, "Principles for migrating the portfolio", false);
 
-  // left column: the commodity trap
-  s.addText("THE COMMODITY TRAP", { x: ML, y: 2.15, w: 5, h: 0.35, fontFace: BODY, fontSize: 12, bold: true, color: BRASS_DK, charSpacing: 3 });
   const pts = [
-    "We compete on rate and fees — the same battleground as everyone else",
-    "Products look interchangeable with the majors and the challengers",
-    "Our member-owned difference is felt, but not expressed in the offer",
-    "Choice is driven by price comparison, not by what we stand for",
+    "No member detriment.",
+    "Consolidate where differences are features, pricing settings or eligibility rules — rather than true products.",
+    "Grandfather products only where required for member, contractual, regulatory or operational reasons.",
+    "Retire unnecessary complexity where products have low usage, limited strategic value or avoidable operational burden.",
+    "Validate every migration decision through member-impact, compliance, pricing, operational and communication assessments.",
   ];
+  const y0 = 2.25, rowH = 0.9;
   pts.forEach((t, i) => {
-    const y = 2.78 + i * 0.92;
-    s.addText(String(i + 1).padStart(2, "0"), { x: ML, y: y, w: 0.5, h: 0.4, fontFace: DISPLAY, fontSize: 14, bold: true, color: MUTED });
-    s.addText(t, { x: ML + 0.5, y: y - 0.04, w: 4.55, h: 0.85, fontFace: DISPLAY, fontSize: 15.5, color: HEAD, lineSpacingMultiple: 1.05 });
+    const y = y0 + i * rowH;
+    hair(s, ML, y - 0.16, 11.53);
+    s.addText(String(i + 1).padStart(2, "0"), { x: ML, y: y, w: 0.9, h: 0.7, fontFace: DISPLAY, fontSize: 30, bold: true, color: BRASS_DK, valign: "middle" });
+    s.addText(t, { x: ML + 1.05, y: y, w: 10.45, h: 0.7, fontFace: DISPLAY, fontSize: 16, color: HEAD, valign: "middle", lineSpacingMultiple: 1.05 });
   });
-
-  vrule(s, 6.25, 2.2, 4.0);
-
-  // right column: pull-quote, stacked cleanly under a brass quote mark
-  s.addText("“", { x: 7.5, y: 1.72, w: 2.0, h: 1.2, fontFace: DISPLAY, fontSize: 120, bold: true, color: BRASS, valign: "top" });
-  s.addText("If a member can't tell us apart from a big-four product page, we compete only on price — and a mutual can't win a race to the bottom.", { x: 7.55, y: 2.98, w: 4.85, h: 2.3, fontFace: DISPLAY, fontSize: 24, color: HEAD, lineSpacingMultiple: 1.14 });
-  s.addText("Vanilla banking commoditises our balance sheet, erodes margin, and leaves our purpose invisible at the point of choice.", { x: 7.55, y: 5.45, w: 4.85, h: 1.0, fontFace: BODY, fontSize: 13.5, color: MUTED, italic: true, lineSpacingMultiple: 1.15 });
   foot(s, 11, false);
-  s.addNotes("The conflict of Element 2, stated plainly. If we are indistinguishable, the only lever left is price — and a member-owned balance sheet cannot win a race to the bottom. The left column diagnoses the trap; the pull-quote lands the stakes emotionally.");
+  s.addNotes("The rules of the road for migration. Principle one is non-negotiable: no member detriment. The rest are the decision logic — consolidate features masquerading as products, grandfather only where genuinely required, retire avoidable complexity, and validate every call across member impact, compliance, pricing, operations and communications.");
 }
 
 // ============================================================
-// S12 — Two views comparison (hairline table)
+// S12 — Key decisions & next steps (dark close)  · the ask
 // ============================================================
 function s12() {
-  const s = P.addSlide(); paperBg(s);
-  kicker(s, "Element 02  ·  The second view", false);
-  headline(s, "Two ways to show up — the choice we're making", false);
-
-  const rows = [
-    ["Basis of choice", "Rate & fees", "Value & values"],
-    ["Product framing", "Feature checklists", "Member outcomes"],
-    ["Relationship", "Transactional", "Lifetime & advised"],
-    ["Profit story", "Extracted for shareholders", "Returned to members"],
-    ["Brand role", "A safe utility", "A bank with a point of view"],
-  ];
-  const tX = ML, tY = 2.25, aW = 3.1, bW = 4.2, cW = 4.23, rowH = 0.82;
-  s.addText("VANILLA BANKING", { x: tX + aW, y: tY - 0.05, w: bW, h: 0.4, fontFace: BODY, fontSize: 11.5, bold: true, color: MUTED, charSpacing: 2 });
-  s.addText("THE DIFFERENTIATED VIEW", { x: tX + aW + bW, y: tY - 0.05, w: cW, h: 0.4, fontFace: BODY, fontSize: 11.5, bold: true, color: BRASS_DK, charSpacing: 2 });
-  hair(s, tX, tY + 0.42, aW + bW + cW, INK);
-  rows.forEach((r, i) => {
-    const y = tY + 0.55 + i * rowH;
-    s.addText(r[0], { x: tX, y, w: aW - 0.1, h: rowH, fontFace: BODY, fontSize: 12, bold: true, color: MUTED, valign: "middle", charSpacing: 1 });
-    s.addText(r[1], { x: tX + aW, y, w: bW - 0.2, h: rowH, fontFace: DISPLAY, fontSize: 16.5, color: "9AA49C", valign: "middle" });
-    s.addText(r[2], { x: tX + aW + bW, y, w: cW - 0.2, h: rowH, fontFace: DISPLAY, fontSize: 16.5, color: HEAD, valign: "middle" });
-    if (i < rows.length - 1) hair(s, tX, y + rowH, aW + bW + cW);
-  });
-  s.addText("Same products can sit behind either column — the difference is the proposition we wrap around them.", { x: ML, y: 6.72, w: 11.5, h: 0.3, fontFace: BODY, fontSize: 11.5, italic: true, color: MUTED });
-  foot(s, 12, false);
-  s.addNotes("The pivot. Same balance sheet, two ways to present it. The left column is where we are; the right is the choice. The key line is the caption: the products need not change — the proposition wrapped around them does.");
-}
-
-// ============================================================
-// S13 — The differentiated proposition (4 pillars, asymmetric hero)
-// Distinct composition from S9's grid: a left thesis, and four
-// stacked pillars on the right carried by oversized brass numerals.
-// ============================================================
-function s13() {
-  const s = P.addSlide(); paperBg(s);
-  kicker(s, "Element 02  ·  Target state", false);
-  headline(s, "The proposition that is unmistakably ours", false);
-
-  // Left thesis column
-  s.addText("THE MUTUAL DIFFERENCE", { x: ML, y: 2.45, w: 3.7, h: 0.3, fontFace: BODY, fontSize: 11, bold: true, color: BRASS_DK, charSpacing: 3 });
-  s.addText("Four things a shareholder bank cannot say — and mean.", { x: ML, y: 2.85, w: 3.55, h: 2.0, fontFace: DISPLAY, fontSize: 25, color: HEAD, lineSpacingMultiple: 1.12 });
-  s.addText("Made visible at the point of choice, not buried in the annual report.", { x: ML, y: 5.35, w: 3.5, h: 1.0, fontFace: BODY, fontSize: 13, color: MUTED, italic: true, lineSpacingMultiple: 1.18 });
-
-  vrule(s, 4.95, 2.3, 4.35);
-
-  // Right stacked pillars
-  const pil = [
-    { n: "01", h: "Member value", d: "Profits returned as better rates, lower fees and shared rewards — the mutual dividend, made visible." },
-    { n: "02", h: "Trusted advice", d: "Guidance across life stages, not just product sales — banking that acts in the member's interest." },
-    { n: "03", h: "Purpose & community", d: "Values-aligned lending and local impact members can see and feel proud of." },
-    { n: "04", h: "Effortless service", d: "Human when it matters, digital when it's faster — a relationship, not a call queue." },
-  ];
-  const px = 5.45, pw = 6.98, y0 = 2.2, rowH = 1.13;
-  pil.forEach((p, i) => {
-    const y = y0 + i * rowH;
-    if (i > 0) hair(s, px, y - 0.12, pw);
-    s.addText(p.n, { x: px, y: y - 0.02, w: 1.05, h: 0.95, fontFace: DISPLAY, fontSize: 42, bold: true, color: BRASS, valign: "top" });
-    s.addText(p.h, { x: px + 1.15, y: y - 0.03, w: pw - 1.15, h: 0.42, fontFace: DISPLAY, fontSize: 19.5, color: HEAD });
-    s.addText(p.d, { x: px + 1.15, y: y + 0.42, w: pw - 1.15, h: 0.62, fontFace: BODY, fontSize: 12.5, color: BODY_C, lineSpacingMultiple: 1.12 });
-  });
-  foot(s, 13, false);
-  s.addNotes("The emotional peak. Four pillars that only a member-owned bank can claim credibly: member value, trusted advice, purpose and community, effortless service. The asymmetric layout — thesis on the left, pillars carried by big brass numerals on the right — deliberately breaks the grid rhythm to mark this as the hero of the deck.");
-}
-
-// ============================================================
-// S14 — Target state on a page (ink synthesis)  · RESOLUTION
-// ============================================================
-function s14() {
   const s = P.addSlide(); inkBg(s);
-  kicker(s, "Bringing it together", true);
-  headline(s, "The target state on a page", true);
-
-  const y1 = 2.35;
-  s.addText("01", { x: ML - 0.03, y: y1, w: 1.6, h: 1.4, fontFace: DISPLAY, fontSize: 60, bold: true, color: BRASS });
-  s.addText("A complete, connected suite", { x: ML + 1.5, y: y1 + 0.02, w: 10.4, h: 0.5, fontFace: DISPLAY, fontSize: 23, color: IVORY });
-  s.addText("Every core need served in-house across all five member types — complete, connected, digital-native and purpose-built. The gaps in wealth, advice, protection and segment products are closed.", { x: ML + 1.5, y: y1 + 0.6, w: 10.3, h: 1.0, fontFace: BODY, fontSize: 14, color: IVORY_M, lineSpacingMultiple: 1.2 });
-
-  hair(s, ML, 4.5, 11.53, HAIR_D);
-  const y2 = 4.75;
-  s.addText("02", { x: ML - 0.03, y: y2, w: 1.6, h: 1.4, fontFace: DISPLAY, fontSize: 60, bold: true, color: BRASS });
-  s.addText("A proposition that is unmistakably ours", { x: ML + 1.5, y: y2 + 0.02, w: 10.4, h: 0.5, fontFace: DISPLAY, fontSize: 23, color: IVORY });
-  s.addText("We stop competing on rate alone and show up on member value, trusted advice, purpose and effortless service — the mutual difference, made visible at the point of choice.", { x: ML + 1.5, y: y2 + 0.6, w: 10.3, h: 1.0, fontFace: BODY, fontSize: 14, color: IVORY_M, lineSpacingMultiple: 1.2 });
-
-  s.addText("A complete suite gives us the right to compete; a distinctive proposition is why members choose us.", { x: ML, y: 6.5, w: 11.5, h: 0.4, fontFace: DISPLAY, fontSize: 15, italic: true, color: BRASS });
-  foot(s, 14, true);
-  s.addNotes("Synthesis. The two elements resolved into one page and back onto the dark ground of the title — the visual bookend. The italic brass line is the thesis of the entire deck: the suite earns the right to compete; the proposition is why members choose us.");
-}
-
-// ============================================================
-// S15 — Three horizons
-// ============================================================
-function s15() {
-  const s = P.addSlide(); paperBg(s);
-  kicker(s, "The path", false);
-  headline(s, "Three horizons to get there", false);
-
-  const hor = [
-    { n: "1", w: "0–12 months", h: "Fix the basics", d: "Complete the core on-sale suite, close obvious segment gaps, reach digital origination parity." },
-    { n: "2", w: "12–24 months", h: "Differentiate", d: "Integrate wealth, advice and protection; launch member-value and segment-led propositions." },
-    { n: "3", w: "24 months +", h: "Lead", d: "Purpose-led, ecosystem-enabled banking where the member-owned model is our edge at scale." },
-  ];
-  const cw = 3.84, y0 = 2.4;
-  hor.forEach((hr, i) => {
-    const x = ML + i * cw;
-    if (i > 0) vrule(s, x - 0.06, y0 + 0.1, 3.5);
-    s.addText(hr.n, { x: x, y: y0, w: 1.2, h: 1.3, fontFace: DISPLAY, fontSize: 72, bold: true, color: BRASS });
-    s.addText(hr.w.toUpperCase(), { x: x, y: y0 + 1.45, w: cw - 0.4, h: 0.3, fontFace: BODY, fontSize: 11, bold: true, color: BRASS_DK, charSpacing: 2 });
-    s.addText(hr.h, { x: x, y: y0 + 1.75, w: cw - 0.4, h: 0.55, fontFace: DISPLAY, fontSize: 23, color: HEAD });
-    s.addText(hr.d, { x: x, y: y0 + 2.4, w: cw - 0.5, h: 1.3, fontFace: BODY, fontSize: 13, color: BODY_C, lineSpacingMultiple: 1.15 });
-  });
-  s.addText("Illustrative sequencing — confirm scope and timing with the executive team.", { x: ML, y: 6.6, w: 11, h: 0.3, fontFace: BODY, fontSize: 10.5, italic: true, color: MUTED });
-  foot(s, 15, false);
-  s.addNotes("The path. Fix the basics, then differentiate, then lead. Horizon 1 is table stakes and fundable now; Horizons 2 and 3 are where the mutual model becomes the edge. Sequencing is illustrative — confirm scope and timing with the executive team.");
-}
-
-// ============================================================
-// S16 — Closing / the ask (ink)  · CLOSE
-// ============================================================
-function s16() {
-  const s = P.addSlide(); inkBg(s);
-  s.addText("&", { x: 7.4, y: 0.3, w: 6.0, h: 7.0, fontFace: DISPLAY, fontSize: 420, color: INK2, align: "right", valign: "middle" });
-  kicker(s, "What we're asking of leaders", true);
-  s.addText("Back the shift from\nvanilla to distinctive", { x: 0.86, y: 1.2, w: 11, h: 1.6, fontFace: DISPLAY, fontSize: 40, color: IVORY, lineSpacingMultiple: 1.0 });
+  s.addText("→", { x: 8.4, y: 0.3, w: 4.9, h: 7.0, fontFace: BODY, fontSize: 260, color: INK2, align: "right", valign: "middle" });
+  kicker(s, "Key decisions & next steps", true);
+  s.addText("Four decisions to move\nfrom catalogue to architecture", { x: 0.86, y: 1.2, w: 11.2, h: 1.5, fontFace: DISPLAY, fontSize: 34, color: IVORY, lineSpacingMultiple: 1.02 });
 
   const asks = [
-    { n: "01", h: "Endorse the two-element target state", d: "A complete product suite and a differentiated, member-owned proposition." },
-    { n: "02", h: "Prioritise closing the gaps", d: "Fund the Horizon 1 moves that bring the on-sale suite to completeness." },
-    { n: "03", h: "Commit to the proposition", d: "Agree to compete on member value, not just rate — across every segment." },
+    { n: "01", h: "Product consolidation", d: "How far to simplify the catalogue into fewer configurable core products." },
+    { n: "02", h: "Migration treatment", d: "Consolidate, grandfather or retire — decided by member and operational impact." },
+    { n: "03", h: "Member impact", d: "How we protect members and communicate change with no detriment." },
+    { n: "04", h: "Infosys platform capability", d: "Confirm Day 1 configurability and the Day 2 evolution roadmap." },
   ];
-  const y0 = 3.35;
+  const y0 = 3.1;
   asks.forEach((a, i) => {
-    const y = y0 + i * 0.98;
-    hair(s, ML, y - 0.14, 11.0, HAIR_D);
-    s.addText(a.n, { x: ML, y: y, w: 0.9, h: 0.7, fontFace: DISPLAY, fontSize: 22, bold: true, color: BRASS });
-    s.addText(a.h, { x: ML + 0.95, y: y - 0.02, w: 5.4, h: 0.7, fontFace: DISPLAY, fontSize: 18, color: IVORY, valign: "middle" });
-    s.addText(a.d, { x: ML + 6.5, y: y - 0.02, w: 5.0, h: 0.7, fontFace: BODY, fontSize: 12.5, color: IVORY_M, valign: "middle", lineSpacingMultiple: 1.05 });
+    const y = y0 + i * 0.85;
+    hair(s, ML, y - 0.13, 11.0, HAIR_D);
+    s.addText(a.n, { x: ML, y: y, w: 0.9, h: 0.65, fontFace: DISPLAY, fontSize: 21, bold: true, color: BRASS, valign: "middle" });
+    s.addText(a.h, { x: ML + 0.95, y: y, w: 5.15, h: 0.65, fontFace: DISPLAY, fontSize: 17.5, color: IVORY, valign: "middle" });
+    s.addText(a.d, { x: ML + 6.35, y: y, w: 5.15, h: 0.65, fontFace: BODY, fontSize: 12.5, color: IVORY_M, valign: "middle", lineSpacingMultiple: 1.05 });
   });
-  s.addText("The suite earns us the right to compete. The proposition is why members choose us — and stay.", { x: ML, y: 6.5, w: 11.4, h: 0.4, fontFace: DISPLAY, fontSize: 16, italic: true, color: BRASS });
-  foot(s, 16, true);
-  s.addNotes("The close. Three decisions, not a discussion: endorse the target state, fund the Horizon 1 gap-closing, and commit to competing on member value. Return to the dark ground and the ampersand motif to bookend the story.");
+  s.addText("Fewer products, greater configurability — a proposition-led portfolio, delivered on the new core platform.", { x: ML, y: 6.6, w: 11.4, h: 0.4, fontFace: DISPLAY, fontSize: 15.5, italic: true, color: BRASS });
+  foot(s, 12, true);
+  s.addNotes("The close, framed as decisions rather than discussion. Four calls the executive team must make: how far to consolidate, how to treat migration, how to protect and communicate to members, and confirmation of Infosys Day 1 configurability plus the Day 2 roadmap. The italic brass line restates the destination in one sentence.");
 }
 
 // ---------- build ----------
-s1(); s2(); s3();
-divider("01", "The retail", "product suite",
-  "What we look like as a product house — the on-sale catalogue, and how completely it serves every member type.", 4,
-  "Element 1 divider. We now go inside the product suite: first the on-sale catalogue, then the same suite re-read through the five member types.");
-s5(); s6(); s7(); s8(); s9();
-divider("02", "How we show up", "in the market",
-  "From vanilla, basic banking to a distinctive, member-owned proposition — the second, differentiated view.", 10,
-  "Element 2 divider. From what we sell to how we show up. This is the harder, more valuable half — the proposition that makes the suite matter.");
-s11(); s12(); s13(); s14(); s15(); s16();
+s1(); s2();
+divider("01", "Current state", "A product-led portfolio",
+  "A broad catalogue built to differentiate through product variety — and the complexity that has come with it.", 3,
+  "Element 1 divider. We first examine today: a broad, product-led portfolio and the challenges it creates for members and operations.");
+s4(); s5();
+divider("02", "Target state", "A proposition-led architecture",
+  "Fewer core products, greater configurability, and clearer propositions for the members we exist to serve.", 6,
+  "Element 2 divider. From today to the destination: a proposition-led architecture on the new Infosys core platform, with Day 1 capability and Day 2 evolution.");
+s7(); s8(); s9(); s10(); s11(); s12();
 
 P.writeFile({ fileName: "Target-State-Product-and-Proposition.pptx" }).then(() => console.log("written"));
