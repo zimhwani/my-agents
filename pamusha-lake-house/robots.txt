@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+Disallow: /house-manual
+Sitemap: https://pamusha-lake-house.vercel.app/sitemap.xml

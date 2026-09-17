@@ -1,0 +1,54 @@
+name: Deploy Pamusha Lake House to Vercel
+
+# Deploys the static site in pamusha-lake-house/ to Vercel on every push that
+# touches it. Until the secrets below exist, the job no-ops (it never fails a push).
+#
+# One-time setup — add as GitHub Actions secrets (Settings → Secrets and variables → Actions):
+#   VERCEL_TOKEN   — create at vercel.com/account/tokens
+#   VERCEL_ORG_ID  — Vercel team/user id (Vercel → Settings → General), or from
+#                    `.vercel/project.json` after `vercel link`
+#   VERCEL_PROJECT_ID (optional) — set once the project exists to pin deploys to it.
+#                    Leave unset for the first run: the CLI creates a project named
+#                    "pamusha-lake-house" automatically.
+#
+# Alternative with zero secrets: Vercel → Add New → Project → import this repo and set
+# Root Directory = pamusha-lake-house. See pamusha-lake-house/README.md.
+
+on:
+  push:
+    branches: [main, claude/sharp-johnson-vxg480]
+    paths:
+      - "pamusha-lake-house/**"
+      - ".github/workflows/pamusha-deploy.yml"
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - if: env.VERCEL_TOKEN == ''
+        run: echo "VERCEL_TOKEN secret not set — skipping deploy. See pamusha-lake-house/README.md."
+
+      - if: env.VERCEL_TOKEN != ''
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - if: env.VERCEL_TOKEN != ''
+        name: Deploy to Vercel (production)
+        working-directory: pamusha-lake-house
+        run: |
+          npm i -g vercel@latest
+          if [ -n "$VERCEL_PROJECT_ID" ]; then
+            vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
+            vercel deploy --prod --yes --token="$VERCEL_TOKEN"
+          else
+            # First deploy: creates a project named after this directory.
+            vercel deploy --prod --yes --token="$VERCEL_TOKEN"
+          fi
