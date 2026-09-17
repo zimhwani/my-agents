@@ -322,6 +322,16 @@ Each agent is designed with:
 
 ---
 
+## ✈️ Apps Built With The Agency
+
+Beyond the agent personas, the repo ships a few working apps that put them to use:
+
+- **[`flight-agent/`](flight-agent/)** – A voice-controlled flight travel agent. Tracks Melbourne → Harare fares for a family (two adults, two children) across a whole date window, ranks them by price, travel time, interchange quality and family-friendly timings, reads the results aloud, and logs price movements daily. Runs on sample fares out of the box; add Amadeus keys for live prices and an Anthropic key for conversational voice.
+- **[`geo-engine/`](geo-engine/)** – Generative Engine Optimisation scanner and reporting pipeline.
+- **[`marketing/thriving-through-menopause/`](marketing/thriving-through-menopause/)** – Campaign asset generator.
+
+---
+
 ## 📊 Stats
 
 - 🎭 **61 Specialized Agents** across 9 divisions

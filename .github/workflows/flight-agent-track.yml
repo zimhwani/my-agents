@@ -1,0 +1,53 @@
+name: Flight agent price tracking
+
+# Daily MEL -> HRE fare scan (2 adults + 2 children, now .. 31 Jan) using the
+# flight-agent app's headless scan. Appends to flight-agent/data/history.json so
+# price movements are logged without anyone keeping a browser open.
+#
+# One-time setup (Settings -> Secrets and variables -> Actions):
+#   AMADEUS_CLIENT_ID / AMADEUS_CLIENT_SECRET  - from developers.amadeus.com
+#   AMADEUS_ENV (variable, optional)           - "test" (default) or "production"
+# Until the secrets are set the workflow no-ops.
+
+on:
+  schedule:
+    - cron: "0 20 * * *" # 06:00/07:00 Melbourne
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    env:
+      AMADEUS_CLIENT_ID: ${{ secrets.AMADEUS_CLIENT_ID }}
+      AMADEUS_CLIENT_SECRET: ${{ secrets.AMADEUS_CLIENT_SECRET }}
+      AMADEUS_ENV: ${{ vars.AMADEUS_ENV || 'test' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - if: env.AMADEUS_CLIENT_ID == ''
+        run: echo "AMADEUS_CLIENT_ID secret not set - skipping scan. See flight-agent/README.md."
+
+      - if: env.AMADEUS_CLIENT_ID != ''
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - if: env.AMADEUS_CLIENT_ID != ''
+        working-directory: flight-agent
+        run: npm install
+
+      - if: env.AMADEUS_CLIENT_ID != ''
+        working-directory: flight-agent
+        run: npm run scan -- --step 3 | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - if: env.AMADEUS_CLIENT_ID != ''
+        name: Commit price history
+        run: |
+          git config user.name "flight-agent-bot"
+          git config user.email "flight-agent-bot@users.noreply.github.com"
+          git add flight-agent/data/latest.json flight-agent/data/history.json
+          git diff --cached --quiet || git commit -m "chore(flight-agent): daily fare snapshot"
+          git push
