@@ -19,6 +19,11 @@
     a.setAttribute("rel", "noopener");
   });
 
+  document.querySelectorAll('a[target="_blank"]').forEach(function (a) {
+    if (a.querySelector(".new-tab")) return;
+    var s = document.createElement("span"); s.className = "visually-hidden new-tab"; s.textContent = " (opens in a new tab)"; a.appendChild(s);
+  });
+
   /* ---- Header state ---------------------------------------------------- */
   var header = document.querySelector(".site-header");
   var bookBar = document.querySelector(".book-bar");
@@ -36,23 +41,23 @@
   var toggle = document.querySelector(".nav__toggle");
   var links = document.querySelector(".nav__links");
   if (toggle && links) {
-    toggle.addEventListener("click", function () {
-      var open = toggle.getAttribute("aria-expanded") === "true";
-      toggle.setAttribute("aria-expanded", String(!open));
-      links.classList.toggle("is-open", !open);
-      document.body.style.overflow = !open ? "hidden" : "";
-      if (!open && header) header.classList.add("is-scrolled");
-    });
+    var mainEl = document.getElementById("main"), footerEl = document.querySelector(".site-footer");
+    function setMenu(open) {
+      toggle.setAttribute("aria-expanded", String(open));
+      links.classList.toggle("is-open", open);
+      document.body.style.overflow = open ? "hidden" : "";
+      if (open && header) header.classList.add("is-scrolled");
+      [mainEl, footerEl].forEach(function (el) { if (el) { if (open) el.setAttribute("inert", ""); else el.removeAttribute("inert"); } });
+      if (open) { var first = links.querySelector("a"); if (first) first.focus(); } else { toggle.focus(); }
+    }
+    toggle.addEventListener("click", function () { setMenu(toggle.getAttribute("aria-expanded") !== "true"); });
     links.querySelectorAll("a").forEach(function (a) {
-      a.addEventListener("click", function () {
-        toggle.setAttribute("aria-expanded", "false");
-        links.classList.remove("is-open");
-        document.body.style.overflow = "";
-      });
+      a.addEventListener("click", function () { if (links.classList.contains("is-open")) { setMenu(false); } });
     });
     document.addEventListener("keydown", function (e) {
-      if (e.key === "Escape" && links.classList.contains("is-open")) toggle.click();
+      if (e.key === "Escape" && links.classList.contains("is-open")) setMenu(false);
     });
+    window.matchMedia("(min-width: 56.01rem)").addEventListener("change", function (m) { if (m.matches && links.classList.contains("is-open")) setMenu(false); });
   }
 
   /* ---- Placeholder art (shown until the owner's photos exist) ---------- */
@@ -197,7 +202,8 @@
       var img = src.querySelector("img"), art = src.querySelector(".art");
       if (img && !img.classList.contains("is-missing")) { dImg.src = img.src; dImg.alt = img.alt; dImg.hidden = false; dArt.hidden = true; }
       else { dImg.hidden = true; dArt.hidden = false; dArt.innerHTML = art ? art.innerHTML : ""; }
-      dCap.textContent = src.getAttribute("data-caption") || (img ? img.alt : "");
+      dCap.textContent = (src.getAttribute("data-caption") || (img ? img.alt : "")) + " (" + (idx + 1) + " of " + items.length + ")";
+      dArt.setAttribute("role", "img"); dArt.setAttribute("aria-label", src.getAttribute("data-caption") || "");
     }
     items.forEach(function (it, i) {
       it.addEventListener("click", function (e) { e.preventDefault(); lastFocus = it; show(i); dlg.showModal(); });
@@ -221,20 +227,29 @@
       var wrap = f.closest(".field"); var err = wrap.querySelector(".field__error");
       wrap.classList.toggle("is-invalid", !!msg); f.setAttribute("aria-invalid", msg ? "true" : "false"); if (err) err.textContent = msg || "";
     }
-    function validate() {
-      var ok = true, d = new FormData(form);
-      var name = (d.get("name") || "").toString().trim(), email = (d.get("email") || "").toString().trim();
+    var submitted = false;
+    function validate(only) {
+      var errs = 0, d = new FormData(form);
+      var name = (d.get("name") || "").toString().trim(), email = (d.get("email") || "").toString().trim(), msg = (d.get("message") || "").toString().trim();
       var ci = d.get("checkin"), co = d.get("checkout"), guests = parseInt(d.get("guests"), 10);
-      setErr("name", name ? "" : "Please tell us your name."); ok = ok && !!name;
-      var em = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email); setErr("email", em ? "" : "Enter a valid email so we can reply."); ok = ok && em;
-      if (ci && co && co <= ci) { setErr("checkout", "Check-out must be after check-in."); ok = false; } else setErr("checkout", "");
-      if (d.get("guests") && (isNaN(guests) || guests < 1 || guests > 9)) { setErr("guests", "We sleep up to 9 guests."); ok = false; } else setErr("guests", "");
-      return ok;
+      var check = function (field, bad, text) { if (only && only !== field) return; setErr(field, bad ? text : ""); if (bad) errs++; };
+      check("name", !name, "Please tell us your name.");
+      check("email", !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email), "Enter a valid email so we can reply.");
+      check("checkout", !!(ci && co && co <= ci), "Check-out must be after check-in.");
+      check("guests", !!(d.get("guests") && (isNaN(guests) || guests < 1 || guests > 9)), "We sleep up to 9 guests.");
+      check("message", !msg, "Tell us what you'd like to know.");
+      return errs;
     }
-    form.querySelectorAll("input, textarea, select").forEach(function (f) { f.addEventListener("blur", validate); });
+    form.querySelectorAll("input, textarea, select").forEach(function (f) { f.addEventListener("blur", function () { if (submitted || f.value) validate(f.name); }); });
     form.addEventListener("submit", function (e) {
-      e.preventDefault();
-      if (!validate()) { var firstBad = form.querySelector('[aria-invalid="true"]'); if (firstBad) firstBad.focus(); return; }
+      e.preventDefault(); submitted = true;
+      var n = validate();
+      if (n) {
+        status.textContent = n === 1 ? "One field needs attention." : n + " fields need attention.";
+        status.classList.add("is-visible", "is-error");
+        var firstBad = form.querySelector('[aria-invalid="true"]'); if (firstBad) firstBad.focus(); return;
+      }
+      status.classList.remove("is-visible", "is-error");
       var d = new FormData(form);
       if (d.get("botcheck")) return; // honeypot
       var payload = {

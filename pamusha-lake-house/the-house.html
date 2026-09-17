@@ -19,10 +19,10 @@
 <meta name="theme-color" content="#141A21" media="(prefers-color-scheme: dark)">
 <link rel="icon" href="/assets/img/favicon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/assets/img/apple-touch-icon.png">
-<script>(function(){try{var t=localStorage.getItem("pamusha-theme");if(t)document.documentElement.setAttribute("data-theme",t);}catch(e){}})();</script>
+<script>document.documentElement.classList.add("js");(function(){try{var t=localStorage.getItem("pamusha-theme");if(t)document.documentElement.setAttribute("data-theme",t);}catch(e){}})();</script>
 <link rel="preload" href="/assets/fonts/fraunces-latin-opsz-normal.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="/assets/fonts/dm-sans-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
-<style>@font-face { font-family: "Fraunces"; font-style: normal; font-weight: 100 900; font-display: swap; src: url("/assets/fonts/fraunces-latin-opsz-normal.woff2") format("woff2-variations"); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; } @font-face { font-family: "DM Sans"; font-style: normal; font-weight: 100 1000; font-display: swap; src: url("/assets/fonts/dm-sans-latin-wght-normal.woff2") format("woff2-variations"); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; } @font-face { font-family: "Fraunces Fallback"; src: local("Georgia"); size-adjust: 104%; ascent-override: 92%; descent-override: 24%; } :root { --linen: #F6F1E9; --linen-2: #EDE5D8; --ink: #1C2430; --ink-soft: #4A5361; --apricot: #E5A46E; --apricot-text: #A4541F; --sage: #B7C2B1; --sage-deep: #4F6150; --n-50: #FBF8F3; --n-100: #F6F1E9; --n-200: #E6DFD3; --n-300: #CFC7BA; --n-400: #A8A39B; --n-500: #7A7F86; --n-600: #5A606A; --n-700: #3E4652; --n-800: #2A323D; --n-900: #1C2430; --bg: var(--linen); --surface: var(--linen-2); --surface-2: var(--n-50); --text: var(--ink); --text-soft: var(--ink-soft); --accent: var(--apricot); --accent-text: var(--apricot-text); --sage-text: var(--sage-deep); --rule: color-mix(in srgb, var(--ink) 14%, transparent); --rule-strong: color-mix(in srgb, var(--ink) 28%, transparent); --btn-bg: var(--ink); --btn-text: var(--linen); --ink-band: var(--ink); --contour-filter: none; --grain-opacity: 0.035; --grain-blend: multiply; --img-placeholder-a: #C9D3D8; --img-placeholder-b: #E8DCC8; --img-placeholder-c: #8FA0A8; --font-display: "Fraunces", "Fraunces Fallback", "Iowan Old Style", Georgia, serif; --font-body: "DM Sans", system-ui, -apple-system, "Segoe UI", sans-serif; --fs-display: clamp(2.75rem, 2rem + 3.6vw, 4.75rem); --fs-h1: clamp(2.25rem, 1.8rem + 2vw, 3.25rem); --fs-h2: clamp(1.75rem, 1.5rem + 1.1vw, 2.25rem); --fs-h3: 1.375rem; --fs-body: 1.0625rem; --fs-small: 0.875rem; --fs-eyebrow: 0.6875rem; --s-1: 0.5rem; --s-2: 1rem; --s-3: 1.5rem; --s-4: 2rem; --s-5: 3rem; --s-6: 5rem; --s-7: 8rem; --s-8: 13rem; --section-y: clamp(5rem, 4rem + 4vw, 8rem); --gutter: clamp(1rem, 0.5rem + 3vw, 3rem); --max: 72rem; --prose: 40rem; --ease: cubic-bezier(0.22, 1, 0.36, 1); --dur: 700ms; --radius: 2px; --radius-pill: 999px; color-scheme: light; } @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg: #141A21; --surface: #1C2530; --surface-2: #1A222C; --text: #EDE6DA; --text-soft: #B6B0A6; --accent: #E5A46E; --accent-text: #E5A46E; --sage: #A9B8A3; --sage-text: #A9B8A3; --n-500: #8A9099; --rule: color-mix(in srgb, #EDE6DA 14%, transparent); --rule-strong: color-mix(in srgb, #EDE6DA 28%, transparent); --btn-bg: #EDE6DA; --btn-text: #141A21; --ink-band: #0E1319; --contour-filter: invert(1); --grain-opacity: 0.05; --grain-blend: overlay; --img-placeholder-a: #2B3A46; --img-placeholder-b: #3E3A34; --img-placeholder-c: #1C2530; color-scheme: dark; } } :root[data-theme="dark"] { --bg: #141A21; --surface: #1C2530; --surface-2: #1A222C; --text: #EDE6DA; --text-soft: #B6B0A6; --accent: #E5A46E; --accent-text: #E5A46E; --sage: #A9B8A3; --sage-text: #A9B8A3; --n-500: #8A9099; --rule: color-mix(in srgb, #EDE6DA 14%, transparent); --rule-strong: color-mix(in srgb, #EDE6DA 28%, transparent); --btn-bg: #EDE6DA; --btn-text: #141A21; --ink-band: #0E1319; --contour-filter: invert(1); --grain-opacity: 0.05; --grain-blend: overlay; --img-placeholder-a: #2B3A46; --img-placeholder-b: #3E3A34; --img-placeholder-c: #1C2530; color-scheme: dark; }</style>
+<style>@font-face { font-family: "Fraunces"; font-style: normal; font-weight: 100 900; font-display: swap; src: url("/assets/fonts/fraunces-latin-opsz-normal.woff2") format("woff2-variations"); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; } @font-face { font-family: "DM Sans"; font-style: normal; font-weight: 100 1000; font-display: swap; src: url("/assets/fonts/dm-sans-latin-wght-normal.woff2") format("woff2-variations"); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; } @font-face { font-family: "Fraunces Fallback"; src: local("Georgia"); size-adjust: 104%; ascent-override: 92%; descent-override: 24%; } :root { --linen: #F6F1E9; --linen-2: #EDE5D8; --ink: #1C2430; --ink-soft: #4A5361; --apricot: #E5A46E; --apricot-text: #98491A; --sage: #B7C2B1; --sage-deep: #4F6150; --n-50: #FBF8F3; --n-100: #F6F1E9; --n-200: #E6DFD3; --n-300: #CFC7BA; --n-400: #A8A39B; --n-500: #7A7F86; --n-600: #5A606A; --n-700: #3E4652; --n-800: #2A323D; --n-900: #1C2430; --bg: var(--linen); --surface: var(--linen-2); --surface-2: var(--n-50); --text: var(--ink); --text-soft: var(--ink-soft); --accent: var(--apricot); --accent-text: var(--apricot-text); --sage-text: var(--sage-deep); --rule: color-mix(in srgb, var(--ink) 14%, transparent); --rule-strong: color-mix(in srgb, var(--ink) 28%, transparent); --btn-bg: var(--ink); --btn-text: var(--linen); --ink-band: var(--ink); --contour-filter: none; --error-text: #A63E24; --focus: var(--text); --grain-opacity: 0.035; --grain-blend: multiply; --img-placeholder-a: #C9D3D8; --img-placeholder-b: #E8DCC8; --img-placeholder-c: #8FA0A8; --font-display: "Fraunces", "Fraunces Fallback", "Iowan Old Style", Georgia, serif; --font-body: "DM Sans", system-ui, -apple-system, "Segoe UI", sans-serif; --fs-display: clamp(2.75rem, 2rem + 3.6vw, 4.75rem); --fs-h1: clamp(2.25rem, 1.8rem + 2vw, 3.25rem); --fs-h2: clamp(1.75rem, 1.5rem + 1.1vw, 2.25rem); --fs-h3: 1.375rem; --fs-body: 1.0625rem; --fs-small: 0.875rem; --fs-eyebrow: 0.6875rem; --s-1: 0.5rem; --s-2: 1rem; --s-3: 1.5rem; --s-4: 2rem; --s-5: 3rem; --s-6: 5rem; --s-7: 8rem; --s-8: 13rem; --section-y: clamp(5rem, 4rem + 4vw, 8rem); --gutter: clamp(1rem, 0.5rem + 3vw, 3rem); --max: 72rem; --prose: 40rem; --ease: cubic-bezier(0.22, 1, 0.36, 1); --dur: 700ms; --radius: 2px; --radius-pill: 999px; color-scheme: light; } @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg: #141A21; --surface: #1C2530; --surface-2: #1A222C; --text: #EDE6DA; --text-soft: #B6B0A6; --accent: #E5A46E; --accent-text: #E5A46E; --sage: #A9B8A3; --sage-text: #A9B8A3; --n-500: #8A9099; --rule: color-mix(in srgb, #EDE6DA 14%, transparent); --rule-strong: color-mix(in srgb, #EDE6DA 28%, transparent); --btn-bg: #EDE6DA; --btn-text: #141A21; --ink-band: #0E1319; --contour-filter: invert(1); --error-text: #F08A6B; --focus: var(--apricot); --grain-opacity: 0.05; --grain-blend: overlay; --img-placeholder-a: #2B3A46; --img-placeholder-b: #3E3A34; --img-placeholder-c: #1C2530; color-scheme: dark; } } :root[data-theme="dark"] { --bg: #141A21; --surface: #1C2530; --surface-2: #1A222C; --text: #EDE6DA; --text-soft: #B6B0A6; --accent: #E5A46E; --accent-text: #E5A46E; --sage: #A9B8A3; --sage-text: #A9B8A3; --n-500: #8A9099; --rule: color-mix(in srgb, #EDE6DA 14%, transparent); --rule-strong: color-mix(in srgb, #EDE6DA 28%, transparent); --btn-bg: #EDE6DA; --btn-text: #141A21; --ink-band: #0E1319; --contour-filter: invert(1); --error-text: #F08A6B; --focus: var(--apricot); --grain-opacity: 0.05; --grain-blend: overlay; --img-placeholder-a: #2B3A46; --img-placeholder-b: #3E3A34; --img-placeholder-c: #1C2530; color-scheme: dark; }</style>
 <link rel="stylesheet" href="/assets/css/main.css">
 
 </head>
@@ -50,7 +50,7 @@
     </div>
   </div>
 </header>
-<main id="main">
+<main id="main" tabindex="-1">
 <section class="page-hero" aria-labelledby="ph-title">
   <div class="wrap">
     <span class="eyebrow">The house</span>
@@ -198,12 +198,12 @@
   </div>
 </section>
 </main>
-<dialog id="lightbox" class="lightbox" aria-label="Image viewer">
+<dialog id="lightbox" class="lightbox" aria-label="Image viewer" aria-describedby="lightbox-caption">
   <button class="lightbox__close" type="button" data-close aria-label="Close">×</button>
   <button class="lightbox__nav lightbox__nav--prev" type="button" data-prev aria-label="Previous image">‹</button>
   <div class="lightbox__stage"><img alt="" hidden><div class="art" hidden aria-hidden="true"></div></div>
   <button class="lightbox__nav lightbox__nav--next" type="button" data-next aria-label="Next image">›</button>
-  <p class="lightbox__caption"></p>
+  <p class="lightbox__caption" id="lightbox-caption" aria-live="polite"></p>
 </dialog>
 <footer class="site-footer">
   <div class="wrap">
@@ -214,7 +214,7 @@
         <p class="small soft">A four-bedroom lake house on Lake Reeve, The Honeysuckles, Gippsland Lakes, Victoria. Sleeps nine. Wood-fired hot tub, fire pit and a deck built for the night sky.</p>
       </div>
       <div>
-        <h3 class="footer-h">The stay</h3>
+        <h2 class="footer-h">The stay</h2>
         <ul>
           <li><a href="/the-house">The house</a></li>
           <li><a href="/the-house#gallery">Gallery</a></li>
@@ -223,7 +223,7 @@
         </ul>
       </div>
       <div>
-        <h3 class="footer-h">Book &amp; contact</h3>
+        <h2 class="footer-h">Book &amp; contact</h2>
         <ul>
           <li><a href="#" data-cta="airbnb">Book on Airbnb</a></li>
           <li><a href="/#enquire">Send an enquiry</a></li>
@@ -231,7 +231,7 @@
         </ul>
       </div>
       <div>
-        <h3 class="footer-h">Appearance</h3>
+        <h2 class="footer-h">Appearance</h2>
         <div class="cluster" role="group" aria-label="Colour theme">
           <button class="btn btn--secondary btn--sm" type="button" data-theme-set="light" aria-pressed="false">Light</button>
           <button class="btn btn--secondary btn--sm" type="button" data-theme-set="dark" aria-pressed="false">Dark</button>

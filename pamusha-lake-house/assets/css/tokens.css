@@ -2,7 +2,7 @@
 :root {
   --linen: #F6F1E9; --linen-2: #EDE5D8;
   --ink: #1C2430; --ink-soft: #4A5361;
-  --apricot: #E5A46E; --apricot-text: #A4541F;
+  --apricot: #E5A46E; --apricot-text: #98491A;
   --sage: #B7C2B1; --sage-deep: #4F6150;
   --n-50: #FBF8F3; --n-100: #F6F1E9; --n-200: #E6DFD3; --n-300: #CFC7BA; --n-400: #A8A39B;
   --n-500: #7A7F86; --n-600: #5A606A; --n-700: #3E4652; --n-800: #2A323D; --n-900: #1C2430;
@@ -15,6 +15,7 @@
   --rule-strong: color-mix(in srgb, var(--ink) 28%, transparent);
   --btn-bg: var(--ink); --btn-text: var(--linen);
   --ink-band: var(--ink); --contour-filter: none;
+  --error-text: #A63E24; --focus: var(--text);
   --grain-opacity: 0.035; --grain-blend: multiply;
   --img-placeholder-a: #C9D3D8; --img-placeholder-b: #E8DCC8; --img-placeholder-c: #8FA0A8;
 
@@ -47,6 +48,7 @@
     --rule-strong: color-mix(in srgb, #EDE6DA 28%, transparent);
     --btn-bg: #EDE6DA; --btn-text: #141A21;
     --ink-band: #0E1319; --contour-filter: invert(1);
+    --error-text: #F08A6B; --focus: var(--apricot);
     --grain-opacity: 0.05; --grain-blend: overlay;
     --img-placeholder-a: #2B3A46; --img-placeholder-b: #3E3A34; --img-placeholder-c: #1C2530;
     color-scheme: dark;
@@ -62,6 +64,7 @@
   --rule-strong: color-mix(in srgb, #EDE6DA 28%, transparent);
   --btn-bg: #EDE6DA; --btn-text: #141A21;
   --ink-band: #0E1319; --contour-filter: invert(1);
+  --error-text: #F08A6B; --focus: var(--apricot);
   --grain-opacity: 0.05; --grain-blend: overlay;
   --img-placeholder-a: #2B3A46; --img-placeholder-b: #3E3A34; --img-placeholder-c: #1C2530;
   color-scheme: dark;

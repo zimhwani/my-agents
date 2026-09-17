@@ -47,6 +47,7 @@
         });
         sections.forEach(function (s) { var visible = s.querySelectorAll(".mcard:not([hidden])").length; s.hidden = term ? visible === 0 : false; });
         if (empty) empty.hidden = !(term && hits === 0);
+        var st = document.getElementById("search-status"); if (st) st.textContent = term ? hits + (hits === 1 ? " card matches" : " cards match") : "";
       }, 150);
     });
   }
@@ -75,8 +76,16 @@
     if (saved[cb.id]) cb.checked = true;
     cb.addEventListener("change", function () { saved[cb.id] = cb.checked; try { localStorage.setItem(KEY, JSON.stringify(saved)); } catch (e) {} });
   });
+  var done = document.querySelector(".checklist__done"), boxes = document.querySelectorAll(".checklist input[type=checkbox]");
+  function checkDone() {
+    if (!done) return;
+    var all = boxes.length && Array.prototype.every.call(boxes, function (b) { return b.checked; });
+    if (all && done.hidden) { done.hidden = false; done.textContent = done.getAttribute("data-text"); }
+    else if (!all && !done.hidden) { done.hidden = true; done.textContent = ""; }
+  }
+  boxes.forEach(function (b) { b.addEventListener("change", checkDone); }); checkDone();
   var reset = document.getElementById("checklist-reset");
-  if (reset) reset.addEventListener("click", function () { saved = {}; try { localStorage.removeItem(KEY); } catch (e) {} document.querySelectorAll(".checklist input").forEach(function (cb) { cb.checked = false; }); });
+  if (reset) reset.addEventListener("click", function () { saved = {}; try { localStorage.removeItem(KEY); } catch (e) {} document.querySelectorAll(".checklist input").forEach(function (cb) { cb.checked = false; }); checkDone(); });
 
   /* Save-to-home-screen hint */
   var hint = document.getElementById("save-hint");

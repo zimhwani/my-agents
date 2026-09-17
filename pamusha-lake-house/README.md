@@ -31,8 +31,10 @@ Domains, then point the domain's DNS (currently at GoDaddy) at Vercel.
 
 ## Add your photography
 
-Drop JPGs into `assets/img/` using these file names; each slot falls back to
-designed placeholder art until the file exists:
+Drop JPGs into `assets/img/` using these file names, then run
+`python3 docs/build/build.py` once so the pages pick them up (the build only
+emits an image tag for files that exist, so nothing 404s). Each slot shows
+designed placeholder art until then:
 
 | File | Used for |
 |---|---|
@@ -51,5 +53,31 @@ Keep files under ~400 KB each (export at quality 80). Alt text lives in the HTML
 Search the HTML for `TODO` — Wi-Fi password, lockbox code, Airbnb listing URL,
 phone, bin days, appliance notes. Everything else is already written.
 
-Enquiry form: the form posts to Web3Forms. Get a free access key at
-web3forms.com and replace `YOUR_WEB3FORMS_ACCESS_KEY` in `index.html`.
+### Owner settings (top of `assets/js/main.js`)
+
+| Setting | What it does |
+|---|---|
+| `AIRBNB_URL` | Your listing URL. Until set, "Book on Airbnb" opens an Airbnb search for The Honeysuckles. |
+| `WEB3FORMS_KEY` | Free key from web3forms.com; enquiries then email you. |
+| `ENQUIRY_EMAIL` | Fallback: with no key, the form opens the guest's email app addressed to you. With neither set, the form politely says it isn't connected yet. |
+
+### Assumptions to confirm
+
+Check-in 3 pm / check-out 10 am, and "usually reply within a day" are stated on
+the site. Guest reviews are paraphrased and labelled as such; replace with
+verbatim quotes (with permission) when you have them. The 10/10 "Exceptional"
+rating is attributed to Vrbo, where the listing is syndicated.
+
+## Editing
+
+`docs/build/build.py` assembles the pages from shared partials (head, header,
+footer) plus one body file per page (`p_index.py`, `p_house.py`, `p_explore.py`,
+`p_manual.py`, `p_404.py`). Edit those and rerun the script, or edit the HTML
+directly if you prefer. The generated HTML is what gets deployed.
+
+## QA record
+
+`docs/qa/` holds the accessibility audit, copy reality check, design review and
+Lighthouse benchmark that shaped the final build. After fixes: zero axe-core
+violations on every page in light and dark mode at mobile and desktop widths;
+Lighthouse mobile 96 performance / 0 CLS before the font and CSS trims.
