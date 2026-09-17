@@ -7,7 +7,7 @@
   var AIRBNB_URL = "https://www.airbnb.com.au/s/The-Honeysuckles--VIC--Australia/homes";
   // TODO(owner): free key from web3forms.com (enquiry form). Leave blank to fall back to a mailto: link.
   var WEB3FORMS_KEY = "";
-  var ENQUIRY_EMAIL = "hello@example.com"; // TODO(owner): your email for the mailto fallback
+  var ENQUIRY_EMAIL = ""; // TODO(owner): your email, used as a mailto: fallback when WEB3FORMS_KEY is blank
 
   var reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
@@ -239,6 +239,11 @@
         access_key: WEB3FORMS_KEY, subject: "Pamusha Lake House enquiry from " + d.get("name"), from_name: "Pamusha website",
         name: d.get("name"), email: d.get("email"), checkin: d.get("checkin"), checkout: d.get("checkout"), guests: d.get("guests"), message: d.get("message")
       };
+      if (!WEB3FORMS_KEY && !ENQUIRY_EMAIL) {
+        status.textContent = "The enquiry form isn't connected yet. Please message us through Airbnb and we'll get straight back to you.";
+        status.classList.add("is-visible", "is-error");
+        return;
+      }
       if (!WEB3FORMS_KEY) {
         var body = "Name: " + payload.name + "\nEmail: " + payload.email + "\nDates: " + (payload.checkin || "?") + " to " + (payload.checkout || "?") + "\nGuests: " + (payload.guests || "?") + "\n\n" + payload.message;
         window.location.href = "mailto:" + ENQUIRY_EMAIL + "?subject=" + encodeURIComponent(payload.subject) + "&body=" + encodeURIComponent(body);
@@ -251,7 +256,7 @@
         .then(function (r) { return r.json(); })
         .then(function (j) {
           if (j.success) {
-            status.textContent = "Thanks " + payload.name + " — we've got your message and will reply within a day.";
+            status.textContent = "Thanks " + payload.name + " — we've got your message and will usually reply within a day.";
             status.classList.add("is-visible"); status.classList.remove("is-error"); form.reset();
           } else { throw new Error(j.message || "failed"); }
         })
