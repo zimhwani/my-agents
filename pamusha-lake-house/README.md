@@ -17,9 +17,25 @@ pamusha-lake-house/
 ## Deploy to Vercel
 
 **Path A — Vercel Git integration (no secrets, recommended)**
-1. vercel.com → *Add New → Project* → import `zimhwani/my-agents`.
+1. vercel.com → *Add New → Project* → import `zimhwani/my-agents`
+   (the repo is already connected to Vercel from the earlier marketing sites,
+   so it appears in the import list).
 2. Set **Root Directory = `pamusha-lake-house`**, Framework Preset = *Other*.
-3. Deploy. Every push to the production branch redeploys automatically.
+   Leave build and output settings blank; `vercel.json` in this folder already
+   declares a static site.
+3. Under *Git*, set the **Production Branch** to `main` (after merging) or to
+   `claude/sharp-johnson-vxg480` to go live from this branch straight away.
+4. Deploy. Every push to that branch redeploys automatically.
+
+Same thing from the Mac terminal, if you prefer the CLI you used for other projects:
+
+```bash
+cd my-agents/pamusha-lake-house
+vercel link          # create a new project named pamusha-lake-house
+vercel git connect   # attach zimhwani/my-agents so pushes deploy
+vercel --prod        # first production deploy now, without waiting for a push
+```
+Then set Root Directory = `pamusha-lake-house` in the project settings once.
 
 **Path B — GitHub Actions** (`.github/workflows/pamusha-deploy.yml`)
 Add repository secrets `VERCEL_TOKEN` and `VERCEL_ORG_ID` (and, after the first
