@@ -6,7 +6,7 @@ export const metadata: Metadata = {
   description: "Voice-controlled flight tracker: Melbourne to Harare for two adults and two children.",
 };
 
-export const viewport: Viewport = { themeColor: "#0b1020", width: "device-width", initialScale: 1 };
+export const viewport: Viewport = { themeColor: [{ media: "(prefers-color-scheme: light)", color: "#f3f5fb" }, { media: "(prefers-color-scheme: dark)", color: "#0b1020" }], width: "device-width", initialScale: 1 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (

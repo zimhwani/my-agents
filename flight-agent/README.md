@@ -67,6 +67,10 @@ scripts/scan.ts Headless scan for cron / CI
 tests/          Vitest unit tests (npm test)
 ```
 
+## Static demo (no server)
+
+`npm run demo` bundles the whole page into `demo/dist/index.html`, a single file that runs on the sample fares and the built-in voice parser with no server at all. Handy for sharing a link or trying the voice flow before adding keys; live Amadeus fares and Claude understanding need the Next.js server.
+
 ## Scripts
 
 ```bash
@@ -75,4 +79,5 @@ npm run build      # production build
 npm test           # unit tests
 npm run typecheck  # tsc --noEmit
 npm run scan       # headless fare scan
+npm run demo       # single-file static demo -> demo/dist/index.html
 ```
