@@ -1,0 +1,26 @@
+{
+  "name": "Opening Range Breakout",
+  "description": "Buy the first 5-minute close above the 15-minute opening range, above VWAP, on elevated relative volume, in names trading above their 20-day EMA. Stop under the range (or 1.5 ATR, whichever is tighter). Take half at +1R, move stop to breakeven, trail the rest by 1.5 ATR off the high, hard target +3R, flat by 15:50 ET.",
+  "bar_minutes": 5,
+  "opening_range_minutes": 15,
+  "entry_window_start": "09:45",
+  "entry_window_end": "11:30",
+  "min_or_pct": 0.3,
+  "max_or_pct": 3.0,
+  "min_rel_volume": 1.2,
+  "require_above_vwap": true,
+  "require_daily_trend": true,
+  "trend_ema_days": 20,
+  "atr_period": 14,
+  "stop_atr_mult": 1.5,
+  "max_risk_pct_of_price": 2.5,
+  "target_r": 2.0,
+
+  "partial_r": 1.0,
+  "partial_fraction": 0.5,
+  "breakeven_after_partial": true,
+  "trail_atr_mult": 1.5,
+  "final_target_r": 3.0,
+  "time_stop_minutes": 120,
+  "time_stop_min_r": 0.5
+}
