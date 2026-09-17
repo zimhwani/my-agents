@@ -14,6 +14,7 @@
   --rule: color-mix(in srgb, var(--ink) 14%, transparent);
   --rule-strong: color-mix(in srgb, var(--ink) 28%, transparent);
   --btn-bg: var(--ink); --btn-text: var(--linen);
+  --ink-band: var(--ink); --contour-filter: none;
   --grain-opacity: 0.035; --grain-blend: multiply;
   --img-placeholder-a: #C9D3D8; --img-placeholder-b: #E8DCC8; --img-placeholder-c: #8FA0A8;
 
@@ -45,6 +46,7 @@
     --rule: color-mix(in srgb, #EDE6DA 14%, transparent);
     --rule-strong: color-mix(in srgb, #EDE6DA 28%, transparent);
     --btn-bg: #EDE6DA; --btn-text: #141A21;
+    --ink-band: #0E1319; --contour-filter: invert(1);
     --grain-opacity: 0.05; --grain-blend: overlay;
     --img-placeholder-a: #2B3A46; --img-placeholder-b: #3E3A34; --img-placeholder-c: #1C2530;
     color-scheme: dark;
@@ -59,6 +61,7 @@
   --rule: color-mix(in srgb, #EDE6DA 14%, transparent);
   --rule-strong: color-mix(in srgb, #EDE6DA 28%, transparent);
   --btn-bg: #EDE6DA; --btn-text: #141A21;
+  --ink-band: #0E1319; --contour-filter: invert(1);
   --grain-opacity: 0.05; --grain-blend: overlay;
   --img-placeholder-a: #2B3A46; --img-placeholder-b: #3E3A34; --img-placeholder-c: #1C2530;
   color-scheme: dark;

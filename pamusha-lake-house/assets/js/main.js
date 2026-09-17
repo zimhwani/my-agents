@@ -21,11 +21,13 @@
 
   /* ---- Header state ---------------------------------------------------- */
   var header = document.querySelector(".site-header");
+  var bookBar = document.querySelector(".book-bar");
+  var vh = window.innerHeight, scrolled = null, barShown = null;
+  window.addEventListener("resize", function () { vh = window.innerHeight; }, { passive: true });
   function onScroll() {
-    if (!header) return;
-    header.classList.toggle("is-scrolled", window.scrollY > 40);
-    var bar = document.querySelector(".book-bar");
-    if (bar) bar.classList.toggle("is-visible", window.scrollY > window.innerHeight * 0.6);
+    var y = window.scrollY;
+    var s = y > 40; if (header && s !== scrolled) { header.classList.toggle("is-scrolled", s); scrolled = s; }
+    var b = y > vh * 0.6; if (bookBar && b !== barShown) { bookBar.classList.toggle("is-visible", b); barShown = b; }
   }
   window.addEventListener("scroll", onScroll, { passive: true });
   onScroll();
