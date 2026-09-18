@@ -202,3 +202,30 @@ def test_tjl_backtest_on_synthetic_gaps(settings):
     # one trade per symbol per day
     seen = {(t.symbol, t.entry_time.date()) for t in res.trades}
     assert len(seen) == len(res.trades)
+
+
+def test_max_initial_risk_skip_and_cap():
+    now = clock.at(DAY, clock.parse_hhmm("10:15"))
+    intraday = prior_sessions(DAY) + gap_day(DAY)
+    daily = daily_uptrend(DAY)
+    base = TrendJoinLong(TJLRules()).evaluate("T", intraday, daily, now)
+    assert base is not None
+    risk_pct = (base.entry - base.stop) / base.entry * 100
+    assert TrendJoinLong(TJLRules(max_initial_risk_pct=risk_pct / 2)).evaluate("T", intraday, daily, now) is None
+    capped = TrendJoinLong(TJLRules(max_initial_risk_pct=risk_pct / 2, max_initial_risk_mode="cap")) \
+        .evaluate("T", intraday, daily, now)
+    assert capped is not None and capped.stop > base.stop
+    assert capped.stop == pytest.approx(round(base.entry * (1 - risk_pct / 200), 2))
+    loose = TrendJoinLong(TJLRules(max_initial_risk_pct=risk_pct * 2)).evaluate("T", intraday, daily, now)
+    assert loose is not None and loose.stop == base.stop
+
+
+def test_sweep_over_tjl_rules(settings):
+    from tradebot.analyze import sweep
+    from tradebot.data import synthetic_bars, synthetic_daily
+    bars = {s: synthetic_bars(s, 30, seed=i + 1, end=DAY, gap_days=0.15) for i, s in enumerate(["AAA", "BBB"])}
+    daily = {s: synthetic_daily(s, 260, seed=i + 1, end_price=b[0].open, end=b[0].time.date())
+             for i, (s, b) in enumerate(bars.items())}
+    rows = sweep(settings, TJLRules(), bars, {"max_initial_risk_pct": [0, 2.0], "max_initial_risk_mode": ["skip"]},
+                 daily=daily)
+    assert len(rows) == 2 and all("trades" in r for r in rows)

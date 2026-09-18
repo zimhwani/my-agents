@@ -46,6 +46,8 @@ class TJLRules:
     latest_entry: str = "15:30"
     force_close: str = "15:51"
     initial_stop_rule: str = "lod_minus_1pct"
+    max_initial_risk_pct: float = 0.0     # 0 = off. Else the entry->stop distance may not exceed this % of price
+    max_initial_risk_mode: str = "skip"   # skip = don't take the trade; cap = tighten the stop to the cap
     partial_r: float = 0.75
     partial_fraction: float = 1 / 3
     breakeven_r: float = 1.0
@@ -74,6 +76,8 @@ class TJLRules:
             latest_entry=str(t.get("latest_entry_et", "15:30")),
             force_close=str(t.get("force_close_et", "15:51")),
             initial_stop_rule=str(e.get("initial_stop_rule", "lod_minus_1pct")),
+            max_initial_risk_pct=float(e.get("max_initial_risk_pct", 0) or 0),
+            max_initial_risk_mode=str(e.get("max_initial_risk_mode", "skip")),
             partial_r=float(e.get("partial_profit_trigger_R", 0.75)),
             partial_fraction=float(e.get("partial_profit_fraction", 1 / 3)),
             breakeven_r=float(e.get("breakeven_trigger_R", 1.0)),
@@ -221,6 +225,13 @@ class TrendJoinLong:
         lod = min(b.low for b in today)
         entry = last.close
         stop = round(r.stop_for(lod), 2)
+        if r.max_initial_risk_pct > 0:
+            cap_stop = round(entry * (1 - r.max_initial_risk_pct / 100.0), 2)
+            if stop < cap_stop:
+                if r.max_initial_risk_mode == "cap":
+                    stop = cap_stop
+                else:
+                    return None
         risk = entry - stop
         if risk <= 0:
             return None
@@ -231,7 +242,10 @@ class TrendJoinLong:
 
 
 def load_tjl(path: str | Path = "rules.json") -> LoadedStrategy:
-    rules = TJLRules.load(path)
+    return loaded_from_rules(TJLRules.load(path))
+
+
+def loaded_from_rules(rules: TJLRules) -> LoadedStrategy:
     strat = TrendJoinLong(rules)
     return LoadedStrategy(
         name=rules.name, strategy=strat, exits=rules.exit_rules(),

@@ -113,16 +113,31 @@ DEFAULT_GRID: dict[str, list] = {
 }
 
 
-def sweep(settings, params, bars, grid: dict[str, list] | None = None, equity: float = 100_000):
-    """Backtest every combination in ``grid``; returns rows sorted by expectancy."""
+TJL_GRID: dict[str, list] = {
+    "max_initial_risk_pct": [0, 2.0, 3.0, 4.0],
+    "max_initial_risk_mode": ["skip", "cap"],
+    "latest_entry": ["10:30", "12:00", "15:30"],
+}
+
+
+def sweep(settings, params, bars, grid: dict[str, list] | None = None, equity: float = 100_000,
+          daily=None):
+    """Backtest every combination in ``grid``; returns rows sorted by expectancy.
+    ``params`` is a StrategyParams (ORB) or a TJLRules (Trend Join Long)."""
     from .backtest import Backtester
 
-    grid = grid or DEFAULT_GRID
+    is_tjl = params.__class__.__name__ == "TJLRules"
+    grid = grid or (TJL_GRID if is_tjl else DEFAULT_GRID)
     keys = list(grid)
     rows = []
     for combo in itertools.product(*(grid[k] for k in keys)):
         p = replace(params, **dict(zip(keys, combo)))
-        res = Backtester(settings, p, bars, equity=equity).run()
+        if is_tjl:
+            from .tjl import loaded_from_rules
+            loaded = loaded_from_rules(p)
+            loaded.apply(settings)
+            p = loaded
+        res = Backtester(settings, p, bars, daily=daily, equity=equity).run()
         st = res.stats
         rows.append({**dict(zip(keys, combo)), "trades": st.trades, "win_rate": st.win_rate,
                      "total_r": st.total_r, "expectancy": st.expectancy_r,

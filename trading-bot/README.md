@@ -110,6 +110,7 @@ same scan → loop → execution → exit → journal pipeline.
 | Stop | low of day − 1% |
 | Management | a third off at +0.75R; stop to breakeven at +1R; then trail under confirmed 5-minute swing lows (2 bars each side); no fixed target |
 | Risk | 1% per trade, 10% of equity per position, 5 positions (these override `.env`) |
+| Optional | `max_initial_risk_pct` in the `exit` block caps the entry→stop distance as a % of price, with `max_initial_risk_mode` = `skip` (don't take the trade) or `cap` (tighten the stop). Off by default; `python -m tradebot sweep` grids it. |
 
 **Opening Range Breakout** (`strategy.json`). Buy the first 5-minute close
 above the 15-minute opening range, above VWAP, with elevated volume, in

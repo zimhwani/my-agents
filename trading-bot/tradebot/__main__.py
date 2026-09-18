@@ -303,23 +303,31 @@ def cmd_analyze(args) -> None:
 
 def cmd_sweep(args) -> None:
     s = _settings(args)
-    from .analyze import DEFAULT_GRID, format_sweep, sweep
-    from .data import load_dir
+    from .analyze import DEFAULT_GRID, TJL_GRID, format_sweep, sweep
+    from .data import load_daily_dir, load_dir
     import json as _json
-    params = StrategyParams.load(args.strategy or "strategy.json")
-    print("(sweep tunes the ORB parameters in strategy.json; Trend Join Long rules are fixed by rules.json)")
+    strategy_file = Path(args.strategy) if args.strategy else s.strategy_file
+    raw = _json.loads(strategy_file.read_text()) if strategy_file.exists() else {}
+    if "strategy_name" in raw or "daily_filters" in raw:
+        from .tjl import TJLRules
+        params = TJLRules.load(strategy_file)
+        default_grid = TJL_GRID
+    else:
+        params = StrategyParams.load(strategy_file)
+        default_grid = DEFAULT_GRID
     bars = load_dir(args.data)
+    daily = load_daily_dir(args.data) or None
     if args.symbols:
         bars = {k: v for k, v in bars.items() if k in args.symbols}
     if not bars:
         print(f"No *_5min.csv files in {args.data}. Run `fetch-data` first.")
         sys.exit(1)
-    grid = _json.loads(args.grid) if args.grid else DEFAULT_GRID
+    grid = _json.loads(args.grid) if args.grid else default_grid
     n = 1
     for v in grid.values():
         n *= len(v)
-    print(f"Sweeping {n} combinations over {len(bars)} symbols (base: {s.strategy_file})...")
-    rows = sweep(s, params, bars, grid, equity=args.equity)
+    print(f"Sweeping {n} combinations over {len(bars)} symbols (base: {strategy_file})...")
+    rows = sweep(s, params, bars, grid, equity=args.equity, daily=daily)
     print(format_sweep(rows))
     print("\nCaveat: a small sample rewards luck. Prefer settings that win for a reason you can explain.")
 
@@ -374,7 +382,7 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--data", default="data/bars")
     p.add_argument("--symbols", nargs="*")
     p.add_argument("--equity", type=float, default=100_000)
-    p.add_argument("--strategy", help="ORB parameter file to sweep (default strategy.json)")
+    p.add_argument("--strategy", help="strategy file to sweep (default: STRATEGY_FILE / rules.json)")
     p.add_argument("--grid", help='JSON, e.g. \'{"min_rel_volume":[1.5,2],"opening_range_minutes":[15,30]}\'')
     p = sub.add_parser("dashboard", help="build the R-multiple dashboard from the trade journal")
     p.add_argument("--journal")
