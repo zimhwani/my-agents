@@ -110,6 +110,9 @@ def test_trading_loop_full_day(settings, params, tmp_path):
         t += timedelta(minutes=5)
     trades = loop.journal.load()
     assert loop.day_done
+    import json as _json
+    live = _json.loads((settings.data_dir / "live.json").read_text())
+    assert live["day_done"] and live["closed_today"] == 1 and live["strategy"]
     assert [x.symbol for x in trades] == ["GOOD"]
     tr = trades[0]
     assert tr.partial_taken and tr.status == "CLOSED"

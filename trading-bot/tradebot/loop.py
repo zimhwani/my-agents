@@ -156,6 +156,8 @@ class TradingLoop:
         if self.day_done:
             return
         if now < clock.session_open(now.date()):
+            mins = (clock.session_open(now.date()) - now).total_seconds() / 60.0
+            self.write_live(now, self.day.start_equity, [f"waiting for the open ({mins:.0f} min)"])
             return
 
         # 1. exits on open trades
