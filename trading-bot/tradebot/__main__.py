@@ -203,28 +203,42 @@ def cmd_telegram_test(args) -> None:
 def cmd_fetch_data(args) -> None:
     s = _settings(args)
     _logging(s)
+    from concurrent.futures import ThreadPoolExecutor, as_completed
     from .data import fetch_history, save_csv
     b = _broker(s)
     out = Path(args.out)
     symbols = args.symbols or s.universe
-    print(f"Fetching {args.days} days of 5-min bars (+ premarket) and 2y daily for {len(symbols)} symbols -> {out}")
+    if args.skip_existing:
+        before = len(symbols)
+        symbols = [x for x in symbols if not ((out / f"{x}_5min.csv").exists() and (out / f"{x}_1d.csv").exists())]
+        print(f"Skipping {before - len(symbols)} symbols already in {out}")
+    workers = args.workers or (4 if s.broker != "ib" and s.data_provider == "alpaca" else 1)
+    print(f"Fetching {args.days} days of 5-min bars (+ premarket) and 2y daily for {len(symbols)} symbols "
+          f"-> {out} ({workers} parallel)")
+
+    def one(sym: str) -> str:
+        if s.broker == "ib":
+            bars = fetch_history(b, sym, args.days, 5)
+        else:  # data provider (Yahoo allows ~60 days of 5-minute bars; Alpaca years)
+            bars = b.intraday_bars(sym, 5, args.days, include_premarket=True)
+        daily = b.daily_bars(sym, 520)
+        if not bars:
+            return f"{sym}: no intraday data, skipped"
+        save_csv(bars, out / f"{sym}_5min.csv")
+        save_csv(daily, out / f"{sym}_1d.csv")
+        return f"{sym}: {len(bars)} 5-min bars, {len(daily)} daily"
+
+    done = 0
     try:
-        for i, sym in enumerate(symbols, 1):
-            try:
-                if s.broker == "ib":
-                    bars = fetch_history(b, sym, args.days, 5)
-                else:  # data provider (Yahoo allows ~60 days of 5-minute bars; Alpaca years)
-                    bars = b.intraday_bars(sym, 5, args.days, include_premarket=True)
-                daily = b.daily_bars(sym, 520)
-            except Exception as exc:
-                print(f"{sym}: skipped ({exc})")
-                continue
-            if not bars:
-                print(f"{sym}: no intraday data, skipped")
-                continue
-            save_csv(bars, out / f"{sym}_5min.csv")
-            save_csv(daily, out / f"{sym}_1d.csv")
-            print(f"[{i}/{len(symbols)}] {sym}: {len(bars)} 5-min bars, {len(daily)} daily")
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            futures = {pool.submit(one, sym): sym for sym in symbols}
+            for fut in as_completed(futures):
+                done += 1
+                sym = futures[fut]
+                try:
+                    print(f"[{done}/{len(symbols)}] {fut.result()}")
+                except Exception as exc:
+                    print(f"[{done}/{len(symbols)}] {sym}: skipped ({exc})")
     finally:
         b.disconnect()
 
@@ -345,6 +359,8 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--days", type=int, default=55, help="calendar days of 5-min bars (Yahoo max ~59, Alpaca 730+)")
     p.add_argument("--symbols", nargs="*")
     p.add_argument("--out", default="data/bars")
+    p.add_argument("--skip-existing", action="store_true", help="don't re-download symbols already saved")
+    p.add_argument("--workers", type=int, help="parallel downloads (default 4 for Alpaca, 1 for Yahoo)")
     p = sub.add_parser("backtest", help="run the strategy over CSV history (or --demo synthetic data)")
     p.add_argument("--data", default="data/bars")
     p.add_argument("--symbols", nargs="*")

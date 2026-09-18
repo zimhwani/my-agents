@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import json
 import logging
+import threading
 import time as _time
 import urllib.error
 import urllib.parse
@@ -72,6 +73,7 @@ class AlpacaData:
         self._t = transport or _urllib_transport
         self._sleep = sleep
         self._last_call = 0.0
+        self._lock = threading.Lock()
         self.cache_seconds = cache_seconds
         self._cache: dict[tuple, tuple[float, object]] = {}
         self._aux = aux  # optional YFinanceData for fx / market cap / screener
@@ -86,10 +88,11 @@ class AlpacaData:
     def _get(self, path: str, params: dict, retries: int = 4) -> dict:
         url = DATA_BASE + path + "?" + urllib.parse.urlencode({k: v for k, v in params.items() if v is not None})
         for attempt in range(retries + 1):
-            gap = 0.31 - (_time.monotonic() - self._last_call)  # ~200 req/min
-            if gap > 0:
-                self._sleep(gap)
-            self._last_call = _time.monotonic()
+            with self._lock:  # ~200 req/min across all threads
+                gap = 0.31 - (_time.monotonic() - self._last_call)
+                if gap > 0:
+                    self._sleep(gap)
+                self._last_call = _time.monotonic()
             status, raw = self._t(url, self.headers)
             if status == 429 and attempt < retries:
                 self._sleep(3.0 * (attempt + 1))
