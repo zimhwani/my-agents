@@ -27,7 +27,7 @@ import urllib.parse
 import urllib.request
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable
+from typing import Callable, Optional, Tuple
 
 from .broker import OrderRef, PositionInfo
 from .config import Settings
@@ -48,7 +48,7 @@ PENDING = {"LOCAL", "UNCONFIRMED", "CONFIRMED", "NEW", "PARTIALLY_FILLED", "REPL
 DONE = {"FILLED"}
 DEAD = {"CANCELLED", "CANCELLING", "REJECTED", "REPLACED"}
 
-Transport = Callable[[str, str, dict, bytes | None], tuple[int, bytes]]
+Transport = Callable[[str, str, dict, Optional[bytes]], Tuple[int, bytes]]
 
 
 class T212Error(RuntimeError):

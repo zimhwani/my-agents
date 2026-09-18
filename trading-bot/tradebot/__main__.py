@@ -7,6 +7,12 @@ import logging
 import sys
 from pathlib import Path
 
+if sys.version_info < (3, 10):  # pragma: no cover
+    sys.exit(f"tradebot needs Python 3.10+ (3.12 recommended); this is {sys.version.split()[0]} "
+             f"at {sys.executable}.\nOn a Mac: brew install python@3.12, then\n"
+             "  deactivate; rm -rf .venv; python3.12 -m venv .venv; source .venv/bin/activate; "
+             "pip install -r requirements.txt")
+
 from . import clock
 from .config import Settings, UnsafeConfig
 from .strategy import StrategyParams
