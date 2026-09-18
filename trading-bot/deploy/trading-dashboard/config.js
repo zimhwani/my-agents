@@ -1,1 +1,1 @@
-window.DATA_BASE = "https://REPLACE-ME.public.blob.vercel-storage.com/tradebot";
+window.DATA_BASE = "https://adnybjtzetdigdeq.public.blob.vercel-storage.com/tradebot";
