@@ -123,6 +123,10 @@ class Settings:
     telegram_bot_token: str = ""
     telegram_chat_id: str = ""
     telegram_status_minutes: int = 30
+    # hosted dashboard (optional)
+    vercel_blob_token: str = ""
+    vercel_blob_prefix: str = "tradebot"
+    dashboard_data_url: str = ""
     # paths
     data_dir: Path = Path("data")
     strategy_file: Path = Path("rules.json")
@@ -232,6 +236,9 @@ class Settings:
             telegram_bot_token=_env("TELEGRAM_BOT_TOKEN"),
             telegram_chat_id=_env("TELEGRAM_CHAT_ID"),
             telegram_status_minutes=_int("TELEGRAM_STATUS_MINUTES", 30),
+            vercel_blob_token=_env("VERCEL_BLOB_TOKEN"),
+            vercel_blob_prefix=_env("VERCEL_BLOB_PREFIX", "tradebot"),
+            dashboard_data_url=_env("DASHBOARD_DATA_URL"),
             data_dir=Path(_env("DATA_DIR", "data")),
             strategy_file=Path(_env("STRATEGY_FILE", "rules.json")),
             universe_file=universe_file,

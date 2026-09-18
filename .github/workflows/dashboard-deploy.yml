@@ -1,0 +1,38 @@
+name: Deploy trading dashboard to Vercel
+
+# Deploys trading-bot/deploy/vercel (the hosted, read-only dashboard shell).
+# It only contains index.html + config.js; the data comes from Vercel Blob,
+# uploaded by the bot itself. No-ops until the secrets below exist:
+#   VERCEL_TOKEN                 — vercel.com/account/tokens
+#   VERCEL_ORG_ID                — Vercel project Settings → General
+#   VERCEL_DASHBOARD_PROJECT_ID  — the dashboard project's ID
+
+on:
+  push:
+    branches: [main, claude/magical-allen-jan8gi]
+    paths:
+      - "trading-bot/deploy/vercel/**"
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_DASHBOARD_PROJECT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - if: env.VERCEL_TOKEN == ''
+        run: echo "VERCEL_TOKEN not set — skipping dashboard deploy."
+      - if: env.VERCEL_TOKEN != ''
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - if: env.VERCEL_TOKEN != ''
+        working-directory: trading-bot/deploy/vercel
+        run: |
+          npm i -g vercel@latest
+          vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
+          vercel build --prod --token="$VERCEL_TOKEN"
+          vercel deploy --prebuilt --prod --token="$VERCEL_TOKEN"

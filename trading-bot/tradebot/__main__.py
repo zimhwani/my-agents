@@ -334,13 +334,32 @@ def cmd_sweep(args) -> None:
 
 def cmd_dashboard(args) -> None:
     s = _settings(args)
-    from .dashboard import write_dashboard
+    from .dashboard import export_static, trades_payload, write_dashboard
     from .journal import Journal, compute_stats
     name = load_strategy(s.strategy_file, s.allow_shorts).name
     trades = Journal(args.journal or s.journal_file).load()
     out = write_dashboard(trades, args.out or s.dashboard_file, name)
     st = compute_stats(trades)
     print(f"{st.trades} closed trades, {st.total_r:+.2f}R -> {out}")
+    if args.export_vercel:
+        if not s.dashboard_data_url:
+            print("DASHBOARD_DATA_URL is not set: the hosted page needs the public base URL of your "
+                  "Vercel Blob store (printed by `python -m tradebot publish`).")
+            sys.exit(2)
+        idx = export_static(args.export_vercel, s.dashboard_data_url, name)
+        print(f"static site -> {idx.parent}  (deploy: cd {idx.parent} && npx vercel deploy --prod)")
+    if args.publish:
+        from .publish import BlobPublisher, PublishError
+        try:
+            pub = BlobPublisher(s.vercel_blob_token, s.vercel_blob_prefix)
+            url = pub.put("trades.json", __import__("json").dumps(trades_payload(trades)).encode())
+            live = s.data_dir / "live.json"
+            if live.exists():
+                pub.put("live.json", live.read_bytes())
+            print(f"published trades.json -> {url}\nDASHBOARD_DATA_URL={pub.base_url}")
+        except PublishError as exc:
+            print(f"publish failed: {exc}")
+            sys.exit(1)
     if args.serve:
         import http.server
         import functools
@@ -389,6 +408,8 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--out")
     p.add_argument("--serve", type=int, nargs="?", const=8765, help="serve data/ on PORT (live panel needs this)")
     p.add_argument("--host", default="127.0.0.1", help="bind address for --serve (keep 127.0.0.1; use an SSH tunnel)")
+    p.add_argument("--export-vercel", metavar="DIR", help="write a hosted copy (index.html, config.js, vercel.json) that reads DASHBOARD_DATA_URL")
+    p.add_argument("--publish", action="store_true", help="upload trades.json (+ live.json) to Vercel Blob now")
 
     args = ap.parse_args(argv)
     {"check": cmd_check, "scan": cmd_scan, "run": cmd_run, "flatten": cmd_flatten, "kill": cmd_kill,

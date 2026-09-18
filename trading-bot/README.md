@@ -276,7 +276,42 @@ R, each open position with its stop, last price and open R, the watchlist,
 and anything currently blocking new entries. The rest of the page is rebuilt
 every time a trade closes.
 
-## 9. Run it every day on your own machine instead
+## 9. Host the dashboard on Vercel
+
+The dashboard can also live at a public URL so you can check it from your
+phone without an SSH tunnel. The page on Vercel is a static shell; the bot on
+the droplet uploads `live.json` (every tick) and `trades.json` (every close)
+to **Vercel Blob** storage, and the page reads them from there.
+
+1. In Vercel: create a project (any name), then **Storage → Blob → Create**
+   and copy the read/write token. Put it in the droplet's `.env` as
+   `VERCEL_BLOB_TOKEN=...`.
+2. On the droplet, publish once to learn the store's public URL:
+
+   ```bash
+   cd /opt/my-agents/trading-bot && sudo -u tradebot .venv/bin/python -m tradebot dashboard --publish
+   ```
+
+   It prints `DASHBOARD_DATA_URL=https://....public.blob.vercel-storage.com/tradebot`.
+   Add that line to `.env` on the droplet **and** on your Mac.
+3. On your Mac, generate the hosted page and deploy it (first time: `npm i -g vercel` and `vercel login`):
+
+   ```bash
+   python -m tradebot dashboard --export-vercel deploy/vercel
+   cd deploy/vercel && vercel deploy --prod
+   ```
+
+   Or commit `deploy/vercel/` and let `.github/workflows/dashboard-deploy.yml`
+   deploy it on push once `VERCEL_TOKEN`, `VERCEL_ORG_ID` and
+   `VERCEL_DASHBOARD_PROJECT_ID` are set as GitHub secrets.
+4. Restart the bot's services on the droplet so they pick up the token:
+   `systemctl restart tradebot-dashboard` (the trading service reads `.env` at its next start).
+
+The hosted page shows practice trades only and contains no keys, but it is
+public unless you enable Vercel's deployment protection. Free Blob storage is
+plenty: two small JSON files, rewritten in place.
+
+## 10. Run it every day on your own machine instead
 
 The loop waits for the open and exits after the close, so schedule it once
 per weekday shortly before 09:30 ET (14:30 London / 15:30 Paris in summer).
@@ -288,7 +323,7 @@ logged in (enable its auto-restart):
 - **macOS / Linux** cron: `0 9 * * 1-5 cd /path/to/trading-bot && .venv/bin/python -m tradebot run >> data/cron.log 2>&1`
   (adjust for your timezone; the bot itself always thinks in ET).
 
-## 10. Going live (only after weeks of clean practice results)
+## 11. Going live (only after weeks of clean practice results)
 
 1. Review `data/dashboard.html` and `data/trades.jsonl`: is expectancy
    positive, is drawdown tolerable, did every day end flat?

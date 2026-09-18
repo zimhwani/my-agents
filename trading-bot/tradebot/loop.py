@@ -33,6 +33,23 @@ from .universe import Candidate, GapScanner, UniverseScanner
 log = logging.getLogger("tradebot.loop")
 
 
+class _RingLog(logging.Handler):
+    """Keeps the last N log lines for the dashboard's execution log."""
+
+    def __init__(self, n: int = 40):
+        super().__init__(level=logging.INFO)
+        self.lines: list[str] = []
+        self.n = n
+        self.setFormatter(logging.Formatter("%(asctime)s %(levelname).1s %(message)s", "%H:%M:%S"))
+
+    def emit(self, record: logging.LogRecord) -> None:
+        try:
+            self.lines.append(self.format(record))
+            del self.lines[:-self.n]
+        except Exception:  # pragma: no cover
+            pass
+
+
 class TradingLoop:
     def __init__(self, settings: Settings, broker: Broker, loaded: LoadedStrategy,
                  notifier: Notifier, journal: Journal | None = None,
@@ -66,6 +83,12 @@ class TradingLoop:
         self._last_status: datetime | None = None
         self._scanned_for: object = None
         self._closed_seen = -1
+        self._ring = _RingLog()
+        logging.getLogger("tradebot").addHandler(self._ring)
+        self.publisher = None
+        if settings.vercel_blob_token:
+            from .publish import BlobPublisher
+            self.publisher = BlobPublisher(settings.vercel_blob_token, settings.vercel_blob_prefix)
 
     # -- helpers ---------------------------------------------------------------
     def _bar_boundary(self, now: datetime) -> datetime:
@@ -198,8 +221,19 @@ class TradingLoop:
                               "r": round(t.unrealized_r(px), 2), "pnl": round(t.open_pnl(px), 2),
                               "partial": t.partial_taken, "entry_time": t.entry_time.strftime("%H:%M"),
                               "reason": t.reason})
+        focus = open_rows[0]["symbol"] if open_rows else (self.watchlist[0].symbol if self.watchlist else None)
+        chart = None
+        if focus:
+            try:
+                bars = self.today_bars(focus, now) or rth_bars(self.bars_for(focus, now))[-78:]
+                chart = {"symbol": focus, "bars": [[b.time.strftime("%H:%M"), b.open, b.high, b.low, b.close, b.volume]
+                                                    for b in bars[-78:]],
+                         "last": self.b.last_price(focus)}
+            except Exception as exc:  # pragma: no cover
+                log.debug("chart snapshot %s: %s", focus, exc)
         payload = {
             "updated": now.isoformat(), "strategy": self.loaded.name, "mode": self.s.describe(),
+            "chart": chart, "log": list(self._ring.lines),
             "equity": round(equity, 2), "day_start_equity": round(self.day.start_equity, 2),
             "realized_r": round(self.day.realized_r, 2), "realized_pnl": round(self.day.realized_pnl, 2),
             "closed_today": len(self.exec.closed_today), "open": open_rows,
@@ -213,11 +247,16 @@ class TradingLoop:
             tmp.replace(self.s.data_dir / "live.json")
         except OSError as exc:  # pragma: no cover
             log.warning("live.json: %s", exc)
+        if self.publisher is not None:
+            self.publisher.publish("live.json", payload)
         if len(self.exec.closed_today) != self._closed_seen:
             self._closed_seen = len(self.exec.closed_today)
             try:
-                from .dashboard import write_dashboard
-                write_dashboard(self.journal.load(), self.s.dashboard_file, self.loaded.name)
+                from .dashboard import trades_payload, write_dashboard
+                trades = self.journal.load()
+                write_dashboard(trades, self.s.dashboard_file, self.loaded.name)
+                if self.publisher is not None:
+                    self.publisher.publish("trades.json", trades_payload(trades), force=True)
             except Exception as exc:  # pragma: no cover
                 log.warning("dashboard: %s", exc)
 
