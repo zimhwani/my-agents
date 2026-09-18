@@ -239,6 +239,38 @@ def cmd_backtest(args) -> None:
     print(f"journal  -> {j.path}\ndashboard -> {out}")
 
 
+def cmd_analyze(args) -> None:
+    s = _settings(args)
+    from .analyze import breakdown
+    from .journal import Journal
+    path = args.journal or (s.data_dir / "backtest_trades.jsonl")
+    trades = Journal(path).load()
+    print(f"{len(trades)} trades from {path}")
+    print(breakdown(trades))
+
+
+def cmd_sweep(args) -> None:
+    s = _settings(args)
+    from .analyze import DEFAULT_GRID, format_sweep, sweep
+    from .data import load_dir
+    import json as _json
+    params = StrategyParams.load(s.strategy_file)
+    bars = load_dir(args.data)
+    if args.symbols:
+        bars = {k: v for k, v in bars.items() if k in args.symbols}
+    if not bars:
+        print(f"No *_5min.csv files in {args.data}. Run `fetch-data` first.")
+        sys.exit(1)
+    grid = _json.loads(args.grid) if args.grid else DEFAULT_GRID
+    n = 1
+    for v in grid.values():
+        n *= len(v)
+    print(f"Sweeping {n} combinations over {len(bars)} symbols (base: {s.strategy_file})...")
+    rows = sweep(s, params, bars, grid, equity=args.equity)
+    print(format_sweep(rows))
+    print("\nCaveat: a small sample rewards luck. Prefer settings that win for a reason you can explain.")
+
+
 def cmd_dashboard(args) -> None:
     s = _settings(args)
     from .dashboard import write_dashboard
@@ -280,6 +312,13 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--days", type=int, default=60, help="(demo) days of synthetic data")
     p.add_argument("--equity", type=float, default=100_000)
     p.add_argument("--demo", action="store_true")
+    p = sub.add_parser("analyze", help="break a backtest (or live) journal down by exit, time, filters, symbol")
+    p.add_argument("--journal", help="default: data/backtest_trades.jsonl")
+    p = sub.add_parser("sweep", help="backtest a grid of strategy parameters over CSV history")
+    p.add_argument("--data", default="data/bars")
+    p.add_argument("--symbols", nargs="*")
+    p.add_argument("--equity", type=float, default=100_000)
+    p.add_argument("--grid", help='JSON, e.g. \'{"min_rel_volume":[1.5,2],"opening_range_minutes":[15,30]}\'')
     p = sub.add_parser("dashboard", help="build the R-multiple dashboard from the trade journal")
     p.add_argument("--journal")
     p.add_argument("--out")
@@ -288,7 +327,7 @@ def main(argv: list[str] | None = None) -> None:
     args = ap.parse_args(argv)
     {"check": cmd_check, "scan": cmd_scan, "run": cmd_run, "flatten": cmd_flatten, "kill": cmd_kill,
      "telegram-test": cmd_telegram_test, "fetch-data": cmd_fetch_data, "backtest": cmd_backtest,
-     "dashboard": cmd_dashboard}[args.cmd](args)
+     "analyze": cmd_analyze, "sweep": cmd_sweep, "dashboard": cmd_dashboard}[args.cmd](args)
 
 
 if __name__ == "__main__":
