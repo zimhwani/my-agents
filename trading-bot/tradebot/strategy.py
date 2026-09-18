@@ -24,6 +24,7 @@ from datetime import datetime, time, timedelta
 from pathlib import Path
 
 from . import clock
+from .exits import ExitRules
 from .indicators import atr as atr_of, ema, vwap as vwap_of
 from .models import LONG, SHORT, Bar, Signal
 
@@ -67,6 +68,13 @@ class StrategyParams:
             raise ValueError(f"Unknown keys in {p}: {sorted(unknown)}")
         return cls(**raw)
 
+    def to_exit_rules(self) -> ExitRules:
+        return ExitRules(partial_r=self.partial_r, partial_fraction=self.partial_fraction,
+                         breakeven_r=self.partial_r if self.breakeven_after_partial else 0.0,
+                         trail_mode="atr", trail_atr_mult=self.trail_atr_mult,
+                         final_target_r=self.final_target_r, time_stop_minutes=self.time_stop_minutes,
+                         time_stop_min_r=self.time_stop_min_r)
+
     @property
     def window_start(self) -> time:
         return clock.parse_hhmm(self.entry_window_start)
@@ -74,6 +82,11 @@ class StrategyParams:
     @property
     def window_end(self) -> time:
         return clock.parse_hhmm(self.entry_window_end)
+
+
+def rth_bars(bars: list[Bar]) -> list[Bar]:
+    """Regular-session bars only (drops pre/post-market)."""
+    return [b for b in bars if clock.MARKET_OPEN <= b.time.time() < clock.MARKET_CLOSE]
 
 
 def session_bars(bars: list[Bar], day) -> list[Bar]:
@@ -84,10 +97,23 @@ def session_bars(bars: list[Bar], day) -> list[Bar]:
     return out
 
 
+def completed_bars(bars: list[Bar], now: datetime, bar_minutes: int) -> list[Bar]:
+    width = timedelta(minutes=bar_minutes)
+    return [b for b in bars if b.time + width <= now]
+
+
 class OpeningRangeBreakout:
+    name = "Opening Range Breakout"
+    intraday_days = 5
+    include_premarket = False
+    scan_kind = "orb"
+
     def __init__(self, params: StrategyParams | None = None, allow_shorts: bool = False):
         self.p = params or StrategyParams()
         self.allow_shorts = allow_shorts
+        self.name = self.p.name
+        self.window_start = self.p.window_start
+        self.window_end = self.p.window_end
 
     # -- helpers ---------------------------------------------------------
     def _completed(self, bars: list[Bar], now: datetime) -> list[Bar]:
@@ -122,7 +148,7 @@ class OpeningRangeBreakout:
         p = self.p
         if not clock.in_window(now, p.window_start, p.window_end):
             return None
-        done = self._completed(intraday, now)
+        done = rth_bars(self._completed(intraday, now))
         today = session_bars(done, now.date())
         if not today:
             return None
@@ -190,5 +216,41 @@ class OpeningRangeBreakout:
                       target=round(target, 2), atr=a, time=now, reason=reason)
 
 
+@dataclass
+class LoadedStrategy:
+    """A strategy plus everything the loop/backtester needs to run it."""
+    name: str
+    strategy: object              # has evaluate(symbol, intraday, daily, now)
+    exits: ExitRules
+    intraday_days: int = 5        # how much 5-minute history the strategy wants
+    include_premarket: bool = False
+    scan_kind: str = "orb"        # orb = pre-market volatility scan, gap = post-open gap scan
+    scan_at: time = time(9, 0)    # earliest time the watchlist scan may run
+    force_close: time | None = None
+    risk_overrides: dict = None   # settings fields the strategy file dictates
+
+    def apply(self, settings) -> None:
+        """Let the strategy file override risk/time settings it specifies."""
+        for k, v in (self.risk_overrides or {}).items():
+            setattr(settings, k, v)
+        if self.force_close is not None:
+            settings.force_close_time = self.force_close
+        settings.validate()
+
+
 def build_strategy(params: StrategyParams, allow_shorts: bool = False):
     return OpeningRangeBreakout(params, allow_shorts=allow_shorts)
+
+
+def load_strategy(path: str | Path, allow_shorts: bool = False) -> LoadedStrategy:
+    """``rules.json`` (Trend Join Long) or ``strategy.json`` (ORB), by content."""
+    p = Path(path)
+    raw = json.loads(p.read_text()) if p.exists() else {}
+    if "strategy_name" in raw or "daily_filters" in raw:
+        from .tjl import load_tjl
+        return load_tjl(p)
+    params = StrategyParams.load(p)
+    strat = OpeningRangeBreakout(params, allow_shorts=allow_shorts)
+    return LoadedStrategy(name=params.name, strategy=strat, exits=params.to_exit_rules(),
+                          intraday_days=5, include_premarket=False, scan_kind="orb",
+                          scan_at=time(9, 0), force_close=None, risk_overrides={})

@@ -22,7 +22,7 @@ from .indicators import atr as atr_of
 from .journal import Journal, Stats, compute_stats
 from .models import Bar, TradeRecord
 from .risk import DayStats, RiskGate, position_size
-from .strategy import StrategyParams, build_strategy, session_bars
+from .strategy import LoadedStrategy, StrategyParams, completed_bars, load_strategy, rth_bars, session_bars
 from .telegram import Notifier
 
 log = logging.getLogger("tradebot.backtest")
@@ -37,27 +37,39 @@ class BacktestResult:
     days: int
 
 
+def _as_loaded(params_or_loaded, settings: Settings) -> LoadedStrategy:
+    if isinstance(params_or_loaded, LoadedStrategy):
+        return params_or_loaded
+    from .strategy import OpeningRangeBreakout
+    p: StrategyParams = params_or_loaded
+    return LoadedStrategy(name=p.name, strategy=OpeningRangeBreakout(p, allow_shorts=settings.allow_shorts),
+                          exits=p.to_exit_rules(), risk_overrides={})
+
+
 class Backtester:
-    def __init__(self, settings: Settings, params: StrategyParams, intraday: dict[str, list[Bar]],
+    def __init__(self, settings: Settings, params, intraday: dict[str, list[Bar]],
                  daily: dict[str, list[Bar]] | None = None, equity: float = 100_000.0,
                  slippage_bps: float = 2.0):
         self.s = settings
-        self.p = params
+        self.loaded = _as_loaded(params, settings)
+        self.strategy = self.loaded.strategy
+        self.bar_minutes = getattr(self.strategy, "bar_minutes", 5)
+        self.atr_period = getattr(getattr(self.strategy, "p", None), "atr_period", 14)
         self.intraday = intraday
-        self.daily = daily or {sym: aggregate_daily(b) for sym, b in intraday.items()}
+        # explicit daily history when given (needed for 200-day filters); else aggregate
+        self.daily = {sym: (daily or {}).get(sym) or aggregate_daily(b) for sym, b in intraday.items()}
         self.sim = SimBroker(equity=equity, slippage_bps=slippage_bps, intraday=intraday, daily=self.daily)
         self.journal = Journal(None)
         self.exec = Executor(self.sim, self.journal, Notifier(quiet=True))
-        self.strategy = build_strategy(params, allow_shorts=settings.allow_shorts)
-        self.exits = ExitManager(params, settings.force_close_time)
+        self.exits = ExitManager(self.loaded.exits, settings.force_close_time)
         self.gate = RiskGate(settings)
 
     def _atr(self, symbol: str, now: datetime) -> float:
-        bars = self.sim.intraday_bars(symbol, self.p.bar_minutes, 5)
-        return atr_of(bars[-(self.p.atr_period * 4):], self.p.atr_period) or 0.0
+        bars = self.sim.intraday_bars(symbol, self.bar_minutes, 5)
+        return atr_of(bars[-(self.atr_period * 4):], self.atr_period) or 0.0
 
     def run(self, start=None, end=None) -> BacktestResult:
-        width = timedelta(minutes=self.p.bar_minutes)
+        width = timedelta(minutes=self.bar_minutes)
         by_day: dict = {}
         for sym, bars in self.intraday.items():
             for b in bars:
@@ -79,13 +91,17 @@ class Backtester:
                             bar_at[sym] = b
                             self.sim.process_bar(sym, b)
                 self.sim.now = now
+                if not (clock.MARKET_OPEN <= slot.time() < clock.MARKET_CLOSE):
+                    continue  # pre/post-market bars only feed data, never decisions
                 # exits
                 self.exec.check_stop_fills(now)
                 for t in list(self.exec.open_trades):
                     b = bar_at.get(t.symbol)
                     if b is None:
                         continue
-                    actions = self.exits.manage(t, b.close, self._atr(t.symbol, now), now, b.high, b.low)
+                    today_bars = session_bars(self.sim.intraday_bars(t.symbol, self.bar_minutes, 1), d)
+                    actions = self.exits.manage(t, b.close, self._atr(t.symbol, now), now, b.high, b.low,
+                                                bars=today_bars)
                     if actions:
                         self.exec.apply(t, actions, now)
                 day.realized_r = sum(t.r_multiple for t in self.exec.closed_today if t.entry_time.date() == d)
@@ -93,14 +109,17 @@ class Backtester:
                 equity = self.sim.net_liquidation()
                 if self.gate.blockers(self.exec.open_trades, day, equity, now):
                     continue
-                if not clock.in_window(now, self.p.window_start, self.p.window_end):
+                if not clock.in_window(now, self.strategy.window_start, self.strategy.window_end):
                     continue
-                held = {t.symbol for t in self.exec.open_trades}
+                held = {t.symbol for t in self.exec.open_trades} | \
+                       {t.symbol for t in self.exec.closed_today if t.entry_time.date() == d}
                 for sym in sorted(bar_at):
                     if sym in held or len(self.exec.open_trades) >= self.s.max_positions:
                         continue
-                    sig = self.strategy.evaluate(sym, self.sim.intraday_bars(sym, self.p.bar_minutes, 5),
-                                                 self.sim.daily_bars(sym, 60), now)
+                    sig = self.strategy.evaluate(
+                        sym, self.sim.intraday_bars(sym, self.bar_minutes, self.loaded.intraday_days,
+                                                    self.loaded.include_premarket),
+                        self.sim.daily_bars(sym, 260), now)
                     if sig is None:
                         continue
                     qty = position_size(equity, sig.entry, sig.stop, self.s.risk_per_trade_pct,

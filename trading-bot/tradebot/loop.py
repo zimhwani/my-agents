@@ -25,31 +25,40 @@ from .indicators import atr as atr_of
 from .journal import Journal, compute_stats
 from .models import Bar
 from .risk import DayStats, RiskGate, position_size
-from .strategy import StrategyParams, build_strategy, session_bars
+from .strategy import LoadedStrategy, completed_bars, rth_bars, session_bars
 from .telegram import Notifier, esc
-from .universe import Candidate, UniverseScanner
+from .universe import Candidate, GapScanner, UniverseScanner
 
 log = logging.getLogger("tradebot.loop")
 
 
 class TradingLoop:
-    def __init__(self, settings: Settings, broker: Broker, params: StrategyParams,
+    def __init__(self, settings: Settings, broker: Broker, loaded: LoadedStrategy,
                  notifier: Notifier, journal: Journal | None = None,
                  executor: Executor | None = None):
         self.s = settings
         self.b = broker
-        self.p = params
+        self.loaded = loaded
+        self.strategy = loaded.strategy
+        self.bar_minutes = getattr(self.strategy, "bar_minutes", 5)
+        self.atr_period = getattr(getattr(self.strategy, "p", None), "atr_period", 14)
         self.notify = notifier
         self.journal = journal or Journal(settings.journal_file)
         self.exec = executor or Executor(broker, self.journal, notifier,
                                          StateStore(settings.state_file), dry_run=settings.dry_run)
-        self.strategy = build_strategy(params, allow_shorts=settings.allow_shorts)
-        self.exits = ExitManager(params, settings.force_close_time)
+        self.exits = ExitManager(loaded.exits, settings.force_close_time)
         self.gate = RiskGate(settings)
-        self.scanner = UniverseScanner(broker, settings)
+        if loaded.scan_kind == "gap":
+            r = getattr(self.strategy, "r", None)
+            self.scanner = GapScanner(broker, settings, min_gap_pct=getattr(r, "min_gap_pct", 3.0),
+                                      min_price=getattr(r, "min_price_usd", 3.0),
+                                      min_market_cap=getattr(r, "min_market_cap_usd", 1e9))
+        else:
+            self.scanner = UniverseScanner(broker, settings)
         self.watchlist: list[Candidate] = []
         self.day: DayStats | None = None
         self.day_done = False
+        self.scanned = False
         self._bars: dict[str, list[Bar]] = {}
         self._daily: dict[str, list[Bar]] = {}
         self._bars_at: dict[str, datetime] = {}
@@ -58,39 +67,53 @@ class TradingLoop:
 
     # -- helpers ---------------------------------------------------------------
     def _bar_boundary(self, now: datetime) -> datetime:
-        m = self.p.bar_minutes
+        m = self.bar_minutes
         return now.replace(minute=(now.minute // m) * m, second=0, microsecond=0)
 
     def bars_for(self, symbol: str, now: datetime) -> list[Bar]:
-        """Intraday bars, refreshed only once per completed bar (IB pacing)."""
+        """Intraday bars, refreshed only once per completed bar (data pacing)."""
         boundary = self._bar_boundary(now)
         if self._bars_at.get(symbol) != boundary or symbol not in self._bars:
-            self._bars[symbol] = self.b.intraday_bars(symbol, self.p.bar_minutes, 5)
+            self._bars[symbol] = self.b.intraday_bars(symbol, self.bar_minutes, self.loaded.intraday_days,
+                                                      self.loaded.include_premarket)
             self._bars_at[symbol] = boundary
         return self._bars[symbol]
 
     def daily_for(self, symbol: str) -> list[Bar]:
         if symbol not in self._daily:
-            self._daily[symbol] = self.b.daily_bars(symbol, 60)
+            self._daily[symbol] = self.b.daily_bars(symbol, 260)
         return self._daily[symbol]
 
+    def today_bars(self, symbol: str, now: datetime) -> list[Bar]:
+        return session_bars(completed_bars(self.bars_for(symbol, now), now, self.bar_minutes), now.date())
+
     def atr_for(self, symbol: str, now: datetime) -> float:
-        bars = [b for b in self.bars_for(symbol, now) if b.time + timedelta(minutes=self.p.bar_minutes) <= now]
-        return atr_of(bars[-(self.p.atr_period * 4):], self.p.atr_period) or 0.0
+        bars = rth_bars(completed_bars(self.bars_for(symbol, now), now, self.bar_minutes))
+        return atr_of(bars[-(self.atr_period * 4):], self.atr_period) or 0.0
 
     def _ensure_day(self, now: datetime) -> None:
         if self.day is None or self._scanned_for != now.date():
             equity = self.b.net_liquidation()
             self.day = DayStats(start_equity=equity)
             self.day_done = False
+            self.scanned = False
+            self.watchlist = []
             self._daily.clear()
             self._bars.clear()
             self._bars_at.clear()
             self.exec.closed_today = [t for t in self.journal.load() if t.entry_time.date() == now.date()]
             self._scanned_for = now.date()
+        if not self.scanned and now.time() >= self.loaded.scan_at:
+            self.scanned = True
             self.watchlist = self.scanner.scan()
-            names = "\n".join(esc(c.line()) for c in self.watchlist) or "(nothing passed the filters)"
-            self.notify.send(f"📋 <b>Watchlist {now:%a %b %d}</b> · equity ${equity:,.0f}\n<pre>{names}</pre>")
+            equity = self.day.start_equity if self.day else 0.0
+            if self.loaded.scan_kind == "gap":
+                names = "\n".join(f"{c.symbol:<6} ${c.price:>8.2f}  gap {c.gap_pct:+5.1f}%" for c in self.watchlist)
+            else:
+                names = "\n".join(c.line() for c in self.watchlist)
+            names = esc(names) or "(nothing passed the filters)"
+            self.notify.send(f"📋 <b>Watchlist {now:%a %b %d}</b> · {esc(self.loaded.name)} · "
+                             f"equity ${equity:,.0f}\n<pre>{names}</pre>")
             log.info("Watchlist: %s", [c.symbol for c in self.watchlist])
 
     def _update_day_stats(self) -> None:
@@ -116,7 +139,8 @@ class TradingLoop:
             price = self.b.last_price(t.symbol)
             if price is None:
                 continue
-            actions = self.exits.manage(t, price, self.atr_for(t.symbol, now), now)
+            actions = self.exits.manage(t, price, self.atr_for(t.symbol, now), now,
+                                        bars=self.today_bars(t.symbol, now))
             if actions:
                 self.exec.apply(t, actions, now)
         self._update_day_stats()
@@ -132,8 +156,8 @@ class TradingLoop:
         # 3. entries
         equity = self.b.net_liquidation()
         blockers = self.gate.blockers(self.exec.open_trades, self.day, equity, now)
-        if not blockers and clock.in_window(now, self.p.window_start, self.p.window_end):
-            held = {t.symbol for t in self.exec.open_trades}
+        if not blockers and self.scanned and clock.in_window(now, self.strategy.window_start, self.strategy.window_end):
+            held = {t.symbol for t in self.exec.open_trades} | {t.symbol for t in self.exec.closed_today}
             for c in self.watchlist:
                 if c.symbol in held or len(self.exec.open_trades) >= self.s.max_positions:
                     continue
@@ -192,14 +216,14 @@ class TradingLoop:
             f"{st.total_r:+.1f}R · expectancy {st.expectancy_r:+.2f}R")
         try:
             from .dashboard import write_dashboard
-            write_dashboard(self.journal.load(), self.s.dashboard_file, self.p.name)
+            write_dashboard(self.journal.load(), self.s.dashboard_file, self.loaded.name)
         except Exception as exc:  # pragma: no cover
             log.warning("dashboard: %s", exc)
 
     # -- real-time driver ----------------------------------------------------------
     def run(self) -> None:
         self.b.connect()
-        self.notify.send(f"🤖 <b>Bot online</b> · {esc(self.s.describe())}\nstrategy: {esc(self.p.name)}")
+        self.notify.send(f"🤖 <b>Bot online</b> · {esc(self.s.describe())}\nstrategy: {esc(self.loaded.name)}")
         extra = self.exec.restore()
         if extra.get("day") and self.exec.open_trades:
             log.info("Recovered %d open trades from state", len(self.exec.open_trades))

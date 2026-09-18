@@ -93,37 +93,55 @@ and a sample price from the data provider. What keeps this safe:
 
 `CLAUDE.md` in this folder tells Claude Code what it may never change.
 
-## 4. Create your strategy (with Claude)
+## 4. The strategy (and how to change it with Claude)
 
-The shipped strategy is an **Opening Range Breakout** with VWAP, relative
-volume and 20-day trend filters. All tunables are in `strategy.json`; the code
-is `tradebot/strategy.py` (signals) and `tradebot/exits.py` (management).
+Two strategies ship. `STRATEGY_FILE` in `.env` picks one; both run through the
+same scan → loop → execution → exit → journal pipeline.
+
+**Trend Join Long** (`rules.json`, the default). Gap-and-go momentum continuation:
+
+| | Rule |
+|---|---|
+| Universe | any US stock, market cap ≥ $1B, price ≥ $3 (Yahoo screener after the open, `universe_broad.txt` as fallback) |
+| Daily | today gapped ≥ 3% above the prior close; prior close above the 200-day SMA; price above the prior day's high |
+| Intraday | price above the premarket high; a 5-minute bar closes at a **new high of day** (the trigger); relative volume ≥ 2.0 vs the same time of day over 14 sessions |
+| Time | entries 10:05–15:30 ET, everything flat at 15:51 |
+| Stop | low of day − 1% |
+| Management | a third off at +0.75R; stop to breakeven at +1R; then trail under confirmed 5-minute swing lows (2 bars each side); no fixed target |
+| Risk | 1% per trade, 10% of equity per position, 5 positions (these override `.env`) |
+
+**Opening Range Breakout** (`strategy.json`). Buy the first 5-minute close
+above the 15-minute opening range, above VWAP, with elevated volume, in
+names above their 20-day EMA. Half off at +1R, breakeven, ATR trail, +3R
+target, time stop, flat at 15:50. Its numbers are tunable and `sweep` will
+grid-search them.
 
 Prompts you can paste into Claude Code inside this folder:
 
 ```
-Read strategy.json and tradebot/strategy.py. Explain the entry rules in plain
-English, then list which parameters most affect trade frequency.
+Read rules.json and tradebot/tjl.py. Explain the entry rules in plain English
+and list which rule rejects most candidates in the last backtest (use
+`python -m tradebot analyze`).
 ```
 ```
-Change the strategy to a 30-minute opening range and require relative volume
-of 1.5. Update strategy.json only, then run the backtest on data/bars and
-report trades, win rate, expectancy and max drawdown in R before and after.
+Change the partial to half off at +1R in rules.json, re-run
+`python -m tradebot backtest`, and report trades, win rate, expectancy,
+profit factor and max drawdown in R before and after.
 ```
 ```
-Implement a new strategy class in tradebot/strategy.py: pullback to the 9 EMA
-on the 5-minute chart in the direction of the 20-day trend, stop below the
-pullback low, 2R target. Keep the same evaluate() signature, wire it into
-build_strategy() behind a "strategy" key in strategy.json, add tests, and
-backtest it.
+Add a filter to Trend Join Long: skip entries where the stop is more than 6%
+below the entry. Implement it in tradebot/tjl.py behind a new rules.json key,
+add a test in tests/test_tjl.py, and backtest it.
 ```
 
 Get history and backtest (the backtester runs the *same* strategy, exit and
 execution code as live, against an in-memory broker):
 
 ```bash
-python -m tradebot fetch-data --days 55            # 5-min bars → data/bars/*.csv (Yahoo keeps ~60 days)
-python -m tradebot backtest                         # → data/backtest_dashboard.html
+python -m tradebot fetch-data --days 55            # 5-min bars incl. premarket + 2y daily → data/bars/
+python -m tradebot backtest                         # Trend Join Long → data/backtest_dashboard.html
+python -m tradebot backtest --strategy strategy.json   # the ORB for comparison
+python -m tradebot analyze                          # where the R came from
 python -m tradebot backtest --demo                  # synthetic data, no account needed
 ```
 
@@ -136,18 +154,20 @@ python -m tradebot run           # the full day: scan, trade, manage, close, rep
 
 What `run` does, in order:
 
-1. **Universe scan** (`universe.py`): from `UNIVERSE`, keep names in the price
-   band with enough dollar volume and ATR, rank by volatility and gap, keep
-   the top `MAX_WATCHLIST`. Telegram gets the watchlist.
+1. **Scan** (`universe.py`): Trend Join Long scans at 09:36 ET for stocks
+   gapping 3%+ with market cap ≥ $1B and price ≥ $3 (Yahoo screener, or the
+   static list if the screener is down), keeps the top `MAX_WATCHLIST` by gap
+   size, and drops anything your broker can't trade. ORB scans pre-market for
+   volatile, liquid names. Telegram gets the watchlist.
 2. **Decision loop** (`loop.py`), every `POLL_SECONDS`: refresh bars once per
    completed 5-minute bar (respecting IB pacing), check for stop fills, run
    the exit manager on open trades, then look for new entries inside the
    entry window if the risk gate allows.
 3. **Execution** (`execution.py`): size by risk, send a market entry, wait for
    the fill, place the GTC protective stop, journal it, alert Telegram.
-4. **Exit logic** (`exits.py`): at +1R sell half and move the stop to
-   breakeven; trail the rest 1.5 ATR off the high; hard target at +3R; time
-   stop if the trade hasn't worked in 2 hours; **flat by 15:50 ET** no matter what.
+4. **Exit logic** (`exits.py`): the strategy's rule set (partial, breakeven,
+   swing-low or ATR trail, optional target and time stop) and **flat before
+   the close** no matter what (15:51 for Trend Join Long, 15:50 for ORB).
 5. **Daily summary** to Telegram and a rebuilt dashboard.
 
 State is saved to `data/state.json` after every change, so if the bot (or

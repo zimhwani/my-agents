@@ -308,8 +308,12 @@ class T212Broker:
     def daily_bars(self, symbol: str, days: int = 60) -> list[Bar]:
         return self.data.daily_bars(symbol, days)
 
-    def intraday_bars(self, symbol: str, bar_minutes: int = 5, days: int = 5) -> list[Bar]:
-        return self.data.intraday_bars(symbol, bar_minutes, days)
+    def intraday_bars(self, symbol: str, bar_minutes: int = 5, days: int = 5,
+                      include_premarket: bool = False) -> list[Bar]:
+        return self.data.intraday_bars(symbol, bar_minutes, days, include_premarket)
+
+    def is_tradable(self, symbol: str) -> bool:
+        return symbol in self._instruments
 
     def last_price(self, symbol: str) -> float | None:
         return self.data.last_price(symbol)

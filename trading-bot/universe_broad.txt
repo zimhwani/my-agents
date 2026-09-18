@@ -1,0 +1,23 @@
+# Broad, liquid US list used as the backtest universe and as the fallback when
+# the Yahoo screener is unavailable. One symbol per line. Edit freely.
+# Mega/large cap tech & growth
+AAPL MSFT NVDA AMZN META GOOGL TSLA AVGO AMD NFLX CRM ORCL ADBE NOW INTU QCOM MU INTC ARM MRVL DELL SMCI
+PLTR SNOW CRWD PANW ZS DDOG NET MDB OKTA TEAM SHOP UBER ABNB DASH COIN HOOD SOFI AFRM UPST PYPL
+ROKU TTD APP DUOL RBLX U PATH AI SOUN IONQ RGTI QBTS
+# Semis & hardware
+TSM ASML LRCX AMAT KLAC ON MCHP ADI TXN WDC STX ANET CLS VRT
+# EV / energy transition / solar
+RIVN LCID NIO XPEV LI ENPH SEDG FSLR RUN PLUG CHPT
+# Biotech / pharma (frequent gappers)
+LLY NVO PFE MRNA BNTX VRTX REGN AMGN GILD BIIB ILMN CRSP NTLA BEAM SRPT ALNY RARE VKTX HIMS
+# Financials
+JPM BAC GS MS C WFC SCHW AXP V MA BLK KKR APO
+# Consumer / retail
+COST WMT TGT HD LOW NKE LULU DIS SBUX MCD CMG DKNG CVNA W ETSY CHWY PTON CELH ELF
+# Industrials / energy / materials
+BA CAT DE GE HON UNP XOM CVX OXY SLB HAL DVN FCX AA CLF X NUE
+# Health / insurance
+UNH CVS HUM CI ISRG DXCM
+# Crypto / speculative
+MSTR MARA RIOT CLSK HUT
+# ETFs are not stocks on Trading 212's API; keep to common shares.

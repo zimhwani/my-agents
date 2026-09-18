@@ -94,7 +94,8 @@ def test_trading_loop_full_day(settings, params, tmp_path):
     sim.daily = {"GOOD": daily_history(DAY, 40, 99.0, volume=100_000 * 78),
                  "DUD": daily_history(DAY, 40, 50.0, volume=100_000 * 78)}
     n = Notifier(quiet=True)
-    loop = TradingLoop(settings, sim, params, n, journal=Journal(tmp_path / "j.jsonl"),
+    from tradebot.backtest import _as_loaded
+    loop = TradingLoop(settings, sim, _as_loaded(params, settings), n, journal=Journal(tmp_path / "j.jsonl"),
                        executor=Executor(sim, Journal(tmp_path / "j.jsonl"), n, StateStore(tmp_path / "s.json")))
     loop.journal = loop.exec.journal
     t = clock.at(DAY, clock.parse_hhmm("09:20"))

@@ -43,6 +43,17 @@ def load_dotenv(path: str | os.PathLike = ".env") -> None:
         os.environ.setdefault(key.strip(), value)
 
 
+def load_universe_file(path: str | os.PathLike) -> list[str]:
+    """One symbol per line (or comma separated); '#' comments allowed."""
+    out: list[str] = []
+    for raw in Path(path).read_text().splitlines():
+        line = raw.split("#")[0].strip()
+        for tok in line.replace(",", " ").split():
+            if tok.upper() not in out:
+                out.append(tok.upper())
+    return out
+
+
 def _env(key: str, default: str = "") -> str:
     return os.environ.get(key, default).strip()
 
@@ -111,7 +122,8 @@ class Settings:
     telegram_status_minutes: int = 30
     # paths
     data_dir: Path = Path("data")
-    strategy_file: Path = Path("strategy.json")
+    strategy_file: Path = Path("rules.json")
+    universe_file: Path | None = None
 
     # ---- derived ---------------------------------------------------------
     @property
@@ -176,6 +188,9 @@ class Settings:
     def load(cls, dotenv: str | os.PathLike = ".env") -> "Settings":
         load_dotenv(dotenv)
         universe = [s.strip().upper() for s in _env("UNIVERSE", DEFAULT_UNIVERSE).split(",") if s.strip()]
+        universe_file = Path(_env("UNIVERSE_FILE")) if _env("UNIVERSE_FILE") else None
+        if universe_file and universe_file.exists():
+            universe = load_universe_file(universe_file)
         s = cls(
             broker=_env("BROKER", "t212").lower(),
             trading_currency=_env("TRADING_CURRENCY", "USD").upper(),
@@ -210,7 +225,8 @@ class Settings:
             telegram_chat_id=_env("TELEGRAM_CHAT_ID"),
             telegram_status_minutes=_int("TELEGRAM_STATUS_MINUTES", 30),
             data_dir=Path(_env("DATA_DIR", "data")),
-            strategy_file=Path(_env("STRATEGY_FILE", "strategy.json")),
+            strategy_file=Path(_env("STRATEGY_FILE", "rules.json")),
+            universe_file=universe_file,
         )
         s.validate()
         s.data_dir.mkdir(parents=True, exist_ok=True)

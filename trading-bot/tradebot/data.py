@@ -46,6 +46,10 @@ def load_dir(directory: str | Path, suffix: str = "_5min.csv") -> dict[str, list
     return out
 
 
+def load_daily_dir(directory: str | Path) -> dict[str, list[Bar]]:
+    return load_dir(directory, suffix="_1d.csv")
+
+
 def aggregate_daily(intraday: list[Bar]) -> list[Bar]:
     """Daily bars from intraday session bars (stamped at 16:00 ET)."""
     days: dict[date, Bar] = {}
@@ -62,11 +66,36 @@ def aggregate_daily(intraday: list[Bar]) -> list[Bar]:
     return [days[d] for d in sorted(days)]
 
 
+def synthetic_daily(symbol: str, days: int = 300, seed: int | None = None, end_price: float = 100.0,
+                    end: date | None = None, drift: float = 0.0004) -> list[Bar]:
+    """Daily history ending the session BEFORE ``end`` at ``end_price`` (walked
+    backwards), so it lines up with ``synthetic_bars`` for the same symbol."""
+    rng = random.Random((seed if seed is not None else hash(symbol) & 0xFFFF) + 7)
+    end = end or clock.now_et().date()
+    d = end - timedelta(days=1)
+    out: list[Bar] = []
+    price = end_price
+    while len(out) < days:
+        if clock.is_trading_day(d):
+            c = price
+            o = c / (1 + rng.gauss(drift, 0.015))
+            h = max(o, c) * (1 + abs(rng.gauss(0, 0.006)))
+            lo = min(o, c) * (1 - abs(rng.gauss(0, 0.006)))
+            out.append(Bar(clock.at(d, clock.MARKET_CLOSE), round(o, 2), round(h, 2), round(lo, 2),
+                           round(c, 2), round(rng.uniform(1.5e6, 4e6))))
+            price = o
+        d -= timedelta(days=1)
+    out.reverse()
+    return out
+
+
 def synthetic_bars(symbol: str, days: int = 40, bar_minutes: int = 5, seed: int | None = None,
-                   start_price: float = 100.0, end: date | None = None) -> list[Bar]:
+                   start_price: float = 100.0, end: date | None = None,
+                   gap_days: float = 0.0) -> list[Bar]:
     """Random-walk session bars with realistic U-shaped volume and, on some
     days, a persistent post-open drift so the ORB strategy has something to
-    catch. Purely for demos/tests."""
+    catch. ``gap_days`` is the share of days that open with a 3-7% gap and a
+    high-volume trend (for the gap-and-go strategy). Purely for demos/tests."""
     rng = random.Random(seed if seed is not None else hash(symbol) & 0xFFFF)
     end = end or clock.now_et().date()
     day = end
@@ -81,16 +110,23 @@ def synthetic_bars(symbol: str, days: int = 40, bar_minutes: int = 5, seed: int 
     daily_vol = 0.018
     out: list[Bar] = []
     for d in trading_days:
-        price *= 1 + rng.gauss(0.0, 0.006)  # overnight gap
+        gap_day = rng.random() < gap_days
+        if gap_day:
+            price *= 1 + rng.uniform(0.03, 0.07)  # gap up
+        else:
+            price *= 1 + rng.gauss(0.0, 0.006)  # overnight noise
         regime = rng.random()
         drift = 0.0
-        if regime < 0.25:
+        if gap_day:
+            drift = rng.choice([-1, 1, 1]) * daily_vol / per_day * 2.0  # gaps usually (not always) run
+        elif regime < 0.25:
             drift = rng.choice([-1, 1]) * daily_vol / per_day * 1.6  # trend day
         bar_sigma = daily_vol / (per_day ** 0.5)
+        vol_mult = rng.uniform(2.5, 4.0) if gap_day else 1.0
         t = clock.session_open(d)
         for i in range(per_day):
             u = abs(i - per_day / 2) / (per_day / 2)
-            vol = 40_000 * (0.5 + 1.5 * u ** 2) * rng.uniform(0.6, 1.4)
+            vol = 40_000 * (0.5 + 1.5 * u ** 2) * rng.uniform(0.6, 1.4) * vol_mult
             o = price
             step = rng.gauss(drift if i >= 3 else 0.0, bar_sigma)
             c = o * (1 + step)

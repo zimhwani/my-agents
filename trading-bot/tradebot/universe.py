@@ -77,3 +77,72 @@ class UniverseScanner:
         for c in out:
             log.info("%s %s", "ACCEPT" if not c.rejected else f"reject({c.rejected})", c.line())
         return accepted[: self.s.max_watchlist]
+
+
+class GapScanner:
+    """Post-open scan for Trend Join Long: stocks gapping >= min_gap_pct above
+    the prior close, priced >= min_price, market cap >= min_cap. Uses the data
+    provider's screener when available, otherwise checks the static universe
+    symbol by symbol. Results are filtered to what the broker can trade."""
+
+    def __init__(self, broker: Broker, settings: Settings, min_gap_pct: float = 3.0,
+                 min_price: float = 3.0, min_market_cap: float = 1e9):
+        self.b = broker
+        self.s = settings
+        self.min_gap_pct = min_gap_pct
+        self.min_price = min_price
+        self.min_market_cap = min_market_cap
+
+    def _tradable(self, symbol: str) -> bool:
+        check = getattr(self.b, "is_tradable", None)
+        return bool(check(symbol)) if check else True
+
+    def _from_screener(self) -> list[Candidate]:
+        data = getattr(self.b, "data", None)
+        fn = getattr(data, "gappers", None)
+        if fn is None:
+            return []
+        out = []
+        for g in fn(self.min_gap_pct, self.min_price, self.min_market_cap, limit=150):
+            if not self._tradable(g.symbol):
+                continue
+            out.append(Candidate(symbol=g.symbol, price=g.price, avg_volume=0.0, avg_dollar_volume=0.0,
+                                 atr_pct=0.0, gap_pct=g.gap_pct, score=g.gap_pct))
+        return out
+
+    def _from_universe(self, symbols: list[str]) -> list[Candidate]:
+        data = getattr(self.b, "data", None)
+        cap_fn = getattr(data, "market_cap", None)
+        out = []
+        for sym in symbols:
+            try:
+                if not self._tradable(sym):
+                    continue
+                daily = self.b.daily_bars(sym, 5)
+                price = self.b.last_price(sym)
+                if not daily or not price:
+                    continue
+                prev = daily[-1].close
+                gap = (price - prev) / prev * 100.0 if prev else 0.0
+                if gap < self.min_gap_pct or price < self.min_price:
+                    continue
+                cap = cap_fn(sym) if cap_fn else None
+                if cap is not None and cap < self.min_market_cap:
+                    continue
+                out.append(Candidate(symbol=sym, price=price, avg_volume=0.0, avg_dollar_volume=0.0,
+                                     atr_pct=0.0, gap_pct=gap, score=gap))
+            except Exception as exc:
+                log.warning("%s: gap scan error %s", sym, exc)
+        return out
+
+    def scan(self, symbols: list[str] | None = None) -> list[Candidate]:
+        found = self._from_screener()
+        source = "screener"
+        if not found:
+            found = self._from_universe(symbols or self.s.universe)
+            source = "static universe"
+        found.sort(key=lambda c: -c.gap_pct)
+        for c in found:
+            log.info("GAP %-6s $%8.2f  gap %+5.1f%%", c.symbol, c.price, c.gap_pct)
+        log.info("Gap scan via %s: %d candidates", source, len(found))
+        return found[: self.s.max_watchlist]

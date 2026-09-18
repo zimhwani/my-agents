@@ -15,7 +15,7 @@ if sys.version_info < (3, 10):  # pragma: no cover
 
 from . import clock
 from .config import Settings, UnsafeConfig
-from .strategy import StrategyParams
+from .strategy import StrategyParams, load_strategy
 from .telegram import Notifier, esc
 
 
@@ -95,9 +95,11 @@ def _broker(s: Settings, connect: bool = True):
 def cmd_check(args) -> None:
     s = _settings(args)
     _logging(s)
+    loaded = load_strategy(s.strategy_file, s.allow_shorts)
+    loaded.apply(s)
     print("Config:", s.describe())
-    params = StrategyParams.load(s.strategy_file)
-    print("Strategy:", params.name)
+    print(f"Strategy: {loaded.name} ({s.strategy_file}) · universe {len(s.universe)} symbols"
+          f"{f' from {s.universe_file}' if s.universe_file else ''}")
     b = _broker(s)
     try:
         if s.broker == "t212":
@@ -123,15 +125,21 @@ def cmd_check(args) -> None:
 def cmd_scan(args) -> None:
     s = _settings(args)
     _logging(s)
-    from .universe import UniverseScanner
+    from .universe import GapScanner, UniverseScanner
+    loaded = load_strategy(s.strategy_file, s.allow_shorts)
+    loaded.apply(s)
     b = _broker(s)
     try:
-        watch = UniverseScanner(b, s).scan()
+        if loaded.scan_kind == "gap":
+            r = loaded.strategy.r
+            watch = GapScanner(b, s, r.min_gap_pct, r.min_price_usd, r.min_market_cap_usd).scan()
+        else:
+            watch = UniverseScanner(b, s).scan()
     finally:
         b.disconnect()
-    print("\nWatchlist:")
+    print(f"\nWatchlist ({loaded.name}):")
     for c in watch:
-        print("  " + c.line())
+        print("  " + (f"{c.symbol:<6} ${c.price:>8.2f}  gap {c.gap_pct:+5.1f}%" if loaded.scan_kind == "gap" else c.line()))
     if args.telegram and watch:
         _notifier(s).send("📋 <b>Scan</b>\n<pre>" + esc("\n".join(c.line() for c in watch)) + "</pre>")
 
@@ -140,8 +148,9 @@ def cmd_run(args) -> None:
     s = _settings(args)
     _logging(s)
     from .loop import TradingLoop
-    params = StrategyParams.load(s.strategy_file)
-    loop = TradingLoop(s, _broker(s, connect=False), params, _notifier(s))
+    loaded = load_strategy(s.strategy_file, s.allow_shorts)
+    loaded.apply(s)
+    loop = TradingLoop(s, _broker(s, connect=False), loaded, _notifier(s))
     try:
         loop.run()
     except Exception as exc:  # surface broker/auth errors without a stack trace
@@ -190,14 +199,25 @@ def cmd_fetch_data(args) -> None:
     from .data import fetch_history, save_csv
     b = _broker(s)
     out = Path(args.out)
+    symbols = args.symbols or s.universe
+    print(f"Fetching {args.days} days of 5-min bars (+ premarket) and 2y daily for {len(symbols)} symbols -> {out}")
     try:
-        for sym in (args.symbols or s.universe):
-            if s.broker == "ib":
-                bars = fetch_history(b, sym, args.days, 5)
-            else:  # data provider (Yahoo allows up to ~60 days of 5-minute bars)
-                bars = b.intraday_bars(sym, 5, args.days)
+        for i, sym in enumerate(symbols, 1):
+            try:
+                if s.broker == "ib":
+                    bars = fetch_history(b, sym, args.days, 5)
+                else:  # data provider (Yahoo allows up to ~60 days of 5-minute bars)
+                    bars = b.intraday_bars(sym, 5, args.days, include_premarket=True)
+                daily = b.daily_bars(sym, 520)
+            except Exception as exc:
+                print(f"{sym}: skipped ({exc})")
+                continue
+            if not bars:
+                print(f"{sym}: no intraday data, skipped")
+                continue
             save_csv(bars, out / f"{sym}_5min.csv")
-            print(f"{sym}: {len(bars)} bars -> {out / f'{sym}_5min.csv'}")
+            save_csv(daily, out / f"{sym}_1d.csv")
+            print(f"[{i}/{len(symbols)}] {sym}: {len(bars)} 5-min bars, {len(daily)} daily")
     finally:
         b.disconnect()
 
@@ -207,25 +227,36 @@ def cmd_backtest(args) -> None:
     _logging(s)
     from .backtest import Backtester
     from .dashboard import write_dashboard
-    from .data import load_dir, synthetic_bars
+    from .data import load_daily_dir, load_dir, synthetic_bars, synthetic_daily
     from .journal import Journal
-    params = StrategyParams.load(s.strategy_file)
+    strategy_file = Path(args.strategy) if args.strategy else s.strategy_file
+    loaded = load_strategy(strategy_file, s.allow_shorts)
+    loaded.apply(s)
+    daily = None
     if args.demo:
         syms = args.symbols or ["AAPL", "NVDA", "TSLA", "AMD", "META", "AMZN"]
-        bars = {sym: synthetic_bars(sym, args.days, seed=i + 1, start_price=80 + 40 * i)
+        gap_share = 0.12 if loaded.scan_kind == "gap" else 0.0
+        bars = {sym: synthetic_bars(sym, args.days, seed=i + 1, start_price=80 + 40 * i, gap_days=gap_share)
                 for i, sym in enumerate(syms)}
+        daily = {sym: synthetic_daily(sym, 300, seed=i + 1, end_price=b[0].open, end=b[0].time.date())
+                 for i, (sym, b) in enumerate(bars.items())}
         print(f"Synthetic data: {len(syms)} symbols x {args.days} days")
     else:
         bars = load_dir(args.data)
+        daily = load_daily_dir(args.data) or None
         if args.symbols:
             bars = {k: v for k, v in bars.items() if k in args.symbols}
         if not bars:
             print(f"No *_5min.csv files in {args.data}. Run `fetch-data` first or use --demo.")
             sys.exit(1)
-    bt = Backtester(s, params, bars, equity=args.equity)
+        if loaded.scan_kind == "gap" and not daily:
+            print("Note: no *_1d.csv daily files found; the 200-day SMA filter needs them. "
+                  "Re-run `fetch-data` to download daily history.")
+    bt = Backtester(s, loaded, bars, daily=daily, equity=args.equity)
     res = bt.run()
     st = res.stats
-    print(f"\n{params.name} · {res.days} days · {len(bars)} symbols")
+    params = loaded
+    print(f"\n{loaded.name} · {res.days} days · {len(bars)} symbols · {s.describe()}")
     print(f"trades {st.trades}  win {st.win_rate*100:.0f}%  total {st.total_r:+.1f}R  "
           f"avg {st.avg_r:+.2f}R  expectancy {st.expectancy_r:+.2f}R  PF {st.profit_factor:.2f}  "
           f"maxDD {st.max_drawdown_r:.1f}R")
@@ -235,7 +266,7 @@ def cmd_backtest(args) -> None:
         j.path.unlink()
     for t in res.trades:
         j.append(t)
-    out = write_dashboard(res.trades, s.data_dir / "backtest_dashboard.html", f"Backtest · {params.name}")
+    out = write_dashboard(res.trades, s.data_dir / "backtest_dashboard.html", f"Backtest · {loaded.name}")
     print(f"journal  -> {j.path}\ndashboard -> {out}")
 
 
@@ -254,7 +285,8 @@ def cmd_sweep(args) -> None:
     from .analyze import DEFAULT_GRID, format_sweep, sweep
     from .data import load_dir
     import json as _json
-    params = StrategyParams.load(s.strategy_file)
+    params = StrategyParams.load(args.strategy or "strategy.json")
+    print("(sweep tunes the ORB parameters in strategy.json; Trend Join Long rules are fixed by rules.json)")
     bars = load_dir(args.data)
     if args.symbols:
         bars = {k: v for k, v in bars.items() if k in args.symbols}
@@ -275,9 +307,9 @@ def cmd_dashboard(args) -> None:
     s = _settings(args)
     from .dashboard import write_dashboard
     from .journal import Journal, compute_stats
-    params = StrategyParams.load(s.strategy_file)
+    name = load_strategy(s.strategy_file, s.allow_shorts).name
     trades = Journal(args.journal or s.journal_file).load()
-    out = write_dashboard(trades, args.out or s.dashboard_file, params.name)
+    out = write_dashboard(trades, args.out or s.dashboard_file, name)
     st = compute_stats(trades)
     print(f"{st.trades} closed trades, {st.total_r:+.2f}R -> {out}")
     if args.serve:
@@ -312,12 +344,14 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--days", type=int, default=60, help="(demo) days of synthetic data")
     p.add_argument("--equity", type=float, default=100_000)
     p.add_argument("--demo", action="store_true")
+    p.add_argument("--strategy", help="strategy file (default: STRATEGY_FILE / rules.json)")
     p = sub.add_parser("analyze", help="break a backtest (or live) journal down by exit, time, filters, symbol")
     p.add_argument("--journal", help="default: data/backtest_trades.jsonl")
     p = sub.add_parser("sweep", help="backtest a grid of strategy parameters over CSV history")
     p.add_argument("--data", default="data/bars")
     p.add_argument("--symbols", nargs="*")
     p.add_argument("--equity", type=float, default=100_000)
+    p.add_argument("--strategy", help="ORB parameter file to sweep (default strategy.json)")
     p.add_argument("--grid", help='JSON, e.g. \'{"min_rel_volume":[1.5,2],"opening_range_minutes":[15,30]}\'')
     p = sub.add_parser("dashboard", help="build the R-multiple dashboard from the trade journal")
     p.add_argument("--journal")

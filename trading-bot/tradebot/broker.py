@@ -52,7 +52,8 @@ class Broker(Protocol):
     def net_liquidation(self) -> float: ...
     def positions(self) -> list[PositionInfo]: ...
     def daily_bars(self, symbol: str, days: int) -> list[Bar]: ...
-    def intraday_bars(self, symbol: str, bar_minutes: int, days: int) -> list[Bar]: ...
+    def intraday_bars(self, symbol: str, bar_minutes: int, days: int,
+                      include_premarket: bool = False) -> list[Bar]: ...
     def last_price(self, symbol: str) -> float | None: ...
     def place_entry_with_stop(self, symbol: str, side: str, qty: int, stop: float,
                               limit: float | None = None) -> tuple[OrderRef, OrderRef]: ...
@@ -138,10 +139,10 @@ class IBBroker:
             self._contracts[symbol] = c
         return c
 
-    def _bars(self, symbol: str, duration: str, size: str) -> list[Bar]:
+    def _bars(self, symbol: str, duration: str, size: str, rth: bool = True) -> list[Bar]:
         raw = self.ib.reqHistoricalData(
             self.contract(symbol), endDateTime="", durationStr=duration,
-            barSizeSetting=size, whatToShow="TRADES", useRTH=True, formatDate=2)
+            barSizeSetting=size, whatToShow="TRADES", useRTH=rth, formatDate=2)
         out = []
         for b in raw:
             t = b.date
@@ -156,8 +157,9 @@ class IBBroker:
     def daily_bars(self, symbol: str, days: int = 60) -> list[Bar]:
         return self._bars(symbol, f"{days} D", "1 day")
 
-    def intraday_bars(self, symbol: str, bar_minutes: int = 5, days: int = 5) -> list[Bar]:
-        return self._bars(symbol, f"{days} D", f"{bar_minutes} mins")
+    def intraday_bars(self, symbol: str, bar_minutes: int = 5, days: int = 5,
+                      include_premarket: bool = False) -> list[Bar]:
+        return self._bars(symbol, f"{days} D", f"{bar_minutes} mins", rth=not include_premarket)
 
     def last_price(self, symbol: str) -> float | None:
         t = self._tickers.get(symbol)
@@ -322,12 +324,16 @@ class SimBroker:
             bars = [b for b in bars if b.time <= self.now]
         return bars[-days:]
 
-    def intraday_bars(self, symbol: str, bar_minutes: int = 5, days: int = 5) -> list[Bar]:
+    def intraday_bars(self, symbol: str, bar_minutes: int = 5, days: int = 5,
+                      include_premarket: bool = False) -> list[Bar]:
         bars = self.intraday.get(symbol, [])
         if self.now:
             bars = [b for b in bars if b.time + timedelta(minutes=bar_minutes) <= self.now]
         cutoff = (self.now or clock.now_et()) - timedelta(days=days + 2)
-        return [b for b in bars if b.time >= cutoff]
+        bars = [b for b in bars if b.time >= cutoff]
+        if not include_premarket:
+            bars = [b for b in bars if clock.MARKET_OPEN <= b.time.time() < clock.MARKET_CLOSE]
+        return bars
 
     def last_price(self, symbol: str) -> float | None:
         return self.prices.get(symbol)

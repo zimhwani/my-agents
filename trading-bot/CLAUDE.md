@@ -16,7 +16,9 @@ can lose money.
 
 ## Always
 - Run `python -m pytest tests -q` before finishing any change.
-- Keep strategy tunables in `strategy.json` and re-run
+- The primary strategy is Trend Join Long, defined by `rules.json`; ORB lives in
+  `strategy.json`. `STRATEGY_FILE` in `.env` selects one. Keep tunables in
+  those files and re-run
   `python -m tradebot backtest` (real data from `fetch-data`, or `--demo`)
   after changing them; report trades, win rate, expectancy, profit factor, max DD in R.
 - Keep the same code path for backtest and live: entry/exit rules live in
@@ -40,7 +42,8 @@ can lose money.
 | `t212.py` | Trading 212 REST client + `Broker` implementation |
 | `broker.py` | `Broker` protocol, IB implementation, in-memory `SimBroker` |
 | `universe.py` | pre-market scan -> watchlist |
-| `strategy.py` | signals (Opening Range Breakout) |
+| `strategy.py` | ORB signals, `load_strategy()` factory, `LoadedStrategy` |
+| `tjl.py` | Trend Join Long (gap-and-go) from `rules.json` |
 | `risk.py` | position size, daily limits, kill switch |
 | `execution.py` | orders, partials, stop moves, state persistence |
 | `exits.py` | partial / breakeven / trail / target / time / EOD rules |
