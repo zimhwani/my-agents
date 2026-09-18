@@ -294,16 +294,19 @@ to **Vercel Blob** storage, and the page reads them from there.
 
    It prints `DASHBOARD_DATA_URL=https://....public.blob.vercel-storage.com/tradebot`.
    Add that line to `.env` on the droplet **and** on your Mac.
-3. On your Mac, generate the hosted page and deploy it (first time: `npm i -g vercel` and `vercel login`):
+3. On your Mac, generate the hosted page, commit it, and push:
 
    ```bash
-   python -m tradebot dashboard --export-vercel deploy/vercel
-   cd deploy/vercel && vercel deploy --prod
+   python -m tradebot dashboard --export-vercel deploy/trading-dashboard
+   git add deploy/trading-dashboard && git commit -m "Dashboard config" && git push
    ```
 
-   Or commit `deploy/vercel/` and let `.github/workflows/dashboard-deploy.yml`
-   deploy it on push once `VERCEL_TOKEN`, `VERCEL_ORG_ID` and
-   `VERCEL_DASHBOARD_PROJECT_ID` are set as GitHub secrets.
+   Then deploy the same way the other sites in this repo deploy
+   (see `deploy/trading-dashboard/README.md`): **Path A**, Vercel → Add New →
+   Project → import this repo → Root Directory = `trading-bot/deploy/trading-dashboard`
+   (no secrets, auto-deploys on every push); or **Path B**, add `VERCEL_TOKEN`
+   and `VERCEL_ORG_ID` as GitHub secrets and `.github/workflows/dashboard-deploy.yml`
+   deploys on push; or **Path C**, `cd deploy/trading-dashboard && vercel deploy --prod`.
 4. Restart the bot's services on the droplet so they pick up the token:
    `systemctl restart tradebot-dashboard` (the trading service reads `.env` at its next start).
 

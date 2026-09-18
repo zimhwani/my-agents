@@ -347,7 +347,7 @@ def cmd_dashboard(args) -> None:
                   "Vercel Blob store (printed by `python -m tradebot publish`).")
             sys.exit(2)
         idx = export_static(args.export_vercel, s.dashboard_data_url, name)
-        print(f"static site -> {idx.parent}  (deploy: cd {idx.parent} && npx vercel deploy --prod)")
+        print(f"static site -> {idx.parent}  (commit it and deploy; see {idx.parent}/README.md)")
     if args.publish:
         from .publish import BlobPublisher, PublishError
         try:

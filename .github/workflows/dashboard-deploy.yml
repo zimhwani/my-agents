@@ -1,17 +1,25 @@
 name: Deploy trading dashboard to Vercel
 
-# Deploys trading-bot/deploy/vercel (the hosted, read-only dashboard shell).
-# It only contains index.html + config.js; the data comes from Vercel Blob,
-# uploaded by the bot itself. No-ops until the secrets below exist:
-#   VERCEL_TOKEN                 — vercel.com/account/tokens
-#   VERCEL_ORG_ID                — Vercel project Settings → General
-#   VERCEL_DASHBOARD_PROJECT_ID  — the dashboard project's ID
+# Deploys trading-bot/deploy/trading-dashboard (the hosted, read-only dashboard
+# shell: index.html + config.js). The data comes from Vercel Blob, uploaded by
+# the bot itself. Until the secrets below exist, the job no-ops (never fails a push).
+#
+# One-time setup — GitHub → Settings → Secrets and variables → Actions:
+#   VERCEL_TOKEN                — vercel.com/account/tokens
+#   VERCEL_ORG_ID               — Vercel → Settings → General (team/user id)
+#   VERCEL_DASHBOARD_PROJECT_ID — optional; leave unset for the first run (the CLI
+#                                 creates a project named "trading-dashboard"), then
+#                                 set it to pin deploys to that project.
+#
+# Alternative with zero secrets: Vercel → Add New → Project → import this repo and
+# set Root Directory = trading-bot/deploy/trading-dashboard.
 
 on:
   push:
     branches: [main, claude/magical-allen-jan8gi]
     paths:
-      - "trading-bot/deploy/vercel/**"
+      - "trading-bot/deploy/trading-dashboard/**"
+      - ".github/workflows/dashboard-deploy.yml"
   workflow_dispatch:
 
 jobs:
@@ -23,16 +31,24 @@ jobs:
       VERCEL_PROJECT_ID: ${{ secrets.VERCEL_DASHBOARD_PROJECT_ID }}
     steps:
       - uses: actions/checkout@v4
+
       - if: env.VERCEL_TOKEN == ''
-        run: echo "VERCEL_TOKEN not set — skipping dashboard deploy."
+        run: echo "VERCEL_TOKEN secret not set — skipping deploy. See trading-bot/deploy/trading-dashboard/README.md."
+
       - if: env.VERCEL_TOKEN != ''
         uses: actions/setup-node@v4
         with:
           node-version: "20"
+
       - if: env.VERCEL_TOKEN != ''
-        working-directory: trading-bot/deploy/vercel
+        name: Deploy to Vercel (production)
+        working-directory: trading-bot/deploy/trading-dashboard
         run: |
           npm i -g vercel@latest
-          vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
-          vercel build --prod --token="$VERCEL_TOKEN"
-          vercel deploy --prebuilt --prod --token="$VERCEL_TOKEN"
+          if [ -n "$VERCEL_PROJECT_ID" ]; then
+            vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
+            vercel deploy --prod --yes --token="$VERCEL_TOKEN"
+          else
+            # First deploy: creates a project named after this directory.
+            vercel deploy --prod --yes --token="$VERCEL_TOKEN"
+          fi
