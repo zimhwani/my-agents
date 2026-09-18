@@ -1,8 +1,7 @@
-# Market data for the Trading 212 path (T212's API has no price feed).
+# Market data for the Trading 212 path (Trading 212's API has no price feed).
 yfinance>=0.2.50
-# Only needed if BROKER=ib: connection to Trader Workstation / IB Gateway.
-ib_async>=1.0
-# Everything else (strategy, exits, journal, Telegram, dashboard, backtest,
-# the Trading 212 client) is standard library only.
-# Dev:
+# Dev / tests:
 pytest>=8
+# Interactive Brokers users: also `pip install -r requirements-ib.txt`
+# Everything else (strategy, exits, journal, Telegram, dashboard, backtest,
+# the Trading 212 client) is standard library only. Python 3.11+ required.

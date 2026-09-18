@@ -27,7 +27,8 @@ account.
 
 1. A **Trading 212 Invest** account with **Practice mode** enabled (the free
    virtual-money account; that is the paper-trading equivalent).
-2. **Python 3.11+** (3.12 recommended).
+2. **Python 3.11+** (3.12 recommended). On a Mac the built-in `python3` is
+   often older: `brew install python@3.12` and use `python3.12` below.
 3. An API key. In the app: switch to **Practice** → **Settings → API (Beta) →
    Generate API key**. Tick the scopes *account*, *portfolio*, *orders (read)*
    and **orders (execute)** — without execute the bot cannot trade. Copy the key;
@@ -48,7 +49,7 @@ account.
 <details>
 <summary>Using Interactive Brokers instead</summary>
 
-Set `BROKER=ib` in `.env`. Run Trader Workstation logged into a **paper**
+Set `BROKER=ib` in `.env` and `pip install -r requirements-ib.txt`. Run Trader Workstation logged into a **paper**
 account and in **File → Global Configuration → API → Settings**: enable
 *ActiveX and Socket Clients*, **uncheck** *Read-Only API*, socket port **7497**
 (paper), trusted IP **127.0.0.1**, Apply → OK. IB supplies its own market data
