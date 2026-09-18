@@ -115,6 +115,12 @@ th{color:var(--text-2);font-weight:500;font-size:12px;position:sticky;top:0;back
 .badge{display:inline-block;padding:1px 6px;border-radius:4px;font-size:11px;border:1px solid var(--border);color:var(--text-2)}
 .empty{color:var(--text-3);padding:24px;text-align:center}
 .legend{display:flex;gap:16px;font-size:12px;color:var(--text-2);margin-bottom:8px}
+.live{border-color:var(--pos)}
+.live-head{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+.live .tiles{margin:8px 0 12px}
+.pulse{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--good);vertical-align:2px;margin-left:6px}
+.pulse.stale{background:var(--critical)}
+.warn{color:var(--critical)}
 .sw{display:inline-block;width:10px;height:10px;border-radius:2px;vertical-align:-1px;margin-right:5px}
 </style>
 </head>
@@ -122,6 +128,17 @@ th{color:var(--text-2);font-weight:500;font-size:12px;position:sticky;top:0;back
 <main>
 <h1>__TITLE__ · R multiples</h1>
 <p class="sub">Generated __GENERATED__ · 1R = the dollars risked from entry to the initial stop. A trade stopped at its original stop is −1R.</p>
+
+<div class="card live" id="live" hidden>
+  <div class="live-head">
+    <h2>Live <span class="pulse" id="pulse"></span></h2>
+    <p class="d" id="liveMeta"></p>
+  </div>
+  <div class="tiles" id="liveTiles"></div>
+  <div class="tbl"><table id="liveOpen"></table></div>
+  <p class="d" id="liveWatch"></p>
+  <p class="d warn" id="liveBlock"></p>
+</div>
 
 <div class="filters">
   <label>Symbol <select id="fSym"><option value="">All</option></select></label>
@@ -280,6 +297,32 @@ function niceTicks(lo,hi,n){
 }
 function render(){ const rows=filtered(); tiles(stats(rows)); barsChart(rows); curveChart(rows); table(rows); }
 render();
+
+// ---- live panel: reads live.json next to this page while the bot runs (needs --serve) ----
+async function live(){
+  try {
+    const r = await fetch('live.json', {cache:'no-store'});
+    if (!r.ok) return;
+    const L = await r.json();
+    const el = $('#live'); el.hidden = false;
+    const upd = new Date(L.updated), ageMin = (Date.now()-upd.getTime())/60000;
+    $('#pulse').classList.toggle('stale', ageMin > 3);
+    $('#liveMeta').textContent = `${L.strategy} · ${L.mode} · updated ${upd.toLocaleTimeString()}${ageMin>3?' (stale)':''}${L.day_done?' · day complete':''}`;
+    const dayPnl = L.equity - L.day_start_equity;
+    $('#liveTiles').innerHTML = [
+      ['Equity', fmt$(L.equity), `${dayPnl>=0?'+':'−'}${fmt$(Math.abs(dayPnl)).replace('$','$')} today`],
+      ['Today', fmtR(L.realized_r), `${L.closed_today} closed · ${fmt$(L.realized_pnl)}`],
+      ['Open positions', L.open.length, L.open.length? `${fmtR(L.open.reduce((a,o)=>a+o.r,0))} unrealized` : 'flat'],
+      ['Watchlist', L.watchlist.length, L.scanned? 'scanned' : 'waiting for scan'],
+    ].map(([k,v,s])=>`<div class="tile"><div class="k">${k}</div><div class="v">${v}</div><div class="s">${s}</div></div>`).join('');
+    const h='<tr><th class="l">Symbol</th><th class="l">Side</th><th>Qty</th><th>Entry</th><th>Stop</th><th>Last</th><th>Open R</th><th>P&amp;L</th><th class="l">Since</th><th class="l">Setup</th></tr>';
+    const b=L.open.map(o=>`<tr><td class="l"><b>${o.symbol}</b></td><td class="l"><span class="badge">${o.side}</span></td><td>${o.qty}${o.partial?` <span class="badge">partial</span>`:''}</td><td>${o.entry.toFixed(2)}</td><td>${o.stop.toFixed(2)}</td><td>${o.price.toFixed(2)}</td><td class="${o.r>=0?'pos-t':'neg-t'}"><b>${fmtR(o.r)}</b></td><td class="${o.pnl>=0?'pos-t':'neg-t'}">${fmt$(o.pnl)}</td><td class="l">${o.entry_time}</td><td class="l" style="color:var(--text-2)">${o.reason}</td></tr>`).join('');
+    $('#liveOpen').innerHTML = h + (b || '<tr><td colspan="10" class="empty">No open positions.</td></tr>');
+    $('#liveWatch').textContent = 'Watchlist: ' + (L.watchlist.map(w=>`${w.symbol} ${w.gap_pct? (w.gap_pct>0?'+':'')+w.gap_pct.toFixed(1)+'%' : ''}`).join(' · ') || '—');
+    $('#liveBlock').textContent = L.blockers.length ? 'Entries blocked: ' + L.blockers.join('; ') : '';
+  } catch (e) { /* opened as a file, or bot not running: static view only */ }
+}
+live(); setInterval(live, 30000);
 </script>
 </body>
 </html>

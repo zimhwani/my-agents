@@ -1,0 +1,20 @@
+[Unit]
+Description=Trading bot session (scan, trade, manage, flat before the close)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=tradebot
+WorkingDirectory=/opt/my-agents/trading-bot
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/opt/my-agents/trading-bot/.venv/bin/python -m tradebot run
+# If it crashes mid-session, come back up; it re-attaches to open trades from data/state.json.
+Restart=on-failure
+RestartSec=30
+# The loop exits on its own after the close; don't restart a clean exit.
+SuccessExitStatus=0
+TimeoutStopSec=90
+
+[Install]
+WantedBy=multi-user.target

@@ -11,6 +11,7 @@ by a real clock (``run``) or by the backtester.
 
 from __future__ import annotations
 
+import json
 import logging
 import time as _time
 import traceback
@@ -64,6 +65,7 @@ class TradingLoop:
         self._bars_at: dict[str, datetime] = {}
         self._last_status: datetime | None = None
         self._scanned_for: object = None
+        self._closed_seen = -1
 
     # -- helpers ---------------------------------------------------------------
     def _bar_boundary(self, now: datetime) -> datetime:
@@ -182,6 +184,42 @@ class TradingLoop:
             self.notify.send(self.status_text(now, equity, blockers), silent=True)
             self._last_status = now
         self.exec.persist(day=self.day.__dict__, watchlist=[c.symbol for c in self.watchlist])
+        self.write_live(now, equity, blockers)
+
+    # -- live snapshot for the dashboard -----------------------------------------------
+    def write_live(self, now: datetime, equity: float, blockers: list[str]) -> None:
+        """data/live.json: what the bot is doing right now (read by the dashboard)."""
+        assert self.day is not None
+        open_rows = []
+        for t in self.exec.open_trades:
+            px = self.b.last_price(t.symbol) or t.entry_price
+            open_rows.append({"symbol": t.symbol, "side": t.side, "qty": t.qty_open, "qty_initial": t.qty_initial,
+                              "entry": round(t.entry_price, 2), "stop": round(t.stop, 2), "price": round(px, 2),
+                              "r": round(t.unrealized_r(px), 2), "pnl": round(t.open_pnl(px), 2),
+                              "partial": t.partial_taken, "entry_time": t.entry_time.strftime("%H:%M"),
+                              "reason": t.reason})
+        payload = {
+            "updated": now.isoformat(), "strategy": self.loaded.name, "mode": self.s.describe(),
+            "equity": round(equity, 2), "day_start_equity": round(self.day.start_equity, 2),
+            "realized_r": round(self.day.realized_r, 2), "realized_pnl": round(self.day.realized_pnl, 2),
+            "closed_today": len(self.exec.closed_today), "open": open_rows,
+            "watchlist": [{"symbol": c.symbol, "price": round(c.price, 2), "gap_pct": round(c.gap_pct, 2),
+                           "atr_pct": round(c.atr_pct, 2)} for c in self.watchlist],
+            "blockers": blockers, "scanned": self.scanned, "day_done": self.day_done,
+        }
+        try:
+            tmp = self.s.data_dir / "live.json.tmp"
+            tmp.write_text(json.dumps(payload))
+            tmp.replace(self.s.data_dir / "live.json")
+        except OSError as exc:  # pragma: no cover
+            log.warning("live.json: %s", exc)
+        if len(self.exec.closed_today) != self._closed_seen:
+            self._closed_seen = len(self.exec.closed_today)
+            try:
+                from .dashboard import write_dashboard
+                write_dashboard(self.journal.load(), self.s.dashboard_file, self.loaded.name)
+            except Exception as exc:  # pragma: no cover
+                log.warning("dashboard: %s", exc)
 
     # -- reporting ---------------------------------------------------------------
     def status_text(self, now: datetime, equity: float, blockers: list[str]) -> str:

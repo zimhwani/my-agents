@@ -224,7 +224,58 @@ detail, a cumulative-R curve, and a filterable trade table. Light and dark
 mode. **1R = the dollars risked from entry to the initial stop**, so a full
 stop-out is −1R regardless of share count.
 
-## 8. Run it every day, hands off
+## 8. Run it on a server (DigitalOcean droplet)
+
+The bot is a single Python process with no GUI, so a $6 droplet is ideal:
+always on, no laptop to keep awake, and a systemd timer starts each session
+before the US open. `deploy/` has everything:
+
+```bash
+# on a fresh Ubuntu droplet, as root
+git clone --branch claude/magical-allen-jan8gi https://github.com/zimhwani/my-agents.git /opt/my-agents
+bash /opt/my-agents/trading-bot/deploy/setup-droplet.sh
+```
+
+Then from your Mac copy the `.env` you already have (keys never go through git):
+
+```bash
+scp trading-bot/.env root@YOUR_DROPLET_IP:/opt/my-agents/trading-bot/.env
+ssh root@YOUR_DROPLET_IP "chown tradebot:tradebot /opt/my-agents/trading-bot/.env && chmod 600 /opt/my-agents/trading-bot/.env && cd /opt/my-agents/trading-bot && sudo -u tradebot .venv/bin/python -m tradebot check && systemctl start tradebot-dashboard"
+```
+
+What the setup installs:
+
+| Unit | Does |
+|---|---|
+| `tradebot.timer` | starts `tradebot.service` Mon–Fri at 09:00 New York time (DST-aware) |
+| `tradebot.service` | `python -m tradebot run`; exits after the close; restarts and re-attaches to open trades if it crashes mid-session |
+| `tradebot-dashboard.service` | serves the dashboard on `127.0.0.1:8765` (never exposed to the internet) |
+
+Day-to-day:
+
+```bash
+systemctl list-timers tradebot.timer      # when the next session starts
+systemctl start tradebot                  # start today's session by hand
+journalctl -u tradebot -f                 # live log
+sudo -u tradebot /opt/my-agents/trading-bot/.venv/bin/python -m tradebot kill      # from /opt/my-agents/trading-bot
+sudo -u tradebot /opt/my-agents/trading-bot/.venv/bin/python -m tradebot flatten
+cd /opt/my-agents && git pull && systemctl restart tradebot-dashboard             # update
+```
+
+To view the dashboard, tunnel it rather than opening a port:
+
+```bash
+ssh -L 8765:127.0.0.1:8765 root@YOUR_DROPLET_IP
+# then open http://127.0.0.1:8765/dashboard.html on your Mac
+```
+
+The **Live** panel at the top of the dashboard appears when the bot is
+running (it reads `data/live.json`, refreshed every tick): equity and today's
+R, each open position with its stop, last price and open R, the watchlist,
+and anything currently blocking new entries. The rest of the page is rebuilt
+every time a trade closes.
+
+## 9. Run it every day on your own machine instead
 
 The loop waits for the open and exits after the close, so schedule it once
 per weekday shortly before 09:30 ET (14:30 London / 15:30 Paris in summer).
@@ -236,7 +287,7 @@ logged in (enable its auto-restart):
 - **macOS / Linux** cron: `0 9 * * 1-5 cd /path/to/trading-bot && .venv/bin/python -m tradebot run >> data/cron.log 2>&1`
   (adjust for your timezone; the bot itself always thinks in ET).
 
-## 9. Going live (only after weeks of clean practice results)
+## 10. Going live (only after weeks of clean practice results)
 
 1. Review `data/dashboard.html` and `data/trades.jsonl`: is expectancy
    positive, is drawdown tolerable, did every day end flat?

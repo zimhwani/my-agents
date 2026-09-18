@@ -1,0 +1,12 @@
+[Unit]
+Description=Start the trading bot each weekday before the US open
+
+[Timer]
+# 09:00 New York time, Monday-Friday (systemd handles DST). The bot itself
+# waits for 09:30 ET, skips exchange holidays, and exits after the close.
+OnCalendar=Mon..Fri 09:00 America/New_York
+Persistent=false
+Unit=tradebot.service
+
+[Install]
+WantedBy=timers.target

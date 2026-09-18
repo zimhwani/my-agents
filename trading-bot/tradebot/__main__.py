@@ -323,8 +323,8 @@ def cmd_dashboard(args) -> None:
         import http.server
         import functools
         handler = functools.partial(http.server.SimpleHTTPRequestHandler, directory=str(out.parent))
-        print(f"Serving http://127.0.0.1:{args.serve}/{out.name}  (Ctrl+C to stop)")
-        http.server.ThreadingHTTPServer(("127.0.0.1", args.serve), handler).serve_forever()
+        print(f"Serving http://{args.host}:{args.serve}/{out.name}  (Ctrl+C to stop)")
+        http.server.ThreadingHTTPServer((args.host, args.serve), handler).serve_forever()
 
 
 # ---------------------------------------------------------------------------
@@ -363,7 +363,8 @@ def main(argv: list[str] | None = None) -> None:
     p = sub.add_parser("dashboard", help="build the R-multiple dashboard from the trade journal")
     p.add_argument("--journal")
     p.add_argument("--out")
-    p.add_argument("--serve", type=int, nargs="?", const=8765, help="serve on localhost:PORT")
+    p.add_argument("--serve", type=int, nargs="?", const=8765, help="serve data/ on PORT (live panel needs this)")
+    p.add_argument("--host", default="127.0.0.1", help="bind address for --serve (keep 127.0.0.1; use an SSH tunnel)")
 
     args = ap.parse_args(argv)
     {"check": cmd_check, "scan": cmd_scan, "run": cmd_run, "flatten": cmd_flatten, "kill": cmd_kill,
