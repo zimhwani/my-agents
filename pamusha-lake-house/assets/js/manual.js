@@ -10,7 +10,12 @@
     pills.forEach(function (a) {
       var on = a.getAttribute("href") === "#" + id;
       a.classList.toggle("is-active", on);
-      if (on) { a.setAttribute("aria-current", "true"); a.scrollIntoView({ block: "nearest", inline: "center", behavior: reduceMotion ? "auto" : "smooth" }); }
+      if (on) {
+        a.setAttribute("aria-current", "true");
+        // Scroll the pill row only (never the page): scrollIntoView on a sticky child would cancel an in-flight page scroll.
+        var row = a.closest("ul");
+        if (row) row.scrollTo({ left: a.offsetLeft - (row.clientWidth - a.offsetWidth) / 2, behavior: reduceMotion ? "auto" : "smooth" });
+      }
       else a.removeAttribute("aria-current");
     });
   }
