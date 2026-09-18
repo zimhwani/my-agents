@@ -62,6 +62,9 @@ def _urllib_transport(method: str, url: str, headers: dict, body: bytes | None) 
             return resp.status, resp.read()
     except urllib.error.HTTPError as exc:
         return exc.code, exc.read()
+    except (urllib.error.URLError, TimeoutError, OSError) as exc:
+        raise T212Error(f"cannot reach {urllib.parse.urlparse(url).netloc}: {exc}. "
+                        "Check your internet connection / VPN / firewall.") from exc
 
 
 class T212Client:
