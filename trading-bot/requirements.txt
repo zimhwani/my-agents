@@ -1,6 +1,8 @@
-# Broker connection to Trader Workstation / IB Gateway (maintained fork of ib_insync).
+# Market data for the Trading 212 path (T212's API has no price feed).
+yfinance>=0.2.50
+# Only needed if BROKER=ib: connection to Trader Workstation / IB Gateway.
 ib_async>=1.0
-# Everything else (strategy, exits, journal, Telegram, dashboard, backtest) is
-# standard library only, so tests and the demo run with nothing else installed.
+# Everything else (strategy, exits, journal, Telegram, dashboard, backtest,
+# the Trading 212 client) is standard library only.
 # Dev:
 pytest>=8

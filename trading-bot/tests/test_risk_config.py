@@ -36,8 +36,24 @@ def test_risk_gate_blockers(settings):
     assert any("force-close" in b for b in gate.blockers([], day, 100_000, clock.at(DAY, clock.parse_hhmm("15:55"))))
 
 
+def test_t212_live_refused_without_ack(tmp_path, monkeypatch):
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("BROKER", "t212")
+    monkeypatch.setenv("T212_ENV", "live")
+    monkeypatch.delenv("LIVE_TRADING_ACK", raising=False)
+    with pytest.raises(UnsafeConfig):
+        Settings.load(tmp_path / "none.env")
+    monkeypatch.setenv("T212_ENV", "demo")
+    s = Settings.load(tmp_path / "none.env")
+    assert s.is_paper and "Trading 212 demo" in s.describe()
+    monkeypatch.setenv("ALLOW_SHORTS", "true")
+    with pytest.raises(UnsafeConfig):  # long-only broker
+        Settings.load(tmp_path / "none.env")
+
+
 def test_live_port_refused_without_ack(tmp_path, monkeypatch):
     monkeypatch.setenv("DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("BROKER", "ib")
     monkeypatch.setenv("IB_PORT", "7496")
     monkeypatch.delenv("LIVE_TRADING_ACK", raising=False)
     with pytest.raises(UnsafeConfig):
@@ -49,9 +65,9 @@ def test_live_port_refused_without_ack(tmp_path, monkeypatch):
 
 def test_dotenv_and_limits(tmp_path, monkeypatch):
     env = tmp_path / ".env"
-    env.write_text("IB_PORT=4002\nRISK_PER_TRADE_PCT=1.0  # comment\n# ignored\nUNIVERSE=aapl, msft\n")
+    env.write_text("BROKER=ib\nIB_PORT=4002\nRISK_PER_TRADE_PCT=1.0  # comment\n# ignored\nUNIVERSE=aapl, msft\n")
     monkeypatch.setenv("DATA_DIR", str(tmp_path))
-    for k in ("IB_PORT", "RISK_PER_TRADE_PCT", "UNIVERSE"):
+    for k in ("BROKER", "IB_PORT", "RISK_PER_TRADE_PCT", "UNIVERSE"):
         monkeypatch.delenv(k, raising=False)
     s = Settings.load(env)
     assert s.ib_port == 4002 and s.is_paper

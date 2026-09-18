@@ -65,9 +65,19 @@ class UnsafeConfig(RuntimeError):
     pass
 
 
+BROKERS = {"t212", "ib"}
+
+
 @dataclass
 class Settings:
-    # broker
+    # broker selection
+    broker: str = "t212"
+    trading_currency: str = "USD"
+    # trading 212
+    t212_api_key: str = ""
+    t212_env: str = "demo"  # demo = Practice account, live = real money
+    data_provider: str = "yfinance"
+    # interactive brokers
     ib_host: str = "127.0.0.1"
     ib_port: int = 7497
     ib_client_id: int = 7
@@ -104,6 +114,8 @@ class Settings:
     # ---- derived ---------------------------------------------------------
     @property
     def is_paper(self) -> bool:
+        if self.broker == "t212":
+            return self.t212_env == "demo"
         return self.ib_port in PAPER_PORTS
 
     @property
@@ -127,7 +139,20 @@ class Settings:
         return self.data_dir / "bot.log"
 
     def validate(self) -> None:
-        if self.ib_port not in PAPER_PORTS:
+        if self.broker not in BROKERS:
+            raise UnsafeConfig(f"BROKER must be one of {sorted(BROKERS)}, got {self.broker!r}")
+        if self.broker == "t212":
+            if self.t212_env not in ("demo", "live"):
+                raise UnsafeConfig("T212_ENV must be 'demo' (Practice account) or 'live'.")
+            if self.t212_env == "live" and self.live_ack != LIVE_ACK:
+                raise UnsafeConfig(
+                    "T212_ENV=live means real money. Refusing to start. Use T212_ENV=demo with a "
+                    f"Practice-mode API key, or set LIVE_TRADING_ACK={LIVE_ACK} only after the bot "
+                    "has run clean on the practice account for weeks."
+                )
+            if self.allow_shorts:
+                raise UnsafeConfig("ALLOW_SHORTS is not possible on Trading 212 (long-only). Set it to false.")
+        elif self.ib_port not in PAPER_PORTS:
             if self.live_ack != LIVE_ACK:
                 raise UnsafeConfig(
                     f"IB_PORT={self.ib_port} is not a paper port ({sorted(PAPER_PORTS)}). "
@@ -148,6 +173,11 @@ class Settings:
         load_dotenv(dotenv)
         universe = [s.strip().upper() for s in _env("UNIVERSE", DEFAULT_UNIVERSE).split(",") if s.strip()]
         s = cls(
+            broker=_env("BROKER", "t212").lower(),
+            trading_currency=_env("TRADING_CURRENCY", "USD").upper(),
+            t212_api_key=_env("T212_API_KEY"),
+            t212_env=_env("T212_ENV", "demo").lower(),
+            data_provider=_env("DATA_PROVIDER", "yfinance").lower(),
             ib_host=_env("IB_HOST", "127.0.0.1"),
             ib_port=_int("IB_PORT", 7497),
             ib_client_id=_int("IB_CLIENT_ID", 7),
@@ -182,8 +212,12 @@ class Settings:
 
     def describe(self) -> str:
         mode = "PAPER" if self.is_paper else "*** LIVE ***"
+        if self.broker == "t212":
+            where = f"Trading 212 {self.t212_env} (data: {self.data_provider})"
+        else:
+            where = f"IB {self.ib_host}:{self.ib_port} client={self.ib_client_id}"
         return (
-            f"{mode} {self.ib_host}:{self.ib_port} client={self.ib_client_id} "
+            f"{mode} {where} "
             f"dry_run={self.dry_run} risk={self.risk_per_trade_pct}%/trade "
             f"(cap ${self.max_risk_per_trade_usd:.0f}) max_pos={self.max_positions} "
             f"daily_stop={self.max_daily_loss_r}R/{self.max_daily_loss_pct}% "

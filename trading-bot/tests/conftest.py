@@ -47,7 +47,7 @@ def daily_history(day: date, days: int, close: float, volume: float = 50_000 * 7
 @pytest.fixture
 def settings(tmp_path, monkeypatch):
     for k in list(__import__("os").environ):
-        if k.startswith(("IB_", "TELEGRAM_", "RISK_", "MAX_", "UNIVERSE", "DRY_RUN", "LIVE_")):
+        if k.startswith(("IB_", "T212_", "BROKER", "TELEGRAM_", "RISK_", "MAX_", "UNIVERSE", "DRY_RUN", "LIVE_")):
             monkeypatch.delenv(k, raising=False)
     monkeypatch.setenv("DATA_DIR", str(tmp_path / "data"))
     return Settings.load(tmp_path / "nonexistent.env")

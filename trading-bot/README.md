@@ -1,10 +1,10 @@
-# IB Autonomous Trading Bot
+# Autonomous Trading Bot (Trading 212 / Interactive Brokers)
 
-A hands-off intraday trading pipeline for **Interactive Brokers** that scans a
-universe before the open, takes its own entries, manages its own stops, takes
-partials, trails winners, force-closes everything before the bell, sends
-**Telegram** status every 30 minutes, and tracks every trade in **R multiples**
-on a dashboard.
+A hands-off intraday trading pipeline for **Trading 212** (default) or
+**Interactive Brokers** that scans a universe before the open, takes its own
+entries, manages its own stops, takes partials, trails winners, force-closes
+everything before the bell, sends **Telegram** status every 30 minutes, and
+tracks every trade in **R multiples** on a dashboard.
 
 ```
 universe scan  →  decision loop  →  execution  →  exit logic  →  journal
@@ -13,27 +13,48 @@ universe scan  →  decision loop  →  execution  →  exit logic  →  journal
                                                                   Telegram)
 ```
 
-Everything except the broker socket is standard-library Python and runs
-offline, so the backtest, dashboard and tests work before you ever connect TWS.
+Everything except the broker HTTP calls is standard-library Python and runs
+offline, so the backtest, dashboard and tests work before you ever connect an
+account.
 
-> **Paper first.** The bot refuses to connect to a live port unless you set an
-> explicit acknowledgement, and it should run clean on paper for weeks before
-> that ever happens.
+> **Practice first.** The bot refuses a live account unless you set an explicit
+> acknowledgement, and it should run clean on the practice account for weeks
+> before that ever happens.
 
 ---
 
-## 1. Prerequisites
+## 1. Prerequisites (Trading 212)
 
-1. **Trader Workstation (TWS)** from Interactive Brokers, logged into a
-   **paper trading** account (free; works without market data subscriptions
-   using delayed data).
+1. A **Trading 212 Invest** account with **Practice mode** enabled (the free
+   virtual-money account; that is the paper-trading equivalent).
 2. **Python 3.11+** (3.12 recommended).
-3. In TWS: **File → Global Configuration → API → Settings**
-   - ✅ *Enable ActiveX and Socket Clients*
-   - ❌ *Read-Only API* — must be **unchecked** so the bot can place orders
-   - *Socket port*: **7497** (paper). Live is 7496 — leave it on paper.
-   - *Trusted IPs*: add **127.0.0.1**
-   - Apply → OK. You can minimise TWS after that; it just has to stay open.
+3. An API key. In the app: switch to **Practice** → **Settings → API (Beta) →
+   Generate API key**. Tick the scopes *account*, *portfolio*, *orders (read)*
+   and **orders (execute)** — without execute the bot cannot trade. Copy the key;
+   it is only shown once. A key made in Practice mode only works on the practice
+   account (`demo.trading212.com`), which is exactly what we want.
+4. Trading 212 specifics the bot already handles (so you know why it behaves as
+   it does):
+   - **No price feed in the API** → bars and quotes come from Yahoo Finance
+     (`yfinance`) by default. Swap in another source by implementing
+     `DataProvider` in `tradebot/marketdata.py`.
+   - **No bracket orders, no order editing** → market buy, wait for the fill,
+     then a separate GTC stop; every stop move is cancel + re-place; partials
+     cancel the stop, sell, and re-place it for the remainder.
+   - **Long only**, whole-share sizing, and per-endpoint **rate limits** (the
+     client throttles itself and backs off on 429).
+   - CFD accounts are not supported by Trading 212's API; use Invest.
+
+<details>
+<summary>Using Interactive Brokers instead</summary>
+
+Set `BROKER=ib` in `.env`. Run Trader Workstation logged into a **paper**
+account and in **File → Global Configuration → API → Settings**: enable
+*ActiveX and Socket Clients*, **uncheck** *Read-Only API*, socket port **7497**
+(paper), trusted IP **127.0.0.1**, Apply → OK. IB supplies its own market data
+and supports attached stops and order modification, which `tradebot/broker.py`
+uses directly.
+</details>
 
 ## 2. Install
 
@@ -41,7 +62,7 @@ offline, so the backtest, dashboard and tests work before you ever connect TWS.
 cd trading-bot
 python -m venv .venv && source .venv/bin/activate     # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
-cp .env.example .env                                   # then edit .env
+cp .env.example .env                                   # paste T212_API_KEY, keep T212_ENV=demo
 ```
 
 ## 3. Connect Claude Code (or you) to the broker, safely
@@ -50,14 +71,15 @@ cp .env.example .env                                   # then edit .env
 python -m tradebot check
 ```
 
-prints the account (paper accounts start with `DU`), net liquidation, open
-positions and a sample price. What keeps this safe:
+prints the account id and currency, equity converted to `TRADING_CURRENCY`,
+open positions, any `UNIVERSE` symbols that are not tradable on your account,
+and a sample price from the data provider. What keeps this safe:
 
 | Guard | Where |
 |---|---|
-| Live ports refused unless `LIVE_TRADING_ACK=I_UNDERSTAND_LIVE_TRADING` | `config.py` |
-| Paper port must be paired with a `DU…` account | `broker.py` |
-| Every entry is sent with an attached hard stop in one transmit chain | `broker.py` |
+| `T212_ENV=live` (or an IB live port) refused unless `LIVE_TRADING_ACK=I_UNDERSTAND_LIVE_TRADING` | `config.py` |
+| Shorts rejected on Trading 212 | `config.py`, `t212.py` |
+| A protective stop is placed right after every fill; if the stop is rejected the position is closed immediately | `t212.py` |
 | Risk per trade, dollar cap, position cap, max positions, daily loss in R and % | `.env`, `risk.py` |
 | Kill switch: `python -m tradebot kill` blocks new entries; `flatten` closes all | `__main__.py` |
 | Forced flat at `FORCE_CLOSE_TIME` (15:50 ET) and at any restart mismatch | `loop.py`, `execution.py` |
@@ -94,9 +116,9 @@ Get history and backtest (the backtester runs the *same* strategy, exit and
 execution code as live, against an in-memory broker):
 
 ```bash
-python -m tradebot fetch-data --days 30            # 5-min bars → data/bars/*.csv (needs TWS)
+python -m tradebot fetch-data --days 55            # 5-min bars → data/bars/*.csv (Yahoo keeps ~60 days)
 python -m tradebot backtest                         # → data/backtest_dashboard.html
-python -m tradebot backtest --demo                  # synthetic data, no TWS needed
+python -m tradebot backtest --demo                  # synthetic data, no account needed
 ```
 
 ## 5. Run the pipeline
@@ -115,8 +137,8 @@ What `run` does, in order:
    completed 5-minute bar (respecting IB pacing), check for stop fills, run
    the exit manager on open trades, then look for new entries inside the
    entry window if the risk gate allows.
-3. **Execution** (`execution.py`): size by risk, send a market entry with an
-   attached GTC stop, wait for the fill, journal it, alert Telegram.
+3. **Execution** (`execution.py`): size by risk, send a market entry, wait for
+   the fill, place the GTC protective stop, journal it, alert Telegram.
 4. **Exit logic** (`exits.py`): at +1R sell half and move the stop to
    breakeven; trail the rest 1.5 ATR off the high; hard target at +3R; time
    stop if the trade hasn't worked in 2 hours; **flat by 15:50 ET** no matter what.
@@ -125,6 +147,10 @@ What `run` does, in order:
 State is saved to `data/state.json` after every change, so if the bot (or
 your PC) restarts mid-session it re-attaches to its open trades and stop orders,
 and re-places any stop the broker no longer has.
+
+Because the account may be in GBP or EUR while the universe trades in USD,
+equity is converted into `TRADING_CURRENCY` with the provider's FX rate before
+sizing, so "0.5% risk" means the same thing whatever your base currency.
 
 Emergency controls:
 
@@ -162,21 +188,27 @@ stop-out is −1R regardless of share count.
 ## 8. Run it every day, hands off
 
 The loop waits for the open and exits after the close, so schedule it once
-per weekday shortly before 09:30 ET (TWS must already be logged in — enable
-auto-restart in TWS settings so its daily restart doesn't need you):
+per weekday shortly before 09:30 ET (14:30 London / 15:30 Paris in summer).
+With Trading 212 nothing else needs to be running; with IB, TWS must already be
+logged in (enable its auto-restart):
 
 - **Windows** Task Scheduler: action `python -m tradebot run`, start in the
   `trading-bot` folder, trigger weekdays 09:00 (your local equivalent).
 - **macOS / Linux** cron: `0 9 * * 1-5 cd /path/to/trading-bot && .venv/bin/python -m tradebot run >> data/cron.log 2>&1`
   (adjust for your timezone; the bot itself always thinks in ET).
 
-## 9. Going live (only after weeks of clean paper results)
+## 9. Going live (only after weeks of clean practice results)
 
 1. Review `data/dashboard.html` and `data/trades.jsonl`: is expectancy
    positive, is drawdown tolerable, did every day end flat?
-2. In TWS switch to the live login and set the API port to 7496.
-3. In `.env`: `IB_PORT=7496` and `LIVE_TRADING_ACK=I_UNDERSTAND_LIVE_TRADING`.
+2. Generate a **new** API key with the app in **Live** mode (practice keys do
+   not work on the live account).
+3. In `.env`: `T212_ENV=live`, the live key, and
+   `LIVE_TRADING_ACK=I_UNDERSTAND_LIVE_TRADING`. (IB: `IB_PORT=7496` plus the ack.)
 4. Start with `RISK_PER_TRADE_PCT=0.25` and `MAX_POSITIONS=1`.
+5. Remember Trading 212 Invest is a cash account: pattern-day-trading rules
+   don't apply, but you are trading with settled cash and Yahoo quotes, so keep
+   size small and expect fills a little worse than the backtest.
 
 ## Configuration reference
 
@@ -190,9 +222,12 @@ stop trading after −3R or −2% on the day.
 python -m pytest tests -q
 ```
 
-Covers the strategy, exit rules, sizing and gates, the live-port refusal, the
-journal maths, the backtester, the executor on the simulated broker, restart
-recovery, and a full scripted trading day through the real `TradingLoop`.
+Covers the strategy, exit rules, sizing and gates, the live-account refusals,
+the journal maths, the backtester, the executor on the simulated broker,
+restart recovery, a full scripted trading day through the real `TradingLoop`,
+and the Trading 212 adapter against a fake REST server (entry → stop, cancel
+and re-place on breakeven, partial with stop re-placement, stop fills, rate
+limiting, auth errors).
 
 ## Disclaimer
 

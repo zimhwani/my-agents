@@ -34,18 +34,41 @@ def _notifier(s: Settings) -> Notifier:
     return Notifier(s.telegram_bot_token, s.telegram_chat_id)
 
 
-def _ib(s: Settings):
+def _data(s: Settings):
+    if s.data_provider == "yfinance":
+        from .marketdata import YFinanceData
+        return YFinanceData()
+    print(f"Unknown DATA_PROVIDER={s.data_provider!r} (implement tradebot.marketdata.DataProvider)")
+    sys.exit(2)
+
+
+def _broker(s: Settings, connect: bool = True):
+    """Build the configured broker (Trading 212 by default, IB with BROKER=ib)."""
+    if s.broker == "t212":
+        from .t212 import T212Broker, T212Error
+        b = T212Broker(s, _data(s))
+        if connect:
+            try:
+                b.connect()
+            except T212Error as exc:
+                print(f"Trading 212: {exc}\n"
+                      "Checklist: in the Trading 212 app switch to Practice mode -> Settings -> API (Beta)\n"
+                      "  -> generate a key with account/portfolio/orders read AND orders execute scopes,\n"
+                      "  put it in .env as T212_API_KEY, keep T212_ENV=demo.")
+                sys.exit(1)
+        return b
     from .broker import IBBroker
     b = IBBroker(s)
-    try:
-        b.connect()
-    except (ConnectionRefusedError, TimeoutError, OSError) as exc:
-        print(f"Could not connect to TWS/Gateway at {s.ib_host}:{s.ib_port}: {exc}\n"
-              "Checklist: TWS is running and logged in -> File > Global Configuration > API > Settings:\n"
-              "  [x] Enable ActiveX and Socket Clients   [ ] Read-Only API (must be UNCHECKED)\n"
-              f"  Socket port = {s.ib_port} ({'paper' if s.is_paper else 'LIVE'})   Trusted IP 127.0.0.1 added\n"
-              "  Then Apply / OK and retry.")
-        sys.exit(1)
+    if connect:
+        try:
+            b.connect()
+        except (ConnectionRefusedError, TimeoutError, OSError) as exc:
+            print(f"Could not connect to TWS/Gateway at {s.ib_host}:{s.ib_port}: {exc}\n"
+                  "Checklist: TWS is running and logged in -> File > Global Configuration > API > Settings:\n"
+                  "  [x] Enable ActiveX and Socket Clients   [ ] Read-Only API (must be UNCHECKED)\n"
+                  f"  Socket port = {s.ib_port} ({'paper' if s.is_paper else 'LIVE'})   Trusted IP 127.0.0.1 added\n"
+                  "  Then Apply / OK and retry.")
+            sys.exit(1)
     return b
 
 
@@ -56,15 +79,21 @@ def cmd_check(args) -> None:
     print("Config:", s.describe())
     params = StrategyParams.load(s.strategy_file)
     print("Strategy:", params.name)
-    b = _ib(s)
+    b = _broker(s)
     try:
-        print("Account:", b.account)
-        print("Net liquidation: $%.2f" % b.net_liquidation())
+        if s.broker == "t212":
+            print(f"Account: {b.account_id} ({b.account_currency}) on Trading 212 {s.t212_env}")
+            missing = [sym for sym in s.universe if sym not in b._instruments]
+            if missing:
+                print("Not tradable on this account (remove from UNIVERSE):", ", ".join(missing))
+        else:
+            print("Account:", b.account)
+        print(f"Equity ({s.trading_currency}): {b.net_liquidation():,.2f}")
         print("Positions:", b.positions() or "none")
         bars = b.daily_bars("SPY", 5)
         print("SPY daily bars (%d): last close %.2f" % (len(bars), bars[-1].close if bars else 0))
         px = b.last_price("SPY")
-        print("SPY last price:", px if px else "unavailable (check IB_MARKET_DATA_TYPE / subscriptions)")
+        print("SPY last price:", px if px else "unavailable (check your data provider / IB_MARKET_DATA_TYPE)")
     finally:
         b.disconnect()
     n = _notifier(s)
@@ -76,7 +105,7 @@ def cmd_scan(args) -> None:
     s = _settings(args)
     _logging(s)
     from .universe import UniverseScanner
-    b = _ib(s)
+    b = _broker(s)
     try:
         watch = UniverseScanner(b, s).scan()
     finally:
@@ -91,11 +120,16 @@ def cmd_scan(args) -> None:
 def cmd_run(args) -> None:
     s = _settings(args)
     _logging(s)
-    from .broker import IBBroker
     from .loop import TradingLoop
     params = StrategyParams.load(s.strategy_file)
-    loop = TradingLoop(s, IBBroker(s), params, _notifier(s))
-    loop.run()
+    loop = TradingLoop(s, _broker(s, connect=False), params, _notifier(s))
+    try:
+        loop.run()
+    except Exception as exc:  # surface broker/auth errors without a stack trace
+        if type(exc).__name__ == "T212Error":
+            print(f"Trading 212: {exc}")
+            sys.exit(1)
+        raise
 
 
 def cmd_flatten(args) -> None:
@@ -103,7 +137,7 @@ def cmd_flatten(args) -> None:
     _logging(s)
     from .execution import Executor, StateStore
     from .journal import Journal
-    b = _ib(s)
+    b = _broker(s)
     try:
         ex = Executor(b, Journal(s.journal_file), _notifier(s), StateStore(s.state_file))
         ex.restore()
@@ -135,11 +169,14 @@ def cmd_fetch_data(args) -> None:
     s = _settings(args)
     _logging(s)
     from .data import fetch_history, save_csv
-    b = _ib(s)
+    b = _broker(s)
     out = Path(args.out)
     try:
         for sym in (args.symbols or s.universe):
-            bars = fetch_history(b, sym, args.days, 5)
+            if s.broker == "ib":
+                bars = fetch_history(b, sym, args.days, 5)
+            else:  # data provider (Yahoo allows up to ~60 days of 5-minute bars)
+                bars = b.intraday_bars(sym, 5, args.days)
             save_csv(bars, out / f"{sym}_5min.csv")
             print(f"{sym}: {len(bars)} bars -> {out / f'{sym}_5min.csv'}")
     finally:
