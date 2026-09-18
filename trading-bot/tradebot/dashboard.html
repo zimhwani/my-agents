@@ -192,13 +192,18 @@ function niceTicks(lo,hi,n){ const span=hi-lo||1, raw=span/n, mag=Math.pow(10,Ma
 function header(st, rows){
   const L = LIVE;
   $('#hEquity').textContent = L? fmt$(L.equity) : '—';
-  $('#hToday').innerHTML = L? `<span class="${cls(L.realized_r)}">${fmtR(L.realized_r)}</span>` : '—';
+  $('#hToday').innerHTML = L && !L.offline ? `<span class="${cls(L.realized_r)}">${fmtR(L.realized_r)}</span>` : '—';
   $('#hTrades').textContent = st.n; $('#hWin').textContent = (st.wr*100).toFixed(0)+'%';
   $('#hTotal').innerHTML = `<span class="${cls(st.total)}">${fmtR(st.total)}</span>`;
-  const b=$('#hBadge'); if (L){ const stale=(Date.now()-new Date(L.updated))/60000>3; b.className='badge '+(stale?'off':'live'); b.textContent= stale?'stale':(L.day_done?'closed':'live'); } else { b.className='badge sim'; b.textContent='journal'; }
-  $('#accEquity').textContent = L? fmt$(L.equity) : fmt$(st.pnl);
-  $('#accMode').textContent = L? (L.mode.split(' ')[0]) : 'journal';
-  $('#accSub').innerHTML = L? `${(L.equity-L.day_start_equity)>=0?'<span class="up">▲</span>':'<span class="down">▼</span>'} ${fmt$(L.equity-L.day_start_equity)} today · ${L.closed_today} closed · ${L.open.length} open` : `${st.n} closed trades · realised P&amp;L`;
+  const b=$('#hBadge');
+  if (L && L.offline){ b.className='badge off'; b.textContent='offline'; }
+  else if (L){ const stale=(Date.now()-new Date(L.updated))/60000>3; b.className='badge '+(stale?'off':'live'); b.textContent= stale?'stale':(L.day_done?'closed':'live'); }
+  else { b.className='badge sim'; b.textContent='no snapshot'; }
+  $('#accEquity').textContent = L? fmt$(L.equity) : '—';
+  $('#accMode').textContent = L? (L.mode.split(' ')[0]) : '';
+  $('#accSub').innerHTML = !L ? 'no snapshot yet · the bot writes one each tick (weekdays from 09:00 ET)'
+    : L.offline ? `${L.currency||''} account · bot offline · next session weekdays 09:00 ET`
+    : `${(L.equity-L.day_start_equity)>=0?'<span class="up">▲</span>':'<span class="down">▼</span>'} ${fmt$(L.equity-L.day_start_equity)} today · ${L.closed_today} closed · ${L.open.length} open`;
   $('#accTrades').textContent = st.n; $('#accWin').textContent=(st.wr*100).toFixed(1)+'%';
   $('#accExp').innerHTML = `<span class="${cls(st.exp)}">${fmtR(st.exp)}</span>`; $('#accPF').textContent = st.pf===Infinity?'∞':st.pf.toFixed(2);
   $('#accOpen').textContent = L? L.open.length : 0;

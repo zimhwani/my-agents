@@ -349,14 +349,28 @@ def cmd_dashboard(args) -> None:
         idx = export_static(args.export_vercel, s.dashboard_data_url, name)
         print(f"static site -> {idx.parent}  (commit it and deploy; see {idx.parent}/README.md)")
     if args.publish:
+        import json as _json
         from .publish import BlobPublisher, PublishError
         try:
             pub = BlobPublisher(s.vercel_blob_token, s.vercel_blob_prefix)
-            url = pub.put("trades.json", __import__("json").dumps(trades_payload(trades)).encode())
+            url = pub.put("trades.json", _json.dumps(trades_payload(trades)).encode())
             live = s.data_dir / "live.json"
-            if live.exists():
-                pub.put("live.json", live.read_bytes())
-            print(f"published trades.json -> {url}\nDASHBOARD_DATA_URL={pub.base_url}")
+            snapshot = _json.loads(live.read_text()) if live.exists() else None
+            if snapshot is None or snapshot.get("offline") or args.snapshot:
+                # no session snapshot yet: publish an "offline" one with the real account equity
+                b = _broker(s)
+                try:
+                    equity = b.net_liquidation()
+                    currency = getattr(b, "account_currency", "") or s.trading_currency
+                finally:
+                    b.disconnect()
+                snapshot = {"updated": clock.now_et().isoformat(), "strategy": name, "mode": s.describe(),
+                            "offline": True, "currency": currency, "equity": round(equity, 2),
+                            "day_start_equity": round(equity, 2), "realized_r": 0.0, "realized_pnl": 0.0,
+                            "closed_today": 0, "open": [], "watchlist": [], "blockers": [], "scanned": False,
+                            "day_done": False, "chart": None, "log": []}
+            pub.put("live.json", _json.dumps(snapshot).encode())
+            print(f"published trades.json + live.json -> {url}\nDASHBOARD_DATA_URL={pub.base_url}")
         except PublishError as exc:
             print(f"publish failed: {exc}")
             sys.exit(1)
@@ -409,7 +423,8 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--serve", type=int, nargs="?", const=8765, help="serve data/ on PORT (live panel needs this)")
     p.add_argument("--host", default="127.0.0.1", help="bind address for --serve (keep 127.0.0.1; use an SSH tunnel)")
     p.add_argument("--export-vercel", metavar="DIR", help="write a hosted copy (index.html, config.js, vercel.json) that reads DASHBOARD_DATA_URL")
-    p.add_argument("--publish", action="store_true", help="upload trades.json (+ live.json) to Vercel Blob now")
+    p.add_argument("--publish", action="store_true", help="upload trades.json + live.json to Vercel Blob now")
+    p.add_argument("--snapshot", action="store_true", help="with --publish: refresh the offline equity snapshot even if a session snapshot exists")
 
     args = ap.parse_args(argv)
     {"check": cmd_check, "scan": cmd_scan, "run": cmd_run, "flatten": cmd_flatten, "kill": cmd_kill,
