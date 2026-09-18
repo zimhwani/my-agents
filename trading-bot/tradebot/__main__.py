@@ -27,7 +27,16 @@ def _logging(settings: Settings | None) -> None:
                         format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
 
+_ENV_PATH = ".env"
+
+
+def args_env_path() -> str:
+    return _ENV_PATH
+
+
 def _settings(args) -> Settings:
+    global _ENV_PATH
+    _ENV_PATH = str(args.env)
     try:
         s = Settings.load(args.env)
     except UnsafeConfig as exc:
@@ -57,7 +66,11 @@ def _broker(s: Settings, connect: bool = True):
             try:
                 b.connect()
             except T212Error as exc:
+                k = s.t212_api_key
+                shown = f"{k[:4]}…{k[-4:]} ({len(k)} chars)" if len(k) > 8 else ("(empty)" if not k else "(too short)")
                 print(f"Trading 212: {exc}\n"
+                      f"Key loaded from {args_env_path()}: {shown}; env={s.t212_env} -> "
+                      f"{'demo' if s.t212_env == 'demo' else 'live'}.trading212.com\n"
                       "Checklist: in the Trading 212 app switch to Practice mode -> Settings -> API (Beta)\n"
                       "  -> generate a key with account/portfolio/orders read AND orders execute scopes,\n"
                       "  put it in .env as T212_API_KEY, keep T212_ENV=demo.")
