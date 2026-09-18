@@ -3,8 +3,8 @@
   "use strict";
 
   /* ---- Owner settings ------------------------------------------------ */
-  // TODO(owner): paste your Airbnb listing URL. Until then, buttons go to an Airbnb search for The Honeysuckles.
-  var AIRBNB_URL = "https://www.airbnb.com.au/s/The-Honeysuckles--VIC--Australia/homes";
+  // Airbnb listing for Pamusha Lake House.
+  var AIRBNB_URL = "https://www.airbnb.com.au/rooms/641000176994899769";
   // TODO(owner): free key from web3forms.com (enquiry form). Leave blank to fall back to a mailto: link.
   var WEB3FORMS_KEY = "";
   var ENQUIRY_EMAIL = ""; // TODO(owner): your email, used as a mailto: fallback when WEB3FORMS_KEY is blank

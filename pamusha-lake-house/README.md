@@ -47,7 +47,7 @@ Domains, then point the domain's DNS (currently at GoDaddy) at Vercel.
 
 ## Add your photography
 
-Drop JPGs into `assets/img/` using these file names, then run
+Photos are in place (see `assets/img/manifest.json` for which original each slot came from). To swap one, drop a JPG over the same file name, then run
 `python3 docs/build/build.py` once so the pages pick them up (the build only
 emits an image tag for files that exist, so nothing 404s). Each slot shows
 designed placeholder art until then:
