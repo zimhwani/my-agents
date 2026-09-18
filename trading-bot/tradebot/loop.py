@@ -178,6 +178,8 @@ class TradingLoop:
             self._update_day_stats()
             self._daily_summary(now)
             self.day_done = True
+            self._closed_seen = -1  # force a final dashboard rebuild + trades.json publish
+            self.write_live(now, self.b.net_liquidation(), ["day complete"])
             return
 
         # 3. entries
