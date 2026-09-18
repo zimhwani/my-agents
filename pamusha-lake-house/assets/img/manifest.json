@@ -10,24 +10,16 @@
   1400
  ],
  "bed-1.jpg": [
-  "2fa1b558-a47e-40a2-93ea-8e59712d8db2.avif",
-  1600,
-  1200
+  "c6becfc4-fbec-45b9-b288-f83fe4b29892.avif"
  ],
  "bed-2.jpg": [
-  "c6becfc4-fbec-45b9-b288-f83fe4b29892.avif",
-  1600,
-  1067
+  "1de96725-fef2-4273-b349-b20e19a33738.avif"
  ],
  "bed-3.jpg": [
-  "6404ce83-9dcc-4258-9af2-5b4897b1660c.avif",
-  1600,
-  1067
+  "6404ce83-9dcc-4258-9af2-5b4897b1660c.avif"
  ],
  "bed-4.jpg": [
-  "b6c1c185-400e-4f93-a253-a015f9cc6736.avif",
-  1039,
-  1400
+  "2fa1b558-a47e-40a2-93ea-8e59712d8db2.avif"
  ],
  "kitchen.jpg": [
   "2ae6b4cd-ee72-4c02-b80f-c132daa62610.jpeg",
@@ -159,16 +151,6 @@
   1050,
   1400
  ],
- "bed-5.jpg": [
-  "890838ac-0ef5-4e74-8820-2f0c0fcab61d.avif",
-  1600,
-  1067
- ],
- "bed-6.jpg": [
-  "1de96725-fef2-4273-b349-b20e19a33738.avif",
-  1050,
-  1400
- ],
  "vanity.jpg": [
   "ab2d5317-222d-4fa6-a0c5-ae069ca70dbd.jpeg",
   1600,
@@ -203,5 +185,11 @@
   "598307e6-6414-444b-8dfb-8dab37c654ef.avif",
   1600,
   1067
+ ],
+ "bed-1b.jpg": [
+  "b6c1c185-400e-4f93-a253-a015f9cc6736.avif"
+ ],
+ "bed-4b.jpg": [
+  "890838ac-0ef5-4e74-8820-2f0c0fcab61d.avif"
  ]
 }
