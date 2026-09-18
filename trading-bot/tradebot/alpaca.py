@@ -169,12 +169,24 @@ class AlpacaData:
 
     def gappers(self, min_gap_pct: float, min_price: float, min_market_cap: float,
                 limit: int = 100) -> list[Gapper]:
-        """Gap scan over the static universe using one snapshot call per 100 symbols
-        (Alpaca has no screener). Market cap is checked via Yahoo when available."""
+        """Gap scan: Yahoo's whole-market screener (when available) merged with
+        Alpaca snapshots over the static universe (Alpaca has no screener).
+        Market cap is checked via Yahoo when available."""
+        out: list[Gapper] = []
+        seen: set[str] = set()
+        if self._aux is not None and hasattr(self._aux, "gappers"):
+            try:
+                for g in self._aux.gappers(min_gap_pct, min_price, min_market_cap, limit):
+                    if g.symbol not in seen:
+                        seen.add(g.symbol)
+                        out.append(g)
+            except Exception as exc:
+                log.warning("Yahoo screener unavailable (%s); using the static universe only", exc)
         if not self.universe:
-            return []
-        out = []
+            return out[:limit]
         for sym, snap in self.snapshots(self.universe).items():
+            if sym in seen:
+                continue
             prev = (snap.get("prevDailyBar") or {}).get("c")
             today = snap.get("dailyBar") or {}
             price = (snap.get("latestTrade") or {}).get("p") or today.get("c")
@@ -186,6 +198,7 @@ class AlpacaData:
             cap = self.market_cap(sym)
             if cap is not None and cap < min_market_cap:
                 continue
+            seen.add(sym)
             out.append(Gapper(sym, float(price), gap, cap, float(prev)))
         out.sort(key=lambda g: -g.gap_pct)
         return out[:limit]

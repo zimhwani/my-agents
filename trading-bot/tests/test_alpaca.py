@@ -50,10 +50,14 @@ class FakeAlpaca:
 
 class Aux:
     def market_cap(self, symbol):
-        return 5e9 if symbol == "GAP" else 5e8
+        return 5e9 if symbol in ("GAP", "SCRN") else 5e8
 
     def fx_rate(self, base, quote):
         return 0.7
+
+    def gappers(self, min_gap_pct, min_price, min_market_cap, limit=100):
+        from tradebot.marketdata import Gapper
+        return [Gapper("SCRN", 40.0, 8.0, 5e9), Gapper("GAP", 110.0, 10.0, 5e9, 100.0)]
 
 
 @pytest.fixture
@@ -85,7 +89,8 @@ def test_last_price_snapshots_and_gappers(data):
     d, fake = data
     assert d.last_price("AAPL") == 123.45
     g = d.gappers(3.0, 3.0, 1e9)
-    assert [x.symbol for x in g] == ["GAP"]  # FLAT has no gap, TINY fails the market-cap check
+    # screener results merged with the static-universe snapshot scan, de-duplicated, sorted by gap
+    assert [x.symbol for x in g] == ["GAP", "SCRN"]  # FLAT has no gap, TINY fails the market-cap check
     assert g[0].gap_pct == pytest.approx(10.0) and g[0].prev_close == 100.0
     assert d.fx_rate("AUD", "USD") == 0.7 and d.fx_rate("USD", "USD") == 1.0
 
