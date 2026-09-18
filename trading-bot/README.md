@@ -29,22 +29,27 @@ account.
    virtual-money account; that is the paper-trading equivalent).
 2. **Python 3.11+** (3.12 recommended). On a Mac the built-in `python3` is
    often older: `brew install python@3.12` and use `python3.12` below.
-3. An API key. In the app: switch to **Practice** → **Settings → API (Beta) →
+3. API credentials. In the app: switch to **Practice** → **Settings → API →
    Generate API key**. Tick the scopes *account*, *portfolio*, *orders (read)*
-   and **orders (execute)** — without execute the bot cannot trade. Copy the key;
-   it is only shown once. A key made in Practice mode only works on the practice
-   account (`demo.trading212.com`), which is exactly what we want.
+   and **orders (execute)** — without execute the bot cannot trade. You get an
+   **API key** and an **API secret**; copy both, they are only shown once. Keys
+   made in Practice mode only work on the practice account
+   (`demo.trading212.com`), which is exactly what we want.
 4. Trading 212 specifics the bot already handles (so you know why it behaves as
    it does):
    - **No price feed in the API** → bars and quotes come from Yahoo Finance
      (`yfinance`) by default. Swap in another source by implementing
      `DataProvider` in `tradebot/marketdata.py`.
-   - **No bracket orders, no order editing** → market buy, wait for the fill,
-     then a separate GTC stop; every stop move is cancel + re-place; partials
-     cancel the stop, sell, and re-place it for the remainder.
+   - **No bracket orders, no order editing**, and the **live API accepts market
+     orders only**. So the protective stop lives in the bot
+     (`T212_STOP_MODE=software`, the default): each poll compares the last
+     price with the stop and sells at market the moment it is crossed. On the
+     practice account you can also try `T212_STOP_MODE=broker`, which rests
+     real GTC stop orders, but live cannot do that, so practice defaults to
+     software too so that what you test is what you will run.
    - **Long only**, whole-share sizing, and per-endpoint **rate limits** (the
      client throttles itself and backs off on 429).
-   - CFD accounts are not supported by Trading 212's API; use Invest.
+   - CFD accounts are not supported by Trading 212's API; use Invest or ISA.
 
 <details>
 <summary>Using Interactive Brokers instead</summary>
@@ -63,7 +68,7 @@ uses directly.
 cd trading-bot
 python -m venv .venv && source .venv/bin/activate     # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
-cp .env.example .env                                   # paste T212_API_KEY, keep T212_ENV=demo
+cp .env.example .env                                   # paste T212_API_KEY + T212_API_SECRET, keep T212_ENV=demo
 ```
 
 ## 3. Connect Claude Code (or you) to the broker, safely
@@ -80,7 +85,7 @@ and a sample price from the data provider. What keeps this safe:
 |---|---|
 | `T212_ENV=live` (or an IB live port) refused unless `LIVE_TRADING_ACK=I_UNDERSTAND_LIVE_TRADING` | `config.py` |
 | Shorts rejected on Trading 212 | `config.py`, `t212.py` |
-| A protective stop is placed right after every fill; if the stop is rejected the position is closed immediately | `t212.py` |
+| A protective stop (software or broker) is armed right after every fill; if a broker stop is rejected the position is closed immediately | `t212.py` |
 | Risk per trade, dollar cap, position cap, max positions, daily loss in R and % | `.env`, `risk.py` |
 | Kill switch: `python -m tradebot kill` blocks new entries; `flatten` closes all | `__main__.py` |
 | Forced flat at `FORCE_CLOSE_TIME` (15:50 ET) and at any restart mismatch | `loop.py`, `execution.py` |
@@ -202,14 +207,16 @@ logged in (enable its auto-restart):
 
 1. Review `data/dashboard.html` and `data/trades.jsonl`: is expectancy
    positive, is drawdown tolerable, did every day end flat?
-2. Generate a **new** API key with the app in **Live** mode (practice keys do
-   not work on the live account).
-3. In `.env`: `T212_ENV=live`, the live key, and
+2. Generate a **new** key + secret with the app in **Live** mode (practice
+   credentials do not work on the live account).
+3. In `.env`: `T212_ENV=live`, the live key and secret, and
    `LIVE_TRADING_ACK=I_UNDERSTAND_LIVE_TRADING`. (IB: `IB_PORT=7496` plus the ack.)
 4. Start with `RISK_PER_TRADE_PCT=0.25` and `MAX_POSITIONS=1`.
 5. Remember Trading 212 Invest is a cash account: pattern-day-trading rules
-   don't apply, but you are trading with settled cash and Yahoo quotes, so keep
-   size small and expect fills a little worse than the backtest.
+   don't apply, but you are trading with settled cash and Yahoo quotes, and
+   your stop is a software stop checked every `POLL_SECONDS`, so keep size
+   small and expect fills a little worse than the backtest. Consider
+   `POLL_SECONDS=15` on live.
 
 ## Configuration reference
 
@@ -226,9 +233,9 @@ python -m pytest tests -q
 Covers the strategy, exit rules, sizing and gates, the live-account refusals,
 the journal maths, the backtester, the executor on the simulated broker,
 restart recovery, a full scripted trading day through the real `TradingLoop`,
-and the Trading 212 adapter against a fake REST server (entry → stop, cancel
-and re-place on breakeven, partial with stop re-placement, stop fills, rate
-limiting, auth errors).
+and the Trading 212 adapter against a fake REST server (key+secret auth,
+entry → stop in both stop modes, cancel and re-place on breakeven, partials,
+software and broker stop fills, restart recovery, rate limiting, auth errors).
 
 ## Disclaimer
 

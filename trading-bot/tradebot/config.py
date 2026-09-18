@@ -75,7 +75,9 @@ class Settings:
     trading_currency: str = "USD"
     # trading 212
     t212_api_key: str = ""
+    t212_api_secret: str = ""
     t212_env: str = "demo"  # demo = Practice account, live = real money
+    t212_stop_mode: str = "software"  # software (works on live) | broker (practice only)
     data_provider: str = "yfinance"
     # interactive brokers
     ib_host: str = "127.0.0.1"
@@ -152,6 +154,8 @@ class Settings:
                 )
             if self.allow_shorts:
                 raise UnsafeConfig("ALLOW_SHORTS is not possible on Trading 212 (long-only). Set it to false.")
+            if self.t212_stop_mode not in ("software", "broker"):
+                raise UnsafeConfig("T212_STOP_MODE must be 'software' or 'broker'.")
         elif self.ib_port not in PAPER_PORTS:
             if self.live_ack != LIVE_ACK:
                 raise UnsafeConfig(
@@ -176,7 +180,9 @@ class Settings:
             broker=_env("BROKER", "t212").lower(),
             trading_currency=_env("TRADING_CURRENCY", "USD").upper(),
             t212_api_key=_env("T212_API_KEY"),
+            t212_api_secret=_env("T212_API_SECRET"),
             t212_env=_env("T212_ENV", "demo").lower(),
+            t212_stop_mode=_env("T212_STOP_MODE", "software").lower(),
             data_provider=_env("DATA_PROVIDER", "yfinance").lower(),
             ib_host=_env("IB_HOST", "127.0.0.1"),
             ib_port=_int("IB_PORT", 7497),
@@ -213,7 +219,7 @@ class Settings:
     def describe(self) -> str:
         mode = "PAPER" if self.is_paper else "*** LIVE ***"
         if self.broker == "t212":
-            where = f"Trading 212 {self.t212_env} (data: {self.data_provider})"
+            where = f"Trading 212 {self.t212_env} (data: {self.data_provider}, stops: {self.t212_stop_mode})"
         else:
             where = f"IB {self.ib_host}:{self.ib_port} client={self.ib_client_id}"
         return (

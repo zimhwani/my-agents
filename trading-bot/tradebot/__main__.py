@@ -66,14 +66,14 @@ def _broker(s: Settings, connect: bool = True):
             try:
                 b.connect()
             except T212Error as exc:
-                k = s.t212_api_key
-                shown = f"{k[:4]}…{k[-4:]} ({len(k)} chars)" if len(k) > 8 else ("(empty)" if not k else "(too short)")
+                def mask(v: str) -> str:
+                    return f"{v[:4]}…{v[-4:]} ({len(v)} chars)" if len(v) > 8 else ("(empty)" if not v else "(too short)")
                 print(f"Trading 212: {exc}\n"
-                      f"Key loaded from {args_env_path()}: {shown}; env={s.t212_env} -> "
-                      f"{'demo' if s.t212_env == 'demo' else 'live'}.trading212.com\n"
-                      "Checklist: in the Trading 212 app switch to Practice mode -> Settings -> API (Beta)\n"
+                      f"Loaded from {args_env_path()}: key {mask(s.t212_api_key)}, secret {mask(s.t212_api_secret)}; "
+                      f"env={s.t212_env} -> {'demo' if s.t212_env == 'demo' else 'live'}.trading212.com\n"
+                      "Checklist: in the Trading 212 app switch to Practice mode -> Settings -> API\n"
                       "  -> generate a key with account/portfolio/orders read AND orders execute scopes,\n"
-                      "  put it in .env as T212_API_KEY, keep T212_ENV=demo.")
+                      "  put BOTH values in .env as T212_API_KEY and T212_API_SECRET, keep T212_ENV=demo.")
                 sys.exit(1)
         return b
     from .broker import IBBroker

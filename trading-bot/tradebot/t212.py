@@ -1,17 +1,21 @@
-"""Trading 212 adapter (public API v0).
+"""Trading 212 adapter (public API v0, current spec).
 
-Docs: https://t212public-api-docs.redoc.ly/  Create the key in the app under
-Settings -> API (Beta) with the *orders execute* scope. Create it while the
-app is in **Practice** mode to get a practice key (base URL demo.trading212.com);
-that is the paper-trading equivalent.
+Docs: https://docs.trading212.com/api  Create the key in the app under
+Settings -> API with the *orders execute* scope. You get an **API key** and an
+**API secret**; both are needed (HTTP Basic auth). Create them while the app
+is in **Practice** mode to get practice credentials (demo.trading212.com),
+which is the paper-trading equivalent.
 
 What differs from a classic broker API and how this adapter copes:
 
-* **No market data.** Bars/quotes come from a ``DataProvider`` (see marketdata.py).
-* **No bracket orders, no order modification.** The bot places a market buy,
-  waits for the fill, then places a separate GTC stop. "Modifying" a stop is
-  cancel + re-place. Partials cancel the stop, sell, and re-place it for the
-  remainder (a pending sell blocks selling the same shares twice).
+* **No market data.** Bars/quotes come from a ``DataProvider`` (marketdata.py).
+* **No bracket orders, no order modification.** Entry is a market buy; the
+  protective stop is managed separately.
+* **Live accounts accept market orders only** (per the API docs), so on live a
+  broker-side stop is impossible. ``T212_STOP_MODE=software`` (the default,
+  on practice too so behaviour matches) keeps the stop in the bot: every poll
+  compares the last price with the stop and fires a market sell when crossed.
+  ``T212_STOP_MODE=broker`` places real GTC stop orders (practice only).
 * **Long only.** Invest/ISA accounts cannot short.
 * **Rate limits per endpoint.** A client-side throttle plus 429 back-off.
 * Sells are expressed as a **negative quantity**.
@@ -19,6 +23,7 @@ What differs from a classic broker API and how this adapter copes:
 
 from __future__ import annotations
 
+import base64
 import json
 import logging
 import time as _time
@@ -38,10 +43,17 @@ log = logging.getLogger("tradebot.t212")
 
 BASES = {"demo": "https://demo.trading212.com", "live": "https://live.trading212.com"}
 
-# seconds between calls, per endpoint family (conservative vs. documented limits)
+# seconds between calls per endpoint family; documented limits in comments
 THROTTLE = {
-    "cash": 2.0, "info": 30.0, "portfolio": 5.0, "position": 1.0, "instruments": 50.0,
-    "orders": 5.0, "order": 1.0, "cancel": 1.0, "place": 2.0, "history": 10.0,
+    "summary": 5.0,      # 1 req / 5s
+    "positions": 1.0,    # 1 req / 1s
+    "instruments": 50.0,  # 1 req / 50s
+    "orders": 5.0,       # 1 req / 5s
+    "order": 1.0,        # 1 req / 1s
+    "cancel": 1.3,       # 50 req / min
+    "market": 1.3,       # 50 req / min
+    "stop": 2.0,         # 1 req / 2s
+    "history": 10.0,     # 6 req / min
 }
 
 PENDING = {"LOCAL", "UNCONFIRMED", "CONFIRMED", "NEW", "PARTIALLY_FILLED", "REPLACING"}
@@ -67,14 +79,23 @@ def _urllib_transport(method: str, url: str, headers: dict, body: bytes | None) 
                         "Check your internet connection / VPN / firewall.") from exc
 
 
+def auth_header(api_key: str, api_secret: str) -> str:
+    """Basic base64(key:secret); legacy raw key if no secret was given."""
+    if not api_secret:
+        return api_key
+    token = base64.b64encode(f"{api_key}:{api_secret}".encode()).decode()
+    return f"Basic {token}"
+
+
 class T212Client:
-    def __init__(self, api_key: str, env: str = "demo", transport: Transport | None = None,
-                 sleep: Callable[[float], None] = _time.sleep):
+    def __init__(self, api_key: str, api_secret: str = "", env: str = "demo",
+                 transport: Transport | None = None, sleep: Callable[[float], None] = _time.sleep):
         if env not in BASES:
             raise T212Error(f"T212_ENV must be demo or live, got {env!r}")
         self.base = BASES[env]
         self.env = env
-        self.key = api_key
+        self._auth = auth_header(api_key, api_secret)
+        self.has_secret = bool(api_secret)
         self._t = transport or _urllib_transport
         self._sleep = sleep
         self._last: dict[str, float] = {}
@@ -93,7 +114,7 @@ class T212Client:
         url = self.base + path
         if params:
             url += "?" + urllib.parse.urlencode({k: v for k, v in params.items() if v is not None})
-        headers = {"Authorization": self.key, "Accept": "application/json"}
+        headers = {"Authorization": self._auth, "Accept": "application/json"}
         data = None
         if body is not None:
             headers["Content-Type"] = "application/json"
@@ -108,8 +129,11 @@ class T212Client:
                 continue
             text = raw.decode(errors="replace") if raw else ""
             if status == 401:
-                raise T212Error("Trading 212 rejected the API key (401). Check T212_API_KEY and that "
-                                f"it was created in {'Practice' if self.env == 'demo' else 'Live'} mode.")
+                hint = ("Both T212_API_KEY and T212_API_SECRET are required (HTTP Basic auth)."
+                        if not self.has_secret else
+                        "Check T212_API_KEY / T212_API_SECRET and that they were created in "
+                        f"{'Practice' if self.env == 'demo' else 'Live'} mode.")
+                raise T212Error(f"Trading 212 rejected the credentials (401). {hint}")
             if status == 403:
                 raise T212Error("Trading 212 refused (403): the key lacks a required scope. "
                                 "Re-create it with account, portfolio, orders read AND orders execute.")
@@ -121,17 +145,12 @@ class T212Client:
         raise T212Error(f"Trading 212 {path}: still rate limited after {retries} retries")
 
     # -- endpoints ---------------------------------------------------------------
-    def cash(self) -> dict:
-        return self.request("GET", "/api/v0/equity/account/cash", "cash")
+    def summary(self) -> dict:
+        return self.request("GET", "/api/v0/equity/account/summary", "summary") or {}
 
-    def info(self) -> dict:
-        return self.request("GET", "/api/v0/equity/account/info", "info")
-
-    def portfolio(self) -> list[dict]:
-        return self.request("GET", "/api/v0/equity/portfolio", "portfolio") or []
-
-    def position(self, ticker: str) -> dict | None:
-        return self.request("GET", f"/api/v0/equity/portfolio/{ticker}", "position")
+    def positions(self, ticker: str | None = None) -> list[dict]:
+        return self.request("GET", "/api/v0/equity/positions", "positions",
+                            params={"ticker": ticker} if ticker else None) or []
 
     def instruments(self) -> list[dict]:
         return self.request("GET", "/api/v0/equity/metadata/instruments", "instruments") or []
@@ -146,12 +165,12 @@ class T212Client:
         self.request("DELETE", f"/api/v0/equity/orders/{order_id}", "cancel")
 
     def market_order(self, ticker: str, quantity: float) -> dict:
-        return self.request("POST", "/api/v0/equity/orders/market", "place",
+        return self.request("POST", "/api/v0/equity/orders/market", "market",
                             body={"ticker": ticker, "quantity": quantity, "extendedHours": False})
 
     def stop_order(self, ticker: str, quantity: float, stop_price: float,
                    validity: str = "GOOD_TILL_CANCEL") -> dict:
-        return self.request("POST", "/api/v0/equity/orders/stop", "place",
+        return self.request("POST", "/api/v0/equity/orders/stop", "stop",
                             body={"ticker": ticker, "quantity": quantity,
                                   "stopPrice": round(stop_price, 2), "timeValidity": validity})
 
@@ -166,7 +185,16 @@ class Instrument:
     symbol: str
     ticker: str
     currency: str
-    min_qty: float
+
+
+def _ticker_of(obj: dict) -> str:
+    inst = obj.get("instrument") or {}
+    return obj.get("ticker") or inst.get("ticker") or ""
+
+
+def _qty(v) -> int | float:
+    q = abs(float(v or 0))
+    return int(q) if q == int(q) else q
 
 
 @dataclass
@@ -181,11 +209,21 @@ class T212Broker:
     _instruments: dict[str, Instrument] = field(default_factory=dict)
     _by_ticker: dict[str, str] = field(default_factory=dict)
     _stops: dict[str, OrderRef] = field(default_factory=dict)  # symbol -> working stop
+    _virtual_seq: int = 0
     _connected: bool = False
 
     def __post_init__(self) -> None:
         if self.client is None:
-            self.client = T212Client(self.settings.t212_api_key, self.settings.t212_env)
+            self.client = T212Client(self.settings.t212_api_key, self.settings.t212_api_secret,
+                                     self.settings.t212_env)
+
+    @property
+    def software_stops(self) -> bool:
+        mode = self.settings.t212_stop_mode
+        if mode == "broker" and self.settings.t212_env == "live":
+            log.warning("T212_STOP_MODE=broker is not supported on live (market orders only); using software")
+            return True
+        return mode != "broker"
 
     # -- connection ----------------------------------------------------------------
     def connect(self) -> None:
@@ -193,15 +231,18 @@ class T212Broker:
         s.validate()
         if not s.t212_api_key:
             raise T212Error("T212_API_KEY is not set")
-        info = self.client.info()
-        self.account_currency = str(info.get("currencyCode", "USD"))
-        self.account_id = str(info.get("id", ""))
+        if not s.t212_api_secret:
+            raise T212Error("T212_API_SECRET is not set (Trading 212 keys come as a key + secret pair)")
+        summary = self.client.summary()
+        self.account_currency = str(summary.get("currency", "USD"))
+        self.account_id = str(summary.get("id", ""))
         self._load_instruments()
-        cash = self.client.cash()
         self._connected = True
-        log.info("Trading 212 %s account %s (%s): total %.2f, free %.2f, %d instruments",
+        cash = summary.get("cash") or {}
+        log.info("Trading 212 %s account %s (%s): total %.2f, available %.2f, %d instruments, stops=%s",
                  s.t212_env.upper(), self.account_id, self.account_currency,
-                 float(cash.get("total", 0)), float(cash.get("free", 0)), len(self._instruments))
+                 float(summary.get("totalValue", 0)), float(cash.get("availableToTrade", 0)),
+                 len(self._instruments), "software" if self.software_stops else "broker")
 
     def _load_instruments(self) -> None:
         cache = Path(self.settings.data_dir) / "t212_instruments.json"
@@ -221,8 +262,7 @@ class T212Broker:
             # prefer the US listing when a symbol exists on several exchanges
             if sym in self._instruments and not ticker.endswith("_US_EQ"):
                 continue
-            self._instruments[sym] = Instrument(sym, ticker, it.get("currencyCode", "USD"),
-                                                float(it.get("minTradeQuantity", 1)))
+            self._instruments[sym] = Instrument(sym, ticker, it.get("currencyCode", "USD"))
         self._by_ticker = {i.ticker: i.symbol for i in self._instruments.values()}
 
     def instrument(self, symbol: str) -> Instrument:
@@ -230,6 +270,9 @@ class T212Broker:
             return self._instruments[symbol]
         except KeyError:
             raise T212Error(f"{symbol} is not tradable on this Trading 212 account") from None
+
+    def _symbol_of(self, ticker: str) -> str:
+        return self._by_ticker.get(ticker, ticker.split("_")[0])
 
     def disconnect(self) -> None:
         self._connected = False
@@ -243,19 +286,23 @@ class T212Broker:
     # -- account -------------------------------------------------------------------
     def net_liquidation(self) -> float:
         """Account value in ``TRADING_CURRENCY`` (the currency the universe trades in)."""
-        cash = self.client.cash()
-        total = float(cash.get("total", 0.0))
+        total = float(self.client.summary().get("totalValue", 0.0))
         return total * self.data.fx_rate(self.account_currency, self.settings.trading_currency)
 
     def positions(self) -> list[PositionInfo]:
         out = []
-        for p in self.client.portfolio():
-            sym = self._by_ticker.get(p.get("ticker", ""), p.get("ticker", "").split("_")[0])
-            qty = float(p.get("quantity", 0))
+        for p in self.client.positions():
+            qty = _qty(p.get("quantity"))
             if qty:
-                out.append(PositionInfo(sym, int(qty) if qty == int(qty) else qty,  # type: ignore[arg-type]
-                                        float(p.get("averagePrice", 0))))
+                out.append(PositionInfo(self._symbol_of(_ticker_of(p)), qty,  # type: ignore[arg-type]
+                                        float(p.get("averagePricePaid") or 0)))
         return out
+
+    def _position_qty(self, ticker: str) -> int | float:
+        for p in self.client.positions(ticker):
+            if _ticker_of(p) == ticker:
+                return _qty(p.get("quantity"))
+        return 0
 
     # -- market data (delegated) -----------------------------------------------------
     def daily_bars(self, symbol: str, days: int = 60) -> list[Bar]:
@@ -278,32 +325,81 @@ class T212Broker:
 
     def _ref_from_order(self, o: dict, kind: str, symbol: str) -> OrderRef:
         return OrderRef(order_id=int(o["id"]), perm_id=int(o["id"]), symbol=symbol, kind=kind,
-                        qty=abs(int(round(float(o.get("quantity") or 0)))),
+                        qty=int(round(_qty(o.get("quantity")))),
                         price=float(o.get("stopPrice") or o.get("limitPrice") or 0),
                         status=self._status(o.get("status")),
-                        filled=abs(int(round(float(o.get("filledQuantity") or 0)))), raw=o)
+                        filled=int(round(_qty(o.get("filledQuantity")))), raw=o)
 
-    def _fill_price(self, ref: OrderRef) -> float:
-        """Average fill from order history (falls back to position avg / last)."""
+    def _history_fill(self, ref: OrderRef) -> tuple[float | None, int, str | None]:
+        """(avg fill price, filled qty, status) for an order from history, else (None, 0, None)."""
         ticker = self.instrument(ref.symbol).ticker
         for h in self.client.order_history(ticker, 20):
-            if int(h.get("id", -1)) == ref.order_id and h.get("fillPrice"):
-                return float(h["fillPrice"])
-        pos = self.client.position(ticker)
-        if pos and pos.get("averagePrice") and ref.kind == "ENTRY":
-            return float(pos["averagePrice"])
+            o = h.get("order") or {}
+            if int(o.get("id", -1)) != ref.order_id:
+                continue
+            fill = h.get("fill") or {}
+            price = fill.get("price")
+            qty = int(round(_qty(fill.get("quantity") or o.get("filledQuantity") or 0)))
+            return (float(price) if price else None), qty, o.get("status")
+        return None, 0, None
+
+    def _fill_price(self, ref: OrderRef) -> float:
+        price, _, _ = self._history_fill(ref)
+        if price:
+            return price
+        if ref.kind == "ENTRY":
+            for p in self.client.positions(self.instrument(ref.symbol).ticker):
+                if p.get("averagePricePaid"):
+                    return float(p["averagePricePaid"])
         return self.last_price(ref.symbol) or ref.price
+
+    def _is_virtual(self, ref: OrderRef) -> bool:
+        return ref.order_id < 0
+
+    def _new_virtual_stop(self, symbol: str, qty: int, stop: float) -> OrderRef:
+        self._virtual_seq -= 1
+        ref = OrderRef(order_id=self._virtual_seq, perm_id=self._virtual_seq, symbol=symbol, kind="STOP",
+                       qty=qty, price=round(stop, 2), status="Submitted")
+        self._stops[symbol] = ref
+        log.info("software stop %s x%d @ %.2f", symbol, qty, stop)
+        return ref
+
+    def _check_virtual_stop(self, ref: OrderRef) -> OrderRef:
+        """Fire the software stop if the last price is at or through it."""
+        if ref.status != "Submitted":
+            return ref
+        px = self.last_price(ref.symbol)
+        if px is None or px > ref.price:
+            return ref
+        log.warning("%s software stop hit: last %.2f <= stop %.2f; selling %d", ref.symbol, px, ref.price, ref.qty)
+        try:
+            fill = self._market_sell(ref.symbol, ref.qty)
+        except T212Error as exc:
+            log.error("%s: software stop sell failed: %s (will retry next poll)", ref.symbol, exc)
+            return ref
+        ref.status, ref.filled, ref.avg_fill = "Filled", fill.filled or ref.qty, fill.avg_fill or px
+        self._stops.pop(ref.symbol, None)
+        return ref
+
+    def _market_sell(self, symbol: str, qty: int) -> OrderRef:
+        inst = self.instrument(symbol)
+        o = self.client.market_order(inst.ticker, -qty)
+        ref = self._ref_from_order(o, "CLOSE", symbol)
+        ref.qty = qty
+        return self.wait_fill(ref, timeout=60)
 
     def wait_fill(self, ref: OrderRef, timeout: float = 45) -> OrderRef:
         deadline = _time.time() + timeout
         while True:
             o = self.client.order(ref.order_id)
-            if o is None or o.get("status") in DONE:  # gone from pending = executed
+            if o is None or o.get("status") in DONE:  # gone from pending = executed (or cancelled)
+                price, qty, status = self._history_fill(ref)
+                if o is None and status in DEAD:
+                    ref.status = "Cancelled"
+                    return ref
                 ref.status = "Filled"
-                ref.filled = ref.filled or ref.qty
-                if o is not None:
-                    ref.filled = abs(int(round(float(o.get("filledQuantity") or ref.qty)))) or ref.qty
-                ref.avg_fill = self._fill_price(ref)
+                ref.filled = qty or (int(round(_qty(o.get("filledQuantity")))) if o else 0) or ref.qty
+                ref.avg_fill = price or self._fill_price(ref)
                 return ref
             if o.get("status") in DEAD:
                 ref.status = "Cancelled"
@@ -313,25 +409,27 @@ class T212Broker:
             _time.sleep(1.0)
 
     def refresh(self, ref: OrderRef) -> OrderRef:
+        if self._is_virtual(ref):
+            return self._check_virtual_stop(ref)
         o = self.client.order(ref.order_id)
         if o is not None:
             new = self._ref_from_order(o, ref.kind, ref.symbol)
             ref.status, ref.filled, ref.qty, ref.price = new.status, new.filled, new.qty, new.price
             return ref
-        # not pending any more: filled or cancelled - order history knows which
-        ticker = self.instrument(ref.symbol).ticker
-        for h in self.client.order_history(ticker, 20):
-            if int(h.get("id", -1)) == ref.order_id:
-                st = h.get("status")
-                ref.status = "Filled" if h.get("fillPrice") or st in DONE else self._status(st)
-                if ref.status == "Filled":
-                    ref.filled = abs(int(round(float(h.get("filledQuantity") or ref.qty)))) or ref.qty
-                    ref.avg_fill = float(h.get("fillPrice") or ref.avg_fill or ref.price)
-                return ref
-        ref.status = "Cancelled"
+        price, qty, status = self._history_fill(ref)
+        if status is None:
+            ref.status = "Cancelled"
+        elif price or status in DONE:
+            ref.status, ref.filled, ref.avg_fill = "Filled", qty or ref.qty, price or ref.avg_fill or ref.price
+            if self._stops.get(ref.symbol) is ref:
+                self._stops.pop(ref.symbol, None)
+        else:
+            ref.status = self._status(status)
         return ref
 
     def _place_stop_retry(self, symbol: str, qty: int, stop: float) -> OrderRef:
+        if self.software_stops:
+            return self._new_virtual_stop(symbol, qty, stop)
         inst = self.instrument(symbol)
         last: Exception | None = None
         for attempt in range(3):
@@ -365,20 +463,25 @@ class T212Broker:
         entry = self.wait_fill(entry, timeout=45)
         if entry.status != "Filled" or entry.filled <= 0:
             self.cancel(entry)
-            return entry, OrderRef(order_id=-1, symbol=symbol, kind="STOP", status="Cancelled")
+            return entry, OrderRef(order_id=-10**9, symbol=symbol, kind="STOP", status="Cancelled")
         try:
             stop_ref = self._place_stop_retry(symbol, entry.filled, stop)
         except T212Error:
             log.error("%s: stop rejected; closing the naked position immediately", symbol)
             self.client.market_order(inst.ticker, -entry.filled)
             raise
-        log.info("T212 stop %s x%d @ %.2f (order %s)", symbol, entry.filled, stop, stop_ref.order_id)
+        log.info("T212 stop %s x%d @ %.2f (%s)", symbol, entry.filled, stop,
+                 "software" if self._is_virtual(stop_ref) else f"order {stop_ref.order_id}")
         return entry, stop_ref
 
     def modify_stop(self, ref: OrderRef, price: float | None = None, qty: int | None = None) -> OrderRef:
         new_price = round(price, 2) if price is not None else ref.price
         new_qty = qty if qty is not None else ref.qty
         if new_price == ref.price and new_qty == ref.qty and ref.status == "Submitted":
+            return ref
+        if self._is_virtual(ref):
+            ref.price, ref.qty = new_price, new_qty
+            self._stops[ref.symbol] = ref
             return ref
         self.cancel(ref)
         new = self._place_stop_retry(ref.symbol, new_qty, new_price)
@@ -387,12 +490,13 @@ class T212Broker:
         return ref
 
     def cancel(self, ref: OrderRef) -> None:
-        if ref.order_id is None or ref.order_id < 0 or ref.status != "Submitted":
+        if ref.status != "Submitted":
             return
-        try:
-            self.client.cancel(ref.order_id)
-        except T212Error as exc:
-            log.warning("cancel %s: %s", ref.order_id, exc)
+        if not self._is_virtual(ref):
+            try:
+                self.client.cancel(ref.order_id)
+            except T212Error as exc:
+                log.warning("cancel %s: %s", ref.order_id, exc)
         ref.status = "Cancelled"
         if self._stops.get(ref.symbol) is ref:
             self._stops.pop(ref.symbol, None)
@@ -401,28 +505,31 @@ class T212Broker:
         inst = self.instrument(symbol)
         stop = self._stops.get(symbol)
         stop_price = stop.price if stop else None
-        if stop is not None and stop.status == "Submitted":
+        broker_stop = stop is not None and not self._is_virtual(stop) and stop.status == "Submitted"
+        if broker_stop:
             self.cancel(stop)  # free the shares held by the pending sell stop
-        o = self.client.market_order(inst.ticker, -qty)
-        ref = self._ref_from_order(o, "CLOSE", symbol)
-        ref.qty = qty
-        ref = self.wait_fill(ref, timeout=60)
-        remaining = 0
-        pos = self.client.position(inst.ticker)
-        if pos:
-            remaining = int(round(float(pos.get("quantity") or 0)))
-        if stop is not None and remaining > 0 and stop_price:
-            new = self._place_stop_retry(symbol, remaining, stop_price)
-            stop.order_id, stop.perm_id, stop.qty, stop.status = new.order_id, new.perm_id, remaining, "Submitted"
-            self._stops[symbol] = stop
+        ref = self._market_sell(symbol, qty)
+        remaining = int(round(self._position_qty(inst.ticker)))
+        if stop is not None and stop_price:
+            if remaining > 0:
+                if broker_stop:
+                    new = self._place_stop_retry(symbol, remaining, stop_price)
+                    stop.order_id, stop.perm_id = new.order_id, new.perm_id
+                stop.qty, stop.status = remaining, "Submitted"
+                self._stops[symbol] = stop
+            else:
+                stop.status = "Cancelled"
+                self._stops.pop(symbol, None)
         return ref
 
     def find_order(self, order_id: int, perm_id: int) -> OrderRef | None:
+        if order_id < 0:  # software stops don't survive a restart; caller re-places
+            return None
         o = self.client.order(order_id)
         if o is None or o.get("status") not in PENDING:
             return None
-        symbol = self._by_ticker.get(o.get("ticker", ""), o.get("ticker", "").split("_")[0])
-        kind = "STOP" if o.get("type", "").upper().startswith("STOP") else "ENTRY"
+        symbol = self._symbol_of(_ticker_of(o))
+        kind = "STOP" if str(o.get("type", "")).upper().startswith("STOP") else "ENTRY"
         ref = self._ref_from_order(o, kind, symbol)
         if kind == "STOP":
             self._stops[symbol] = ref

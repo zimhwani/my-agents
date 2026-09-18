@@ -25,6 +25,9 @@ can lose money.
 - Any new broker call goes through the `Broker` protocol in `tradebot/broker.py`
   and gets a `SimBroker` implementation too; new price sources implement
   `DataProvider` in `tradebot/marketdata.py`.
+- Remember Trading 212's live API accepts market orders only: the software
+  stop in `t212.py` is the only protection on live, so never weaken
+  `_check_virtual_stop` or the per-poll stop check in `execution.py`.
 - Respect Trading 212 rate limits: go through `T212Client.request` (throttled,
   429-aware); never call the REST API directly from the loop.
 
