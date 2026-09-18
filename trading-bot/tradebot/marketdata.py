@@ -82,10 +82,12 @@ class YFinanceData:
         return val
 
     def daily_bars(self, symbol: str, days: int = 60) -> list[Bar]:
+        period = "2y" if days <= 480 else "5y"
+
         def fetch():
-            df = self._yf.Ticker(symbol).history(period="2y", interval="1d", auto_adjust=False)
+            df = self._yf.Ticker(symbol).history(period=period, interval="1d", auto_adjust=False)
             return frame_to_bars(df, daily=True)
-        bars = self._cached(("d", symbol), 3600, fetch)
+        bars = self._cached(("d", symbol, period), 3600, fetch)
         # drop today's still-forming daily bar; callers treat daily bars as closed sessions
         today = clock.now_et().date()
         return [b for b in bars if b.time.date() < today][-days:]

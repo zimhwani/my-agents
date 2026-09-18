@@ -208,7 +208,7 @@ def cmd_fetch_data(args) -> None:
     b = _broker(s)
     out = Path(args.out)
     symbols = args.symbols or s.universe
-    if args.skip_existing:
+    if args.skip_existing and not args.daily_only:
         before = len(symbols)
         symbols = [x for x in symbols if not ((out / f"{x}_5min.csv").exists() and (out / f"{x}_1d.csv").exists())]
         print(f"Skipping {before - len(symbols)} symbols already in {out}")
@@ -216,12 +216,18 @@ def cmd_fetch_data(args) -> None:
     print(f"Fetching {args.days} days of 5-min bars (+ premarket) and 2y daily for {len(symbols)} symbols "
           f"-> {out} ({workers} parallel)")
 
+    # daily history must reach 200+ sessions before the first intraday day (SMA filter)
+    daily_days = int(args.days * 0.7) + 260
+
     def one(sym: str) -> str:
+        daily = b.daily_bars(sym, daily_days)
+        if args.daily_only:
+            save_csv(daily, out / f"{sym}_1d.csv")
+            return f"{sym}: {len(daily)} daily"
         if s.broker == "ib":
             bars = fetch_history(b, sym, args.days, 5)
         else:  # data provider (Yahoo allows ~60 days of 5-minute bars; Alpaca years)
             bars = b.intraday_bars(sym, 5, args.days, include_premarket=True)
-        daily = b.daily_bars(sym, 520)
         if not bars:
             return f"{sym}: no intraday data, skipped"
         save_csv(bars, out / f"{sym}_5min.csv")
@@ -401,6 +407,7 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--symbols", nargs="*")
     p.add_argument("--out", default="data/bars")
     p.add_argument("--skip-existing", action="store_true", help="don't re-download symbols already saved")
+    p.add_argument("--daily-only", action="store_true", help="only (re)download the daily files (fast)")
     p.add_argument("--workers", type=int, help="parallel downloads (default 4 for Alpaca, 1 for Yahoo)")
     p = sub.add_parser("backtest", help="run the strategy over CSV history (or --demo synthetic data)")
     p.add_argument("--data", default="data/bars")
