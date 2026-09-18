@@ -39,6 +39,7 @@ can lose money.
 | `config.py` | env settings + safety validation |
 | `clock.py` | ET market hours, holidays |
 | `marketdata.py` | `DataProvider` protocol, Yahoo Finance implementation |
+| `alpaca.py` | Alpaca Market Data implementation (long 5-minute history) |
 | `t212.py` | Trading 212 REST client + `Broker` implementation |
 | `broker.py` | `Broker` protocol, IB implementation, in-memory `SimBroker` |
 | `universe.py` | pre-market scan -> watchlist |

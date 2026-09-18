@@ -90,6 +90,9 @@ class Settings:
     t212_env: str = "demo"  # demo = Practice account, live = real money
     t212_stop_mode: str = "software"  # software (works on live) | broker (practice only)
     data_provider: str = "yfinance"
+    alpaca_api_key: str = ""
+    alpaca_api_secret: str = ""
+    alpaca_feed: str = "iex"
     # interactive brokers
     ib_host: str = "127.0.0.1"
     ib_port: int = 7497
@@ -168,6 +171,8 @@ class Settings:
                 raise UnsafeConfig("ALLOW_SHORTS is not possible on Trading 212 (long-only). Set it to false.")
             if self.t212_stop_mode not in ("software", "broker"):
                 raise UnsafeConfig("T212_STOP_MODE must be 'software' or 'broker'.")
+        if self.data_provider not in ("yfinance", "alpaca"):
+            raise UnsafeConfig("DATA_PROVIDER must be 'yfinance' or 'alpaca'.")
         elif self.ib_port not in PAPER_PORTS:
             if self.live_ack != LIVE_ACK:
                 raise UnsafeConfig(
@@ -199,6 +204,9 @@ class Settings:
             t212_env=_env("T212_ENV", "demo").lower(),
             t212_stop_mode=_env("T212_STOP_MODE", "software").lower(),
             data_provider=_env("DATA_PROVIDER", "yfinance").lower(),
+            alpaca_api_key=_env("ALPACA_API_KEY"),
+            alpaca_api_secret=_env("ALPACA_API_SECRET"),
+            alpaca_feed=_env("ALPACA_FEED", "iex").lower(),
             ib_host=_env("IB_HOST", "127.0.0.1"),
             ib_port=_int("IB_PORT", 7497),
             ib_client_id=_int("IB_CLIENT_ID", 7),

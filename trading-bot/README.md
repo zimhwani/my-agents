@@ -38,8 +38,9 @@ account.
 4. Trading 212 specifics the bot already handles (so you know why it behaves as
    it does):
    - **No price feed in the API** → bars and quotes come from Yahoo Finance
-     (`yfinance`) by default. Swap in another source by implementing
-     `DataProvider` in `tradebot/marketdata.py`.
+     (`yfinance`) by default, or from **Alpaca** (`DATA_PROVIDER=alpaca`, free
+     plan, years of 5-minute history, see below). Swap in another source by
+     implementing `DataProvider` in `tradebot/marketdata.py`.
    - **No bracket orders, no order editing**, and the **live API accepts market
      orders only**. So the protective stop lives in the bot
      (`T212_STOP_MODE=software`, the default): each poll compares the last
@@ -133,6 +134,18 @@ Add a filter to Trend Join Long: skip entries where the stop is more than 6%
 below the entry. Implement it in tradebot/tjl.py behind a new rules.json key,
 add a test in tests/test_tjl.py, and backtest it.
 ```
+
+**Longer history with Alpaca.** Yahoo only keeps ~60 days of 5-minute bars,
+which is too little to judge a selective strategy. Alpaca's free plan serves
+years of 5-minute bars from the IEX feed (plus real-time IEX quotes):
+
+1. Create a free account at https://alpaca.markets, open the paper-trading
+   dashboard and generate API keys (they are used for data only; the bot never
+   sends Alpaca an order).
+2. In `.env`: `DATA_PROVIDER=alpaca`, `ALPACA_API_KEY=...`, `ALPACA_API_SECRET=...`.
+3. `python -m tradebot fetch-data --days 400` then `python -m tradebot backtest`.
+
+Alpaca has no FX rates or market caps, so the bot still uses Yahoo for those.
 
 Get history and backtest (the backtester runs the *same* strategy, exit and
 execution code as live, against an in-memory broker):

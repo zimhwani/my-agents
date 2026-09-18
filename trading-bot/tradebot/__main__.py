@@ -50,6 +50,13 @@ def _notifier(s: Settings) -> Notifier:
 
 
 def _data(s: Settings):
+    if s.data_provider == "alpaca":
+        from .alpaca import AlpacaData, AlpacaError
+        try:
+            return AlpacaData(s.alpaca_api_key, s.alpaca_api_secret, s.alpaca_feed, universe=s.universe)
+        except AlpacaError as exc:
+            print(f"Alpaca: {exc}")
+            sys.exit(2)
     if s.data_provider == "yfinance":
         from .marketdata import YFinanceData
         return YFinanceData()
@@ -206,7 +213,7 @@ def cmd_fetch_data(args) -> None:
             try:
                 if s.broker == "ib":
                     bars = fetch_history(b, sym, args.days, 5)
-                else:  # data provider (Yahoo allows up to ~60 days of 5-minute bars)
+                else:  # data provider (Yahoo allows ~60 days of 5-minute bars; Alpaca years)
                     bars = b.intraday_bars(sym, 5, args.days, include_premarket=True)
                 daily = b.daily_bars(sym, 520)
             except Exception as exc:
@@ -335,7 +342,7 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--resume", action="store_true", help="remove the kill switch")
     sub.add_parser("telegram-test", help="send a test message")
     p = sub.add_parser("fetch-data", help="download 5-min history from IB to CSV for backtests")
-    p.add_argument("--days", type=int, default=30)
+    p.add_argument("--days", type=int, default=55, help="calendar days of 5-min bars (Yahoo max ~59, Alpaca 730+)")
     p.add_argument("--symbols", nargs="*")
     p.add_argument("--out", default="data/bars")
     p = sub.add_parser("backtest", help="run the strategy over CSV history (or --demo synthetic data)")
