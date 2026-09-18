@@ -5,6 +5,10 @@
   /* ---- Owner settings ------------------------------------------------ */
   // Airbnb listing for Pamusha Lake House.
   var AIRBNB_URL = "https://www.airbnb.com.au/rooms/641000176994899769";
+  // Direct booking (future): set this to your booking page or Stripe Checkout URL and every
+  // primary "Book" button switches to it, with Airbnb kept as the secondary option.
+  // See docs/direct-booking-plan.md for the Stripe + availability design.
+  var DIRECT_BOOKING_URL = "";
   // TODO(owner): free key from web3forms.com (enquiry form). Leave blank to fall back to a mailto: link.
   var WEB3FORMS_KEY = "";
   var ENQUIRY_EMAIL = ""; // TODO(owner): your email, used as a mailto: fallback when WEB3FORMS_KEY is blank
@@ -12,6 +16,14 @@
   var reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
   /* ---- Airbnb links ---------------------------------------------------- */
+  if (DIRECT_BOOKING_URL) {
+    document.querySelectorAll('[data-cta="airbnb"]').forEach(function (a) {
+      if (a.hasAttribute("data-keep-airbnb")) return;
+      a.setAttribute("data-cta", "direct");
+      a.setAttribute("href", DIRECT_BOOKING_URL);
+      if (/book on airbnb/i.test(a.textContent)) a.textContent = "Check availability";
+    });
+  }
   document.querySelectorAll('[data-cta="airbnb"]').forEach(function (a) {
     var u = AIRBNB_URL + (AIRBNB_URL.indexOf("?") > -1 ? "&" : "?") + "utm_source=pamusha-site&utm_medium=web&utm_campaign=direct";
     a.setAttribute("href", u);
