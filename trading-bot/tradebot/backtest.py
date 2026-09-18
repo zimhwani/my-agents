@@ -78,9 +78,20 @@ class Backtester:
                     continue
                 by_day.setdefault(d, {}).setdefault(sym, []).append(b)
         start_equity = self.sim.net_liquidation()
+        day_ok = getattr(self.strategy, "day_ok", None)
         for d in sorted(by_day):
             day = DayStats(start_equity=self.sim.net_liquidation())
             symbols_today = by_day[d]
+            # once-per-day prefilter (e.g. gap + SMA for Trend Join Long)
+            eligible = set(symbols_today)
+            if day_ok is not None:
+                self.sim.now = clock.session_open(d)
+                eligible = set()
+                for sym, bars in symbols_today.items():
+                    first = next((b for b in sorted(bars, key=lambda b: b.time)
+                                  if clock.MARKET_OPEN <= b.time.time() < clock.MARKET_CLOSE), None)
+                    if first is not None and day_ok(first.open, self.sim.daily_bars(sym, 260)):
+                        eligible.add(sym)
             slots = sorted({b.time for bars in symbols_today.values() for b in bars})
             for slot in slots:
                 now = slot + width
@@ -114,7 +125,7 @@ class Backtester:
                 held = {t.symbol for t in self.exec.open_trades} | \
                        {t.symbol for t in self.exec.closed_today if t.entry_time.date() == d}
                 for sym in sorted(bar_at):
-                    if sym in held or len(self.exec.open_trades) >= self.s.max_positions:
+                    if sym in held or sym not in eligible or len(self.exec.open_trades) >= self.s.max_positions:
                         continue
                     sig = self.strategy.evaluate(
                         sym, self.sim.intraday_bars(sym, self.bar_minutes, self.loaded.intraday_days,

@@ -8,6 +8,7 @@ so the pipeline can be exercised end to end with no broker attached.
 
 from __future__ import annotations
 
+import bisect
 import logging
 import math
 import time as _time
@@ -318,22 +319,33 @@ class SimBroker:
     def positions(self) -> list[PositionInfo]:
         return [p for p in self._positions.values() if p.qty != 0]
 
+    _keys: dict = field(default_factory=dict)  # (kind, symbol) -> (bars, [times]) sorted
+
+    def _sorted(self, kind: str, symbol: str) -> tuple[list[Bar], list[datetime]]:
+        key = (kind, symbol)
+        src = (self.daily if kind == "d" else self.intraday).get(symbol, [])
+        hit = self._keys.get(key)
+        if hit is None or hit[2] is not src or len(hit[0]) != len(src):
+            bars = sorted(src, key=lambda b: b.time)
+            hit = (bars, [b.time for b in bars], src)
+            self._keys[key] = hit
+        return hit[0], hit[1]
+
     def daily_bars(self, symbol: str, days: int = 60) -> list[Bar]:
-        bars = self.daily.get(symbol, [])
-        if self.now:
-            bars = [b for b in bars if b.time <= self.now]
-        return bars[-days:]
+        bars, times = self._sorted("d", symbol)
+        end = bisect.bisect_right(times, self.now) if self.now else len(bars)
+        return bars[max(0, end - days):end]
 
     def intraday_bars(self, symbol: str, bar_minutes: int = 5, days: int = 5,
                       include_premarket: bool = False) -> list[Bar]:
-        bars = self.intraday.get(symbol, [])
-        if self.now:
-            bars = [b for b in bars if b.time + timedelta(minutes=bar_minutes) <= self.now]
-        cutoff = (self.now or clock.now_et()) - timedelta(days=days + 2)
-        bars = [b for b in bars if b.time >= cutoff]
+        bars, times = self._sorted("i", symbol)
+        now = self.now or clock.now_et()
+        end = bisect.bisect_right(times, now - timedelta(minutes=bar_minutes))
+        start = bisect.bisect_left(times, now - timedelta(days=days + 2))
+        out = bars[start:end]
         if not include_premarket:
-            bars = [b for b in bars if clock.MARKET_OPEN <= b.time.time() < clock.MARKET_CLOSE]
-        return bars
+            out = [b for b in out if clock.MARKET_OPEN <= b.time.time() < clock.MARKET_CLOSE]
+        return out
 
     def last_price(self, symbol: str) -> float | None:
         return self.prices.get(symbol)

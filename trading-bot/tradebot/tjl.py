@@ -18,14 +18,14 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from datetime import datetime, time
+from datetime import datetime, time, timedelta
 from pathlib import Path
 
 from . import clock
 from .exits import ExitRules
 from .indicators import sma
 from .models import LONG, Bar, Signal
-from .strategy import LoadedStrategy, completed_bars, rth_bars, session_bars
+from .strategy import LoadedStrategy, rth_bars
 
 
 @dataclass
@@ -155,31 +155,49 @@ class TrendJoinLong:
         self.intraday_days = self.r.rvol_lookback_days + 4
         self.bar_minutes = 5
 
+    def day_ok(self, open_price: float, prior_daily: list[Bar]) -> bool:
+        """Cheap once-per-day check (gap + SMA); lets the backtester skip the rest."""
+        if not prior_daily:
+            return False
+        prior = prior_daily[-1]
+        if self.r.prior_close_above_sma200:
+            avg = sma([d.close for d in prior_daily], self.r.sma_days)
+            if avg is None or prior.close <= avg:
+                return False
+        gap = (open_price - prior.close) / prior.close * 100.0 if prior.close else 0.0
+        return gap >= self.r.min_gap_pct
+
     def evaluate(self, symbol: str, intraday: list[Bar], daily: list[Bar],
                  now: datetime) -> Signal | None:
         now = clock.to_et(now)
         r = self.r
         if not clock.in_window(now, self.window_start, self.window_end):
             return None
-        done = completed_bars(intraday, now, self.bar_minutes)
-        today_all = sorted((b for b in done if b.time.date() == now.date()), key=lambda b: b.time)
-        today = session_bars(done, now.date())
+        # today's completed bars, taken from the (ascending) tail without scanning history
+        width = timedelta(minutes=self.bar_minutes)
+        today_all: list[Bar] = []
+        for b in reversed(intraday):
+            if b.time.date() != now.date():
+                if b.time.date() < now.date():
+                    break
+                continue
+            if b.time + width <= now:
+                today_all.append(b)
+        today_all.reverse()
+        today = [b for b in today_all if clock.MARKET_OPEN <= b.time.time() < clock.MARKET_CLOSE]
         if len(today) < 2:
             return None
-        prior_daily = [d for d in daily if d.time.date() < now.date()]
+        prior_daily = daily if (daily and daily[-1].time.date() < now.date()) \
+            else [d for d in daily if d.time.date() < now.date()]
         if not prior_daily:
             return None
         prior = prior_daily[-1]
         last, earlier = today[-1], today[:-1]
 
-        # daily filters
-        if r.prior_close_above_sma200:
-            avg = sma([d.close for d in prior_daily], r.sma_days)
-            if avg is None or prior.close <= avg:
-                return None
-        gap = (today[0].open - prior.close) / prior.close * 100.0 if prior.close else 0.0
-        if gap < r.min_gap_pct:
+        # daily filters (cheap, checked first)
+        if not self.day_ok(today[0].open, prior_daily):
             return None
+        gap = (today[0].open - prior.close) / prior.close * 100.0
         if r.above_prior_day_high and last.close <= prior.high:
             return None
 
@@ -191,7 +209,9 @@ class TrendJoinLong:
         hod_before = max(b.high for b in earlier)
         if r.above_today_hod and last.close <= hod_before:
             return None
-        rvol = relative_volume(rth_bars(done), today, r.rvol_lookback_days, daily)
+        # only now pay for the volume profile over the lookback history
+        history = [b for b in intraday if b.time + width <= now]
+        rvol = relative_volume(rth_bars(history), today, r.rvol_lookback_days, daily)
         if rvol is None or rvol < r.rvol_min:
             return None
         if last.close < r.min_price_usd:
