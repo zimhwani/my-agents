@@ -50,6 +50,7 @@ can lose money.
 | `exits.py` | partial / breakeven / trail / target / time / EOD rules |
 | `loop.py` | the decision loop (`tick`) and real-time driver (`run`) |
 | `backtest.py` | same pipeline on historical bars via `SimBroker` |
+| `events.py` | whole-market gap events + 5-min range planning (`fetch-gappers`) |
 | `journal.py` | trade JSONL + R-multiple stats |
 | `telegram.py` | alerts |
 | `dashboard.py` | self-contained HTML dashboard |

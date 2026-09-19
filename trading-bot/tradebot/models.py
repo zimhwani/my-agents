@@ -12,7 +12,7 @@ LONG = "LONG"
 SHORT = "SHORT"
 
 
-@dataclass
+@dataclass(slots=True)
 class Bar:
     time: datetime  # bar START time, tz-aware ET
     open: float

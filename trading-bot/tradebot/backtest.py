@@ -92,14 +92,21 @@ class Backtester:
             symbols_today = by_day[d]
             # once-per-day prefilter (e.g. gap + SMA for Trend Join Long)
             eligible = set(symbols_today)
+            order = sorted(symbols_today)
             if day_ok is not None:
                 self.sim.now = clock.session_open(d)
-                eligible = set()
+                ranked: list[tuple[float, str]] = []
                 for sym, bars in symbols_today.items():
                     first = next((b for b in sorted(bars, key=lambda b: b.time)
                                   if clock.MARKET_OPEN <= b.time.time() < clock.MARKET_CLOSE), None)
-                    if first is not None and day_ok(first.open, self.sim.daily_bars(sym, 260)):
-                        eligible.add(sym)
+                    prior = self.sim.daily_bars(sym, 260)
+                    if first is not None and day_ok(first.open, prior):
+                        gap = (first.open - prior[-1].close) / prior[-1].close if prior and prior[-1].close else 0.0
+                        ranked.append((gap, sym))
+                # like the live gap scan: biggest gaps first, capped at the watchlist size
+                ranked.sort(key=lambda t: -t[0])
+                order = [sym for _, sym in ranked[: self.s.max_watchlist]]
+                eligible = set(order)
             slots = sorted({b.time for bars in symbols_today.values() for b in bars})
             for slot in slots:
                 now = slot + width
@@ -132,8 +139,9 @@ class Backtester:
                     continue
                 held = {t.symbol for t in self.exec.open_trades} | \
                        {t.symbol for t in self.exec.closed_today if t.entry_time.date() == d}
-                for sym in sorted(bar_at):
-                    if sym in held or sym not in eligible or len(self.exec.open_trades) >= self.s.max_positions:
+                for sym in order:
+                    if sym not in bar_at or sym in held or sym not in eligible \
+                            or len(self.exec.open_trades) >= self.s.max_positions:
                         continue
                     sig = self.strategy.evaluate(
                         sym, self.sim.intraday_bars(sym, self.bar_minutes, self.loaded.intraday_days,

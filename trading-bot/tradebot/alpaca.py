@@ -33,6 +33,7 @@ from .models import Bar
 log = logging.getLogger("tradebot.alpaca")
 
 DATA_BASE = "https://data.alpaca.markets"
+TRADING_BASE = "https://paper-api.alpaca.markets"  # assets list only; the bot never sends Alpaca an order
 Transport = Callable[[str, dict], Tuple[int, bytes]]
 
 
@@ -85,8 +86,8 @@ class AlpacaData:
                 log.warning("yfinance unavailable (%s): no FX rates / market caps", exc)
 
     # -- http --------------------------------------------------------------------
-    def _get(self, path: str, params: dict, retries: int = 4) -> dict:
-        url = DATA_BASE + path + "?" + urllib.parse.urlencode({k: v for k, v in params.items() if v is not None})
+    def _get(self, path: str, params: dict, retries: int = 4, base: str = DATA_BASE):
+        url = base + path + "?" + urllib.parse.urlencode({k: v for k, v in params.items() if v is not None})
         for attempt in range(retries + 1):
             with self._lock:  # ~200 req/min across all threads
                 gap = 0.31 - (_time.monotonic() - self._last_call)
@@ -150,6 +151,44 @@ class AlpacaData:
         if not include_premarket:
             bars = [b for b in bars if clock.MARKET_OPEN <= b.time.time() < clock.MARKET_CLOSE]
         return bars
+
+    def bars_between(self, symbol: str, timeframe: str, start: datetime, end: datetime) -> list[Bar]:
+        return self.bars(symbol, timeframe, start, end)
+
+    def assets(self, exchanges: tuple[str, ...] = ("NASDAQ", "NYSE", "ARCA", "AMEX")) -> list[str]:
+        """Active, tradable US common stocks on the main exchanges (plain symbols only)."""
+        rows = self._get("/v2/assets", {"status": "active", "asset_class": "us_equity"}, base=TRADING_BASE)
+        out = []
+        for a in rows or []:
+            sym = a.get("symbol", "")
+            if not a.get("tradable") or a.get("exchange") not in exchanges:
+                continue
+            if not sym.isalpha() or len(sym) > 5:
+                continue  # skip units, warrants, preferreds, test symbols
+            out.append(sym)
+        return sorted(set(out))
+
+    def multi_daily_bars(self, symbols: list[str], start: datetime, chunk: int = 200) -> dict[str, list[Bar]]:
+        """Daily bars for many symbols via the multi-symbol endpoint (paginated)."""
+        out: dict[str, list[Bar]] = {}
+        for i in range(0, len(symbols), chunk):
+            group = symbols[i:i + chunk]
+            token = None
+            while True:
+                res = self._get("/v2/stocks/bars", {
+                    "symbols": ",".join(group), "timeframe": "1Day",
+                    "start": start.astimezone(timezone.utc).isoformat(), "limit": 10000,
+                    "adjustment": "raw", "feed": self.feed, "sort": "asc", "page_token": token})
+                for sym, rows in (res.get("bars") or {}).items():
+                    out.setdefault(sym, []).extend(
+                        Bar(clock.at(_parse_ts(b["t"]).date(), clock.MARKET_CLOSE), float(b["o"]), float(b["h"]),
+                            float(b["l"]), float(b["c"]), float(b.get("v") or 0)) for b in rows)
+                token = res.get("next_page_token")
+                if not token:
+                    break
+        for rows in out.values():
+            rows.sort(key=lambda b: b.time)
+        return out
 
     # -- quotes -------------------------------------------------------------------
     def last_price(self, symbol: str) -> float | None:

@@ -101,3 +101,31 @@ def test_rate_limit_retry_and_auth_error(data):
     assert d.last_price("AAPL") == 123.45
     with pytest.raises(AlpacaError, match="rejected"):
         d.bars("BAD", "5Min", clock.at(DAY, clock.MARKET_OPEN))
+
+
+def test_assets_and_multi_daily_bars():
+    class Fake(FakeAlpaca):
+        def __call__(self, url, headers):
+            u = urlparse(url)
+            if u.path == "/v2/assets":
+                assert "paper-api.alpaca.markets" in url
+                return 200, json.dumps([
+                    {"symbol": "AAPL", "exchange": "NASDAQ", "tradable": True},
+                    {"symbol": "BRK.B", "exchange": "NYSE", "tradable": True},
+                    {"symbol": "XYZW", "exchange": "OTC", "tradable": True},
+                    {"symbol": "ZZ", "exchange": "NYSE", "tradable": False},
+                ]).encode()
+            if u.path == "/v2/stocks/bars":
+                q = parse_qs(u.query)
+                assert q["timeframe"] == ["1Day"] and "AAPL" in q["symbols"][0]
+                if q.get("page_token") == ["p2"]:
+                    return 200, json.dumps({"bars": {"AAPL": [{"t": "2026-09-15T04:00:00Z", "o": 2, "h": 3, "l": 1, "c": 2.5, "v": 7}]}, "next_page_token": None}).encode()
+                return 200, json.dumps({"bars": {"AAPL": [{"t": "2026-09-14T04:00:00Z", "o": 1, "h": 2, "l": 0.5, "c": 1.5, "v": 5}],
+                                                 "MSFT": [{"t": "2026-09-14T04:00:00Z", "o": 10, "h": 11, "l": 9, "c": 10.5, "v": 50}]},
+                                        "next_page_token": "p2"}).encode()
+            return super().__call__(url, headers)
+    d = AlpacaData("K", "S", "iex", transport=Fake(), sleep=lambda s: None, aux=Aux())
+    assert d.assets() == ["AAPL"]
+    bars = d.multi_daily_bars(["AAPL", "MSFT"], clock.at(DAY, clock.MARKET_OPEN))
+    assert [b.close for b in bars["AAPL"]] == [1.5, 2.5] and bars["AAPL"][0].time.time() == clock.MARKET_CLOSE
+    assert len(bars["MSFT"]) == 1

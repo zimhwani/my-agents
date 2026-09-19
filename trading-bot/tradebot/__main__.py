@@ -249,6 +249,78 @@ def cmd_fetch_data(args) -> None:
         b.disconnect()
 
 
+def cmd_fetch_gappers(args) -> None:
+    """Whole-market gap events -> data/gappers/*.csv (event-driven backtest data)."""
+    s = _settings(args)
+    _logging(s)
+    if s.data_provider != "alpaca":
+        print("fetch-gappers needs DATA_PROVIDER=alpaca (bulk history).")
+        sys.exit(2)
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    from datetime import timedelta
+    from .alpaca import AlpacaData
+    from .data import save_csv
+    from .events import find_gap_events, plan_ranges, summarize
+    from .tjl import TJLRules
+    rules = TJLRules.load(s.strategy_file) if Path(s.strategy_file).exists() and "rules" in str(s.strategy_file) else TJLRules()
+    d: AlpacaData = _data(s)
+    out = Path(args.out)
+    out.mkdir(parents=True, exist_ok=True)
+    now = clock.now_et()
+    first_event_day = (now - timedelta(days=args.days)).date()
+    daily_start = now - timedelta(days=int(args.days * 1.0) + 320)
+
+    print("1/3 listing US stocks...")
+    symbols = d.assets()
+    if args.max_symbols:
+        symbols = symbols[: args.max_symbols]
+    print(f"    {len(symbols)} symbols")
+    print(f"2/3 daily bars since {daily_start.date()} (bulk)...")
+    daily = d.multi_daily_bars(symbols, daily_start)
+    print(f"    {sum(len(v) for v in daily.values()):,} daily bars for {len(daily)} symbols")
+    events = find_gap_events(daily, rules.min_gap_pct, max(rules.min_price_usd, args.min_price),
+                             args.min_dollar_volume, rules.sma_days, start=first_event_day)
+    if args.max_events and len(events) > args.max_events:
+        events = sorted(events, key=lambda e: -e.gap_pct)[: args.max_events]
+        events.sort(key=lambda e: (e.day, -e.gap_pct))
+    print("    " + summarize(events).replace("\n", "\n    "))
+    if not events:
+        sys.exit(1)
+    plan = plan_ranges(events, args.context)
+    for sym in plan:
+        save_csv(daily[sym], out / f"{sym}_1d.csv")
+    total_ranges = sum(len(r) for r in plan.values())
+    print(f"3/3 5-min bars for {len(plan)} symbols / {total_ranges} date ranges ({args.workers} parallel)...")
+
+    def one(sym: str) -> str:
+        if args.skip_existing and (out / f"{sym}_5min.csv").exists():
+            return f"{sym}: exists"
+        bars = []
+        for start, end in plan[sym]:
+            bars.extend(d.bars_between(sym, "5Min", clock.at(start, clock.parse_hhmm("04:00")),
+                                       clock.at(end, clock.parse_hhmm("20:00"))))
+        seen = {}
+        for b in bars:
+            seen[b.time] = b
+        bars = [seen[k] for k in sorted(seen)]
+        if bars:
+            save_csv(bars, out / f"{sym}_5min.csv")
+        return f"{sym}: {len(bars)} bars over {len(plan[sym])} range(s)"
+
+    done = 0
+    with ThreadPoolExecutor(max_workers=args.workers) as pool:
+        futs = {pool.submit(one, sym): sym for sym in plan}
+        for fut in as_completed(futs):
+            done += 1
+            try:
+                msg = fut.result()
+            except Exception as exc:
+                msg = f"{futs[fut]}: failed ({exc})"
+            if done % 25 == 0 or done == len(futs):
+                print(f"[{done}/{len(futs)}] {msg}")
+    print(f"done -> {out}   next: python -m tradebot backtest --data {out} && python -m tradebot analyze")
+
+
 def cmd_backtest(args) -> None:
     s = _settings(args)
     _logging(s)
@@ -409,6 +481,17 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--skip-existing", action="store_true", help="don't re-download symbols already saved")
     p.add_argument("--daily-only", action="store_true", help="only (re)download the daily files (fast)")
     p.add_argument("--workers", type=int, help="parallel downloads (default 4 for Alpaca, 1 for Yahoo)")
+    p = sub.add_parser("fetch-gappers", help="whole-market gap events + the 5-min bars to replay them (Alpaca)")
+    p.add_argument("--days", type=int, default=730, help="how far back to look for gap events")
+    p.add_argument("--out", default="data/gappers")
+    p.add_argument("--min-price", type=float, default=3.0)
+    p.add_argument("--min-dollar-volume", type=float, default=500_000,
+                   help="20-day avg close*volume floor in the feed's units (IEX volume is ~2-3%% of consolidated)")
+    p.add_argument("--context", type=int, default=16, help="sessions of 5-min history before each event (RVOL lookback)")
+    p.add_argument("--max-symbols", type=int, default=0, help="debug: cap the symbol list")
+    p.add_argument("--max-events", type=int, default=0, help="cap events (keeps the largest gaps)")
+    p.add_argument("--workers", type=int, default=4)
+    p.add_argument("--skip-existing", action="store_true")
     p = sub.add_parser("backtest", help="run the strategy over CSV history (or --demo synthetic data)")
     p.add_argument("--data", default="data/bars")
     p.add_argument("--symbols", nargs="*")
@@ -436,7 +519,8 @@ def main(argv: list[str] | None = None) -> None:
     args = ap.parse_args(argv)
     {"check": cmd_check, "scan": cmd_scan, "run": cmd_run, "flatten": cmd_flatten, "kill": cmd_kill,
      "telegram-test": cmd_telegram_test, "fetch-data": cmd_fetch_data, "backtest": cmd_backtest,
-     "analyze": cmd_analyze, "sweep": cmd_sweep, "dashboard": cmd_dashboard}[args.cmd](args)
+     "analyze": cmd_analyze, "sweep": cmd_sweep, "dashboard": cmd_dashboard,
+     "fetch-gappers": cmd_fetch_gappers}[args.cmd](args)
 
 
 if __name__ == "__main__":

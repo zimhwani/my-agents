@@ -148,6 +148,26 @@ years of 5-minute bars from the IEX feed (plus real-time IEX quotes):
 
 Alpaca has no FX rates or market caps, so the bot still uses Yahoo for those.
 
+**Backtest the market the bot actually trades.** A fixed list of large caps is
+the wrong universe for a gap strategy: 3%+ gappers are mostly small and mid
+caps, different names every day. `fetch-gappers` (Alpaca only) pulls two years
+of daily bars for every US stock, finds every gap event (open 3%+ above the
+prior close, prior close above the 200-day SMA, price ≥ $3, liquid), and then
+downloads 5-minute bars only for those symbol-days plus the sessions the
+volume filter looks back over:
+
+```bash
+python -m tradebot fetch-gappers --days 730          # ~20-40 min, a few hundred MB
+python -m tradebot backtest --data data/gappers
+python -m tradebot analyze
+python -m tradebot sweep --data data/gappers
+```
+
+The backtester ranks each day's gappers by gap size and keeps the top
+`MAX_WATCHLIST`, exactly like the live scan. (Market cap isn't available
+historically at this scale, so the universe filter is a liquidity floor,
+`--min-dollar-volume`, in IEX volume units.)
+
 Get history and backtest (the backtester runs the *same* strategy, exit and
 execution code as live, against an in-memory broker):
 
