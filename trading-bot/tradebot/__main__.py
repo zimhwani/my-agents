@@ -270,25 +270,39 @@ def cmd_fetch_gappers(args) -> None:
     first_event_day = (now - timedelta(days=args.days)).date()
     daily_start = now - timedelta(days=int(args.days * 1.0) + 320)
 
-    print("1/3 listing US stocks...")
-    symbols = d.assets()
-    if args.max_symbols:
-        symbols = symbols[: args.max_symbols]
-    print(f"    {len(symbols)} symbols")
-    print(f"2/3 daily bars since {daily_start.date()} (bulk)...")
-    daily = d.multi_daily_bars(symbols, daily_start)
-    print(f"    {sum(len(v) for v in daily.values()):,} daily bars for {len(daily)} symbols")
-    events = find_gap_events(daily, rules.min_gap_pct, max(rules.min_price_usd, args.min_price),
-                             args.min_dollar_volume, rules.sma_days, start=first_event_day)
-    if args.max_events and len(events) > args.max_events:
-        events = sorted(events, key=lambda e: -e.gap_pct)[: args.max_events]
-        events.sort(key=lambda e: (e.day, -e.gap_pct))
+    import json as _json
+    from datetime import date as _date
+    from .events import GapEvent
+    cache = out / "events.json"
+    if args.skip_existing and cache.exists():
+        raw = _json.loads(cache.read_text())
+        events = [GapEvent(e["symbol"], _date.fromisoformat(e["day"]), e["gap_pct"], e["prev_close"],
+                           e["open"], e["dollar_volume"]) for e in raw]
+        print(f"1-2/3 reusing {len(events)} cached gap events from {cache}")
+    else:
+        print("1/3 listing US stocks...")
+        symbols = d.assets()
+        if args.max_symbols:
+            symbols = symbols[: args.max_symbols]
+        print(f"    {len(symbols)} symbols")
+        print(f"2/3 daily bars since {daily_start.date()} (bulk)...")
+        daily = d.multi_daily_bars(symbols, daily_start)
+        print(f"    {sum(len(v) for v in daily.values()):,} daily bars for {len(daily)} symbols")
+        events = find_gap_events(daily, rules.min_gap_pct, max(rules.min_price_usd, args.min_price),
+                                 args.min_dollar_volume, rules.sma_days, start=first_event_day)
+        if args.max_events and len(events) > args.max_events:
+            events = sorted(events, key=lambda e: -e.gap_pct)[: args.max_events]
+            events.sort(key=lambda e: (e.day, -e.gap_pct))
+        if not events:
+            print("    no gap events found")
+            sys.exit(1)
+        for sym in {e.symbol for e in events}:
+            save_csv(daily[sym], out / f"{sym}_1d.csv")
+        cache.write_text(_json.dumps([{"symbol": e.symbol, "day": e.day.isoformat(), "gap_pct": e.gap_pct,
+                                       "prev_close": e.prev_close, "open": e.open, "dollar_volume": e.dollar_volume}
+                                      for e in events]))
     print("    " + summarize(events).replace("\n", "\n    "))
-    if not events:
-        sys.exit(1)
     plan = plan_ranges(events, args.context)
-    for sym in plan:
-        save_csv(daily[sym], out / f"{sym}_1d.csv")
     total_ranges = sum(len(r) for r in plan.values())
     print(f"3/3 5-min bars for {len(plan)} symbols / {total_ranges} date ranges ({args.workers} parallel)...")
 

@@ -41,15 +41,22 @@ class AlpacaError(RuntimeError):
     pass
 
 
-def _urllib_transport(url: str, headers: dict) -> tuple[int, bytes]:
-    req = urllib.request.Request(url, headers=headers, method="GET")
-    try:
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            return resp.status, resp.read()
-    except urllib.error.HTTPError as exc:
-        return exc.code, exc.read()
-    except (urllib.error.URLError, TimeoutError, OSError) as exc:
-        raise AlpacaError(f"cannot reach data.alpaca.markets: {exc}") from exc
+def _urllib_transport(url: str, headers: dict, attempts: int = 5) -> tuple[int, bytes]:
+    """GET with retries on network errors (timeouts, resets, DNS hiccups)."""
+    last: Exception | None = None
+    for i in range(attempts):
+        req = urllib.request.Request(url, headers=headers, method="GET")
+        try:
+            with urllib.request.urlopen(req, timeout=60) as resp:
+                return resp.status, resp.read()
+        except urllib.error.HTTPError as exc:
+            return exc.code, exc.read()
+        except (urllib.error.URLError, TimeoutError, OSError) as exc:
+            last = exc
+            wait = 2.0 * (i + 1)
+            log.warning("network error (%s); retry %d/%d in %.0fs", exc, i + 1, attempts - 1, wait)
+            _time.sleep(wait)
+    raise AlpacaError(f"cannot reach data.alpaca.markets after {attempts} attempts: {last}")
 
 
 def _parse_ts(value: str) -> datetime:
