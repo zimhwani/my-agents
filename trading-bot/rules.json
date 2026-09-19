@@ -19,7 +19,7 @@
   },
   "time_filter": {
     "earliest_entry_et": "10:05",
-    "latest_entry_et": "10:30",
+    "latest_entry_et": "15:30",
     "force_close_et": "15:51"
   },
   "exit": {
