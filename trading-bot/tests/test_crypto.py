@@ -189,6 +189,14 @@ def test_alpaca_broker_sells_what_it_holds_after_fees(settings, monkeypatch):
     # closing again is a no-op instead of an exception
     ref = b.market_close("BTC/USD", LONG, 0.05)
     assert ref.status == "Filled" and ref.filled == 0.0
+    # held qty is floored, never rounded up past what the account has
+    fake.positions["BTC/USD"] = 0.0498755
+    ref = b.market_close("BTC/USD", LONG, 0.05)
+    assert ref.status == "Filled" and ref.filled == pytest.approx(0.049875)
+    # dust under $1 is treated as flat rather than retried forever
+    fake.positions["BTC/USD"] = 0.000005
+    ref = b.market_close("BTC/USD", LONG, 0.000005)
+    assert ref.status == "Filled" and ref.filled == 0.0
     # a genuine auth failure still names the keys
     from tradebot.alpaca import AlpacaError
     bad = AlpacaBroker(settings, data, transport=lambda m, u, h, body: (403, b'{"message":"forbidden"}'))

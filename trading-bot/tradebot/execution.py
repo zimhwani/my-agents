@@ -74,7 +74,7 @@ class Executor:
                 self._stops[t.id] = ref
                 t.stop_order_id, t.stop_perm_id = ref.order_id, ref.perm_id
             self.open_trades.append(t)
-            log.info("Restored open trade %s %s x%d stop %.2f", t.side, t.symbol, t.qty_open, t.stop)
+            log.info("Restored open trade %s %s x%s stop %.2f", t.side, t.symbol, t.qty_open, t.stop)
         return extra
 
     # -- entries ---------------------------------------------------------------

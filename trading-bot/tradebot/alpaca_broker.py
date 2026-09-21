@@ -10,6 +10,7 @@ Position symbols come back without the slash ("BTCUSD"); we normalise to "BTC/US
 from __future__ import annotations
 
 import json
+import math
 import logging
 import threading
 import time as _time
@@ -276,11 +277,12 @@ class AlpacaBroker:
         """Market-sell at most what the account holds. Alpaca deducts crypto fees from the
         asset bought, so a position is a little smaller than the order that opened it; selling
         the ordered qty is refused with 403 'insufficient qty'."""
-        held = round(self._position_qty(symbol), 6)
+        held = math.floor(self._position_qty(symbol) * 1e6) / 1e6  # floor: never ask for more than held
+        price = self.last_price(symbol) or 0.0
         flat = OrderRef(order_id=-10**8, symbol=norm(symbol), kind="CLOSE", qty=qty, status="Filled",
-                        filled=0.0, avg_fill=self.last_price(symbol) or 0.0)
-        if held <= 0:
-            log.warning("%s: nothing left to sell (position already flat)", norm(symbol))
+                        filled=0.0, avg_fill=price)
+        if held <= 0 or held * price < 1.0:  # nothing, or dust below any minimum order size
+            log.warning("%s: nothing sellable left (held %.6f); treating as flat", norm(symbol), held)
             return flat
         if held < qty:
             log.info("%s: selling %.6f held instead of %.6f requested", norm(symbol), held, qty)
@@ -352,7 +354,7 @@ class AlpacaBroker:
         if entry.status != "Filled" or entry.filled <= 0:
             self.cancel(entry)
             return entry, OrderRef(order_id=-10**9, symbol=norm(symbol), kind="STOP", status="Cancelled")
-        held = round(self._position_qty(symbol), 6)
+        held = math.floor(self._position_qty(symbol) * 1e6) / 1e6
         if 0 < held < entry.filled:  # fee was taken from the coin
             log.info("%s: filled %.6f, holding %.6f after fees", norm(symbol), entry.filled, held)
             entry.filled = held
