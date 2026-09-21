@@ -130,6 +130,7 @@ class Settings:
     vercel_blob_token: str = ""
     vercel_blob_prefix: str = "tradebot"
     dashboard_data_url: str = ""
+    dashboard_sources: str = ""  # "Equities=https://.../tradebot,Crypto=https://.../crypto" for a multi-bot page
     # paths
     data_dir: Path = Path("data")
     strategy_file: Path = Path("rules.json")
@@ -253,6 +254,7 @@ class Settings:
             vercel_blob_token=_env("VERCEL_BLOB_TOKEN"),
             vercel_blob_prefix=_env("VERCEL_BLOB_PREFIX", "tradebot"),
             dashboard_data_url=_env("DASHBOARD_DATA_URL"),
+            dashboard_sources=_env("DASHBOARD_SOURCES"),
             data_dir=Path(_env("DATA_DIR", "data")),
             strategy_file=Path(_env("STRATEGY_FILE", "rules.json")),
             universe_file=universe_file,

@@ -373,6 +373,17 @@ python -m tradebot --env .env.crypto analyze
 Telegram messages from it are prefixed `[CRYPTO]`. A day summary arrives at
 midnight ET; status every hour.
 
+**One dashboard for both bots.** The hosted page has an Equities / Crypto
+switcher when it is exported with both data feeds:
+
+```bash
+python -m tradebot dashboard --export-vercel deploy/trading-dashboard \
+  --sources "Equities=https://<store>.public.blob.vercel-storage.com/tradebot,Crypto=https://<store>.public.blob.vercel-storage.com/crypto"
+```
+
+(or set `DASHBOARD_SOURCES` in `.env` to the same value). Commit and push;
+the existing Vercel project redeploys.
+
 ## 11. Run it every day on your own machine instead
 
 The loop waits for the open and exits after the close, so schedule it once

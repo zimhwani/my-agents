@@ -25,6 +25,9 @@ main{max-width:1440px;margin:0 auto;padding:12px 16px 32px;display:grid;grid-tem
 .top .kv .k{font-size:9px;color:var(--text-3);text-transform:uppercase;letter-spacing:.14em}
 .top .kv .v{font-size:13px;color:#fff;font-variant-numeric:tabular-nums}
 .top .clock{font-size:16px;color:#fff;font-variant-numeric:tabular-nums}
+.tabs{display:flex;gap:4px}
+.tabs button{background:#160b1d;color:var(--text-2);border:1px solid var(--line-2);border-radius:3px;padding:4px 10px;font:inherit;font-size:11px;letter-spacing:.12em;text-transform:uppercase;cursor:pointer}
+.tabs button.on{background:var(--neon);color:#120a18;border-color:var(--neon);box-shadow:var(--glow);font-weight:700}
 .badge{display:inline-block;padding:1px 6px;border-radius:2px;font-size:9px;letter-spacing:.14em;text-transform:uppercase;font-weight:700;vertical-align:1px}
 .badge.live{background:var(--neon);color:#120a18;box-shadow:var(--glow)}
 .badge.off{background:#2b1a33;color:var(--text-2)}
@@ -83,6 +86,7 @@ select{background:#160b1d;color:var(--text);border:1px solid var(--line-2);borde
 <main>
   <div class="top">
     <div class="name">TRADEBOT · <b id="hStrat">__TITLE__</b> <span id="hBadge" class="badge off">offline</span></div>
+    <div class="tabs" id="tabs" hidden></div>
     <div class="kv"><span class="k">Equity</span><span class="v" id="hEquity">—</span></div>
     <div class="kv"><span class="k">Today</span><span class="v" id="hToday">—</span></div>
     <div class="kv"><span class="k">Trades</span><span class="v" id="hTrades">—</span></div>
@@ -152,8 +156,15 @@ select{background:#160b1d;color:var(--text);border:1px solid var(--line-2);borde
 </main>
 <div class="tip" id="tip"></div>
 <script>
-let DATA = __DATA__ || {rows: [], stats: {}};
-const DATA_BASE = (window.DATA_BASE || '').replace(/\/$/, '');   // set by config.js on the hosted version
+const EMBEDDED = __DATA__;
+let DATA = EMBEDDED || {rows: [], stats: {}};
+// Hosted version: config.js sets window.DATA_SOURCES = [{name, base}, ...] (or a single window.DATA_BASE)
+const SOURCES = (window.DATA_SOURCES && window.DATA_SOURCES.length) ? window.DATA_SOURCES
+  : (window.DATA_BASE ? [{name: 'Bot', base: window.DATA_BASE}] : []);
+let SRC = 0;
+try { const k = localStorage.getItem('tradebot.src'); if (k !== null && SOURCES[+k]) SRC = +k; } catch (e) {}
+const dataBase = () => SOURCES.length ? String(SOURCES[SRC].base).replace(/\/$/, '') : '';
+const DATA_BASE = dataBase();
 const $ = s => document.querySelector(s);
 const tip = $('#tip');
 const fmtR = r => (r>0?'+':'') + (+r).toFixed(2) + 'R';
@@ -317,13 +328,32 @@ function clock(){ const now=new Date(); try { $('#clock').textContent = now.toLo
 setInterval(clock,1000); clock();
 
 function render(){ const rows=filtered(); const st=stats(rows); header(st,rows); candles(); watchlist(); tape(rows); curve(rows); tradesTable(rows); analytics(rows); logPanel(rows); }
-const src = name => DATA_BASE ? `${DATA_BASE}/${name}?t=${Date.now()}` : name;
+const src = name => dataBase() ? `${dataBase()}/${name}?t=${Date.now()}` : name;
 async function live(){
-  try { const r=await fetch(src('live.json'),{cache:'no-store'}); if(r.ok){ LIVE=await r.json(); } } catch(e){}
-  if (DATA_BASE){ try { const r=await fetch(src('trades.json'),{cache:'no-store'}); if(r.ok){ DATA=await r.json(); fillSymbols(); } } catch(e){} }
+  const base = dataBase();
+  let L = null;
+  try { const r=await fetch(src('live.json'),{cache:'no-store'}); if(r.ok){ L=await r.json(); } } catch(e){}
+  if (base){
+    let D = null;
+    try { const r=await fetch(src('trades.json'),{cache:'no-store'}); if(r.ok){ D=await r.json(); } } catch(e){}
+    if (base !== dataBase()) return;  // the user switched bots while we were fetching
+    DATA = D || {rows: [], stats: {}}; fillSymbols();
+  }
+  LIVE = L;
+  if (L && L.strategy) $('#hStrat').textContent = L.strategy;
   render();
 }
-live(); setInterval(live, 30000);
+function tabs(){
+  if (SOURCES.length < 2) return;
+  const el = $('#tabs'); el.hidden = false;
+  el.innerHTML = SOURCES.map((s,i)=>`<button data-i="${i}" class="${i===SRC?'on':''}">${s.name}</button>`).join('');
+  el.querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>{
+    SRC = +b.dataset.i; try { localStorage.setItem('tradebot.src', String(SRC)); } catch(e){}
+    el.querySelectorAll('button').forEach(x=>x.classList.toggle('on', x===b));
+    LIVE = null; DATA = {rows: [], stats: {}}; render(); live();
+  }));
+}
+tabs(); live(); setInterval(live, 30000);
 </script>
 </body>
 </html>

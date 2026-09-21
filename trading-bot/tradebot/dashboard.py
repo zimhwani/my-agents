@@ -58,16 +58,21 @@ def trades_payload(trades: list[TradeRecord]) -> dict:
     return {"rows": trade_rows(closed), "stats": stats}
 
 
-def export_static(out_dir: str | Path, data_url: str, title: str = "Trading Bot") -> Path:
+def export_static(out_dir: str | Path, data_url: str | list[tuple[str, str]], title: str = "Trading Bot") -> Path:
     """Write a hostable copy (e.g. for Vercel) that loads trades.json and
-    live.json from ``data_url`` instead of embedding them."""
+    live.json from remote URLs instead of embedding them. ``data_url`` is one
+    base URL, or a list of (name, base_url) for a multi-bot page with tabs."""
     d = Path(out_dir)
     d.mkdir(parents=True, exist_ok=True)
     html = _template().replace("__TITLE__", title).replace("__DATA__", "null") \
         .replace("__GENERATED__", "live")
-    html = html.replace("<script>\nlet DATA", '<script src="config.js"></script>\n<script>\nlet DATA', 1)
+    html = html.replace("<script>\nconst EMBEDDED", '<script src="config.js"></script>\n<script>\nconst EMBEDDED', 1)
     (d / "index.html").write_text(html, encoding="utf-8")
-    (d / "config.js").write_text(f'window.DATA_BASE = {json.dumps(data_url)};\n', encoding="utf-8")
+    if isinstance(data_url, str):
+        cfg = f'window.DATA_BASE = {json.dumps(data_url)};\n'
+    else:
+        cfg = "window.DATA_SOURCES = " + json.dumps([{"name": n, "base": u} for n, u in data_url], indent=2) + ";\n"
+    (d / "config.js").write_text(cfg, encoding="utf-8")
     (d / "vercel.json").write_text(json.dumps({
         "$schema": "https://openapi.vercel.sh/vercel.json", "framework": None, "buildCommand": None,
         "installCommand": None, "outputDirectory": ".",

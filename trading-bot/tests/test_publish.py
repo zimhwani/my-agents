@@ -75,7 +75,11 @@ def test_trades_payload_and_static_export(tmp_path):
     assert "__DATA__" not in html and '"rows"' in html
     idx = export_static(tmp_path / "site", "https://store1.public.blob.vercel-storage.com/tradebot", "X")
     out = idx.read_text()
-    assert "let DATA = null" in out and '<script src="config.js">' in out and "__DATA__" not in out
+    assert "const EMBEDDED = null" in out and '<script src="config.js">' in out and "__DATA__" not in out
     cfg = (tmp_path / "site" / "config.js").read_text()
     assert "store1.public.blob.vercel-storage.com/tradebot" in cfg
+    idx2 = export_static(tmp_path / "multi", [("Equities", "https://s/tradebot"), ("Crypto", "https://s/crypto")], "X")
+    cfg2 = (tmp_path / "multi" / "config.js").read_text()
+    assert "DATA_SOURCES" in cfg2 and '"name": "Crypto"' in cfg2 and "https://s/crypto" in cfg2
+    assert '<script src="config.js">' in idx2.read_text()
     assert json.loads((tmp_path / "site" / "vercel.json").read_text())["outputDirectory"] == "."

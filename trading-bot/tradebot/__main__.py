@@ -491,11 +491,18 @@ def cmd_dashboard(args) -> None:
     st = compute_stats(trades)
     print(f"{st.trades} closed trades, {st.total_r:+.2f}R -> {out}")
     if args.export_vercel:
-        if not s.dashboard_data_url:
-            print("DASHBOARD_DATA_URL is not set: the hosted page needs the public base URL of your "
-                  "Vercel Blob store (printed by `python -m tradebot publish`).")
+        sources_raw = args.sources or s.dashboard_sources
+        if sources_raw:
+            sources = [tuple(part.split("=", 1)) for part in sources_raw.split(",") if "=" in part]
+            target = [(n.strip(), u.strip()) for n, u in sources]
+            print("multi-bot page: " + ", ".join(f"{n} -> {u}" for n, u in target))
+        elif s.dashboard_data_url:
+            target = s.dashboard_data_url
+        else:
+            print("Set DASHBOARD_DATA_URL (one bot) or DASHBOARD_SOURCES=Name=url,Name=url (tabs) first; "
+                  "`python -m tradebot dashboard --publish` prints the base URL.")
             sys.exit(2)
-        idx = export_static(args.export_vercel, s.dashboard_data_url, name)
+        idx = export_static(args.export_vercel, target, name)
         print(f"static site -> {idx.parent}  (commit it and deploy; see {idx.parent}/README.md)")
     if args.publish:
         import json as _json
@@ -587,7 +594,8 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--out")
     p.add_argument("--serve", type=int, nargs="?", const=8765, help="serve data/ on PORT (live panel needs this)")
     p.add_argument("--host", default="127.0.0.1", help="bind address for --serve (keep 127.0.0.1; use an SSH tunnel)")
-    p.add_argument("--export-vercel", metavar="DIR", help="write a hosted copy (index.html, config.js, vercel.json) that reads DASHBOARD_DATA_URL")
+    p.add_argument("--export-vercel", metavar="DIR", help="write a hosted copy (index.html, config.js, vercel.json) that reads DASHBOARD_DATA_URL / DASHBOARD_SOURCES")
+    p.add_argument("--sources", help='multi-bot page: "Equities=https://.../tradebot,Crypto=https://.../crypto"')
     p.add_argument("--publish", action="store_true", help="upload trades.json + live.json to Vercel Blob now")
     p.add_argument("--snapshot", action="store_true", help="with --publish: refresh the offline equity snapshot even if a session snapshot exists")
 
