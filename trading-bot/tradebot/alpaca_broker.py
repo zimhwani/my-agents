@@ -187,7 +187,8 @@ class AlpacaBroker:
         status, raw = self._t(method, url, self.headers, json.dumps(body).encode() if body is not None else None)
         text = raw.decode(errors="replace") if raw else ""
         if status in (401, 403):
-            raise AlpacaError(f"Alpaca rejected the request ({status}): check ALPACA_API_KEY/SECRET and ALPACA_ENV")
+            hint = "" if "insufficient" in text.lower() else " (check ALPACA_API_KEY/SECRET and ALPACA_ENV)"
+            raise AlpacaError(f"Alpaca {method} {path} -> {status}: {text[:300]}{hint}")
         if status == 404:
             return None
         if status >= 400:
@@ -271,6 +272,27 @@ class AlpacaBroker:
         ref.qty = qty
         return self.wait_fill(ref, timeout=60)
 
+    def _sell(self, symbol: str, qty: float) -> OrderRef:
+        """Market-sell at most what the account holds. Alpaca deducts crypto fees from the
+        asset bought, so a position is a little smaller than the order that opened it; selling
+        the ordered qty is refused with 403 'insufficient qty'."""
+        held = round(self._position_qty(symbol), 6)
+        flat = OrderRef(order_id=-10**8, symbol=norm(symbol), kind="CLOSE", qty=qty, status="Filled",
+                        filled=0.0, avg_fill=self.last_price(symbol) or 0.0)
+        if held <= 0:
+            log.warning("%s: nothing left to sell (position already flat)", norm(symbol))
+            return flat
+        if held < qty:
+            log.info("%s: selling %.6f held instead of %.6f requested", norm(symbol), held, qty)
+            qty = held
+        try:
+            return self._market(symbol, "sell", qty)
+        except AlpacaError as exc:
+            if "insufficient" not in str(exc).lower():
+                raise
+            log.warning("%s: sell of %.6f refused (%s); treating as flat", norm(symbol), qty, exc)
+            return flat
+
     def wait_fill(self, ref: OrderRef, timeout: float = 45) -> OrderRef:
         deadline = _time.time() + timeout
         oid = ref.raw["id"] if isinstance(ref.raw, dict) else None
@@ -299,7 +321,7 @@ class AlpacaBroker:
                 return ref
             log.warning("%s software stop hit: %.4f <= %.4f; selling %s", ref.symbol, px, ref.price, ref.qty)
             try:
-                fill = self._market(ref.symbol, "sell", ref.qty)
+                fill = self._sell(ref.symbol, ref.qty)
             except AlpacaError as exc:
                 log.error("%s stop sell failed: %s", ref.symbol, exc)
                 return ref
@@ -330,6 +352,10 @@ class AlpacaBroker:
         if entry.status != "Filled" or entry.filled <= 0:
             self.cancel(entry)
             return entry, OrderRef(order_id=-10**9, symbol=norm(symbol), kind="STOP", status="Cancelled")
+        held = round(self._position_qty(symbol), 6)
+        if 0 < held < entry.filled:  # fee was taken from the coin
+            log.info("%s: filled %.6f, holding %.6f after fees", norm(symbol), entry.filled, held)
+            entry.filled = held
         return entry, self.place_stop(symbol, side, entry.filled, stop)
 
     def modify_stop(self, ref: OrderRef, price: float | None = None, qty: float | None = None) -> OrderRef:
@@ -352,7 +378,7 @@ class AlpacaBroker:
             self._stops.pop(ref.symbol, None)
 
     def market_close(self, symbol: str, side: str, qty: float) -> OrderRef:
-        ref = self._market(symbol, "sell", qty)
+        ref = self._sell(symbol, qty)
         stop = self._stops.get(norm(symbol))
         if stop is not None:
             remaining = round(self._position_qty(symbol), 6)

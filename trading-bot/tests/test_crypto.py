@@ -103,6 +103,7 @@ class FakeAlpacaTrading:
         self.positions = {}
         self.price = 100.0
         self.n = 0
+        self.fee = 0.0  # fraction of a buy deducted from the coin, like Alpaca's crypto fee
 
     def __call__(self, method, url, headers, body):
         assert headers["APCA-API-KEY-ID"] == "K"
@@ -119,7 +120,10 @@ class FakeAlpacaTrading:
             oid = f"o{self.n}"
             qty = float(data["qty"])
             sym = data["symbol"]
-            self.positions[sym] = self.positions.get(sym, 0.0) + (qty if data["side"] == "buy" else -qty)
+            if data["side"] == "sell" and qty > self.positions.get(sym, 0.0) + 1e-12:
+                return 403, json.dumps({"code": 40310000, "message": "insufficient qty available for order"}).encode()
+            credited = qty * (1 - self.fee) if data["side"] == "buy" else -qty
+            self.positions[sym] = self.positions.get(sym, 0.0) + credited
             self.orders[oid] = {"id": oid, "symbol": sym, "qty": str(qty), "side": data["side"], "status": "filled",
                                 "filled_qty": str(qty), "filled_avg_price": str(self.price)}
             return 200, json.dumps({**self.orders[oid], "status": "accepted", "filled_qty": "0"}).encode()
@@ -166,3 +170,27 @@ def test_alpaca_broker_entry_partial_and_software_stop(settings, monkeypatch):
 def test_symbol_normalisation():
     assert norm("BTCUSD") == "BTC/USD" and norm("btc/usd") == "BTC/USD" and norm("ETHUSDT") == "ETH/USDT"
     assert fname("BTC/USD") == "BTC-USD"
+
+
+def test_alpaca_broker_sells_what_it_holds_after_fees(settings, monkeypatch):
+    """Alpaca deducts the crypto fee from the coin bought; closing the ordered qty used to 403 forever."""
+    monkeypatch.setattr("tradebot.alpaca_broker._time.sleep", lambda s: None)
+    settings.broker, settings.alpaca_api_key, settings.alpaca_api_secret = "alpaca", "K", "S"
+    fake = FakeAlpacaTrading()
+    fake.fee = 0.0025
+    data = AlpacaCryptoData("K", "S", transport=fake, sleep=lambda s: None)
+    b = AlpacaBroker(settings, data, transport=fake)
+    b.connect()
+    entry, stop = b.place_entry_with_stop("BTC/USD", LONG, 0.05, 95.0)
+    assert entry.filled == pytest.approx(0.049875) and stop.qty == pytest.approx(0.049875)
+    # a caller still holding the ordered qty (e.g. state from before the fix) closes cleanly
+    ref = b.market_close("BTC/USD", LONG, 0.05)
+    assert ref.status == "Filled" and ref.filled == pytest.approx(0.049875) and b.positions() == []
+    # closing again is a no-op instead of an exception
+    ref = b.market_close("BTC/USD", LONG, 0.05)
+    assert ref.status == "Filled" and ref.filled == 0.0
+    # a genuine auth failure still names the keys
+    from tradebot.alpaca import AlpacaError
+    bad = AlpacaBroker(settings, data, transport=lambda m, u, h, body: (403, b'{"message":"forbidden"}'))
+    with pytest.raises(AlpacaError, match="ALPACA_API_KEY"):
+        bad._req("GET", "/v2/account")
