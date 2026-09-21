@@ -329,6 +329,7 @@ class TradingLoop:
     # -- real-time driver ----------------------------------------------------------
     def run(self) -> None:
         self.b.connect()
+        log.info("Config: %s · strategy: %s", self.s.describe(), self.loaded.name)
         self.notify.send(f"🤖 <b>Bot online</b> · {esc(self.s.describe())}\nstrategy: {esc(self.loaded.name)}")
         extra = self.exec.restore()
         if extra.get("day") and self.exec.open_trades:
