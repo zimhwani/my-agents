@@ -213,7 +213,9 @@ function header(st, rows){
   else { b.className='badge sim'; b.textContent='no snapshot'; }
   $('#accEquity').textContent = L? fmt$(L.equity) : '—';
   $('#accMode').textContent = L? (L.mode.split(' ')[0]) : '';
-  $('#accSub').innerHTML = !L ? 'no snapshot yet · the bot writes one each tick (weekdays from 09:00 ET)'
+  $('#accSub').innerHTML = !L ? (SOURCES.length > 1 && /crypto/i.test(SOURCES[SRC].name)
+      ? 'no snapshot yet · the crypto bot publishes one every tick while running'
+      : 'no snapshot yet · the bot writes one each tick (weekdays from 09:00 ET)')
     : L.offline ? `${L.currency||''} account · bot offline · next session weekdays 09:00 ET`
     : `${(L.equity-L.day_start_equity)>=0?'<span class="up">▲</span>':'<span class="down">▼</span>'} ${fmt$(L.equity-L.day_start_equity)} today · ${L.closed_today} closed · ${L.open.length} open`;
   $('#accTrades').textContent = st.n; $('#accWin').textContent=(st.wr*100).toFixed(1)+'%';
@@ -342,6 +344,7 @@ async function live(){
   }
   LIVE = L;
   if (L && L.strategy) $('#hStrat').textContent = L.strategy;
+  else if (SOURCES.length > 1) $('#hStrat').textContent = SOURCES[SRC].name;
   render();
 }
 function tabs(){
