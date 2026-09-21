@@ -29,7 +29,7 @@
     "breakeven_trigger_R": 1.0,
     "post_breakeven_trail": "swing_low_5m_2_2",
     "max_initial_risk_pct": 3.0,
-    "max_initial_risk_mode": "cap"
+    "max_initial_risk_mode": "skip"
   },
   "risk": {
     "max_risk_per_trade_pct": 1.0,

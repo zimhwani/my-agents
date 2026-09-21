@@ -79,11 +79,12 @@ class Backtester:
                 by_day.setdefault(d, {}).setdefault(sym, []).append(b)
         start_equity = self.sim.net_liquidation()
         day_ok = getattr(self.strategy, "day_ok", None)
-        if day_ok is not None and by_day:
+        if day_ok is not None and by_day and not getattr(Backtester, "_warned_short", False):
             first = min(by_day)
             short = [sym for sym, d in self.daily.items()
                      if sum(1 for b in d if b.time.date() < first) < 200]
             if short:
+                Backtester._warned_short = True
                 log.warning("%d/%d symbols have <200 daily bars before %s; their early days are skipped "
                             "by the SMA filter. Re-run `fetch-data --daily-only` to extend daily history.",
                             len(short), len(self.daily), first)
