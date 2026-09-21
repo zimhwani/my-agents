@@ -39,6 +39,7 @@ class CryptoRules:
     min_rel_volume: float = 1.5
     atr_bars: int = 14
     stop_atr_mult: float = 2.0
+    min_initial_risk_pct: float = 0.0  # widen tiny stops so fees stay a fraction of 1R
     max_initial_risk_pct: float = 6.0
     partial_r: float = 1.5
     partial_fraction: float = 1 / 3
@@ -61,6 +62,7 @@ class CryptoRules:
             breakout_bars=int(e.get("breakout_bars", 20)), trend_ema_bars=int(e.get("trend_ema_bars", 200)),
             min_rel_volume=float(e.get("min_rel_volume", 1.5)), atr_bars=int(e.get("atr_bars", 14)),
             stop_atr_mult=float(e.get("stop_atr_mult", 2.0)),
+            min_initial_risk_pct=float(e.get("min_initial_risk_pct", 0.0)),
             max_initial_risk_pct=float(e.get("max_initial_risk_pct", 6.0)),
             partial_r=float(x.get("partial_profit_trigger_R", 1.5)),
             partial_fraction=float(x.get("partial_profit_fraction", 1 / 3)),
@@ -147,6 +149,8 @@ class CryptoMomentum:
             return None, "no_atr"
         entry = last.close
         stop = entry - r.stop_atr_mult * a
+        if r.min_initial_risk_pct > 0:
+            stop = min(stop, entry * (1 - r.min_initial_risk_pct / 100.0))
         risk = entry - stop
         if risk <= 0 or risk / entry * 100.0 > r.max_initial_risk_pct:
             return None, "stop_too_wide"

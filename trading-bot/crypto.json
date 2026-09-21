@@ -1,32 +1,43 @@
 {
-  "strategy_name": "Crypto Momentum Breakout",
+  "strategy_name": "Crypto Momentum Scalper",
   "market": "crypto",
   "direction": "long_only",
-  "universe": ["BTC/USD", "ETH/USD", "SOL/USD", "DOGE/USD", "AVAX/USD", "LINK/USD", "LTC/USD", "DOT/USD", "UNI/USD", "AAVE/USD", "XRP/USD", "SHIB/USD"],
-  "bar_minutes": 15,
-
+  "universe": [
+    "BTC/USD",
+    "ETH/USD",
+    "SOL/USD",
+    "DOGE/USD",
+    "AVAX/USD",
+    "LINK/USD",
+    "LTC/USD",
+    "DOT/USD",
+    "UNI/USD",
+    "AAVE/USD",
+    "XRP/USD",
+    "SHIB/USD"
+  ],
+  "bar_minutes": 5,
   "entry": {
-    "breakout_bars": 20,
-    "trend_ema_bars": 200,
-    "min_rel_volume": 1.5,
+    "breakout_bars": 12,
+    "trend_ema_bars": 100,
+    "min_rel_volume": 1.2,
     "atr_bars": 14,
     "stop_atr_mult": 2.0,
-    "max_initial_risk_pct": 6.0
+    "min_initial_risk_pct": 0.8,
+    "max_initial_risk_pct": 4.0
   },
-
   "exit": {
-    "partial_profit_trigger_R": 1.5,
-    "partial_profit_fraction": 0.3333,
-    "breakeven_trigger_R": 1.5,
-    "trail": "atr_3.0",
-    "time_stop_minutes": 1440,
+    "partial_profit_trigger_R": 1.0,
+    "partial_profit_fraction": 0.5,
+    "breakeven_trigger_R": 1.0,
+    "trail": "atr_2.5",
+    "time_stop_minutes": 240,
     "time_stop_min_r": 0.5,
     "cooldown_minutes": 0
   },
-
   "risk": {
     "max_risk_per_trade_pct": 1.0,
     "max_position_size_pct_of_portfolio": 25,
-    "max_concurrent_positions": 4
+    "max_concurrent_positions": 6
   }
 }

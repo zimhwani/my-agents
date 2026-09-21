@@ -387,10 +387,10 @@ def cmd_crypto_explain(args) -> None:
     from datetime import timedelta
     from .alpaca_broker import AlpacaCryptoData
     from .crypto import CryptoMomentum, ema
-    loaded = load_strategy(s.strategy_file, s.allow_shorts)
+    loaded = load_strategy(args.strategy or s.strategy_file, s.allow_shorts)
     strat = loaded.strategy
     if not isinstance(strat, CryptoMomentum):
-        raise SystemExit("crypto-explain needs STRATEGY_FILE=crypto.json")
+        raise SystemExit("crypto-explain needs a crypto rules file (STRATEGY_FILE=crypto.json or --strategy)")
     symbols = args.symbols or loaded.universe or s.universe
     minutes = strat.bar_minutes
     width = timedelta(minutes=minutes)
@@ -620,6 +620,7 @@ def main(argv: list[str] | None = None) -> None:
     p = sub.add_parser("crypto-explain", help="why isn't the crypto bot trading? count the gate that rejected each bar")
     p.add_argument("--days", type=int, default=3)
     p.add_argument("--symbols", nargs="*")
+    p.add_argument("--strategy", help="rules file to replay instead of STRATEGY_FILE (e.g. crypto_15m.json)")
     p = sub.add_parser("backtest", help="run the strategy over CSV history (or --demo synthetic data)")
     p.add_argument("--data", default="data/bars")
     p.add_argument("--symbols", nargs="*")

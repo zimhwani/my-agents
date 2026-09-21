@@ -33,10 +33,12 @@ def bars_24h(n=260, bar_minutes=15, base=100.0, breakout_at=None, vol=100.0):
 def test_crypto_rules_and_exits():
     ls = load_strategy("crypto.json")
     assert ls.continuous and ls.fractional and ls.force_close is None and ls.scan_kind == "static"
-    assert ls.exits.trail_mode == "atr" and ls.exits.trail_atr_mult == 3.0 and ls.exits.fractional
-    assert ls.exits.final_target_r == 0 and ls.exits.time_stop_minutes == 1440
+    assert ls.exits.trail_mode == "atr" and ls.exits.trail_atr_mult == 2.5 and ls.exits.fractional
+    assert ls.exits.final_target_r == 0 and ls.exits.time_stop_minutes == 240
     assert ls.cooldown_minutes == 0 and "BTC/USD" in ls.universe
-    assert ls.risk_overrides["max_positions"] == 4
+    assert ls.risk_overrides["max_positions"] == 6 and ls.strategy.bar_minutes == 5
+    slow = load_strategy("crypto_15m.json")
+    assert slow.strategy.bar_minutes == 15 and slow.exits.time_stop_minutes == 1440
 
 
 def test_crypto_signal_and_filters():
@@ -215,3 +217,14 @@ def test_crypto_explain_names_the_failing_gate():
     assert s.explain("BTC/USD", quiet, now) == "low_relvol"
     assert s.explain("BTC/USD", bars_24h()[-50:], now) == "history"
     assert set(s.GATES) >= {"signal", "no_breakout", "low_relvol", "history", "below_ema"}
+
+
+def test_min_initial_risk_widens_tiny_stops():
+    now = clock.at(DAY, clock.parse_hhmm("00:00"))
+    bars = bars_24h(breakout_at=259)  # ATR here is ~0.1 on a ~102 price: a 0.2% stop
+    tight = CryptoMomentum(CryptoRules(breakout_bars=20, trend_ema_bars=100, min_rel_volume=1.5))
+    wide = CryptoMomentum(CryptoRules(breakout_bars=20, trend_ema_bars=100, min_rel_volume=1.5,
+                                      min_initial_risk_pct=0.8))
+    a, b = tight.evaluate("BTC/USD", bars, [], now), wide.evaluate("BTC/USD", bars, [], now)
+    assert a is not None and b is not None and a.entry == b.entry
+    assert (a.entry - a.stop) / a.entry < 0.008 and abs((b.entry - b.stop) / b.entry - 0.008) < 1e-6
