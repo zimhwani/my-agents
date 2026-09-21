@@ -106,6 +106,7 @@ class Settings:
     # risk
     risk_per_trade_pct: float = 0.5
     max_risk_per_trade_usd: float = 250.0
+    equity_cap_usd: float = 0.0  # >0: size trades as if equity were at most this (paper accounts)
     max_position_pct: float = 25.0
     max_positions: int = 3
     max_daily_loss_r: float = -3.0
@@ -234,6 +235,7 @@ class Settings:
             live_ack=_env("LIVE_TRADING_ACK"),
             risk_per_trade_pct=_float("RISK_PER_TRADE_PCT", 0.5),
             max_risk_per_trade_usd=_float("MAX_RISK_PER_TRADE_USD", 250.0),
+            equity_cap_usd=_float("EQUITY_CAP_USD", 0.0),
             max_position_pct=_float("MAX_POSITION_PCT", 25.0),
             max_positions=_int("MAX_POSITIONS", 3),
             max_daily_loss_r=_float("MAX_DAILY_LOSS_R", -3.0),
@@ -274,7 +276,9 @@ class Settings:
         return (
             f"{mode} {where} "
             f"dry_run={self.dry_run} risk={self.risk_per_trade_pct}%/trade "
-            f"(cap ${self.max_risk_per_trade_usd:.0f}) max_pos={self.max_positions} "
+            f"(cap ${self.max_risk_per_trade_usd:.0f}"
+            + (f", equity capped at ${self.equity_cap_usd:,.0f}" if self.equity_cap_usd > 0 else "")
+            + f") max_pos={self.max_positions} "
             f"daily_stop={self.max_daily_loss_r}R/{self.max_daily_loss_pct}% "
             f"force_close={self.force_close_time.strftime('%H:%M')} ET"
         )

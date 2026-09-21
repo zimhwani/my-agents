@@ -76,3 +76,10 @@ def test_dotenv_and_limits(tmp_path, monkeypatch):
     monkeypatch.setenv("RISK_PER_TRADE_PCT", "5")
     with pytest.raises(UnsafeConfig):
         Settings.load(env)
+
+
+def test_equity_cap_env(monkeypatch):
+    monkeypatch.setenv("EQUITY_CAP_USD", "3560")
+    from tradebot.config import Settings
+    s = Settings.load()
+    assert s.equity_cap_usd == 3560.0

@@ -217,7 +217,8 @@ class TradingLoop:
                                              self.daily_for(c.symbol), now)
                 if sig is None:
                     continue
-                qty = position_size(equity, sig.entry, sig.stop, self.s.risk_per_trade_pct,
+                sizing_equity = min(equity, self.s.equity_cap_usd) if self.s.equity_cap_usd > 0 else equity
+                qty = position_size(sizing_equity, sig.entry, sig.stop, self.s.risk_per_trade_pct,
                                     self.s.max_risk_per_trade_usd, self.s.max_position_pct,
                                     fractional=self.loaded.fractional)
                 log.info("SIGNAL %s qty=%s %s", sig.symbol, qty, sig.reason)
