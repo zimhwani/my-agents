@@ -163,3 +163,30 @@ def fetch_history(broker, symbol: str, days: int, bar_minutes: int = 5) -> list[
         _time.sleep(2)  # be gentle with IB's historical pacing limits
         log.info("%s: %d bars so far (back to %s)", symbol, len(seen), first.date())
     return [seen[k] for k in sorted(seen)]
+
+
+def synthetic_continuous(symbol: str, days: int = 60, bar_minutes: int = 15, seed: int | None = None,
+                         start_price: float = 100.0, end: datetime | None = None) -> list[Bar]:
+    """Random-walk 24/7 bars (crypto-like: fat tails, momentum bursts). Demos/tests only."""
+    rng = random.Random(seed if seed is not None else hash(symbol) & 0xFFFF)
+    end = end or clock.now_et().replace(second=0, microsecond=0)
+    n = days * (1440 // bar_minutes)
+    t = end - timedelta(minutes=bar_minutes * n)
+    price = start_price
+    sigma = 0.004 * (bar_minutes / 15) ** 0.5
+    out: list[Bar] = []
+    drift = 0.0
+    for i in range(n):
+        if rng.random() < 0.01:  # momentum burst for a few hours
+            drift = rng.choice([-1, 1, 1]) * sigma * 0.6
+        elif rng.random() < 0.05:
+            drift = 0.0
+        o = price
+        c = o * (1 + rng.gauss(drift, sigma))
+        h = max(o, c) * (1 + abs(rng.gauss(0, sigma * 0.5)))
+        lo = min(o, c) * (1 - abs(rng.gauss(0, sigma * 0.5)))
+        vol = 100 * (1 + abs(rng.gauss(0, 1))) * (3 if drift else 1)
+        out.append(Bar(t, round(o, 4), round(h, 4), round(lo, 4), round(c, 4), round(vol, 2)))
+        price = c
+        t += timedelta(minutes=bar_minutes)
+    return out

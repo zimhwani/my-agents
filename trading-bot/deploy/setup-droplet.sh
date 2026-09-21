@@ -27,6 +27,8 @@ chown -R tradebot:tradebot /opt/my-agents
 install -m 0644 deploy/tradebot.service /etc/systemd/system/tradebot.service
 install -m 0644 deploy/tradebot.timer /etc/systemd/system/tradebot.timer
 install -m 0644 deploy/tradebot-dashboard.service /etc/systemd/system/tradebot-dashboard.service
+install -m 0644 deploy/tradebot-crypto.service /etc/systemd/system/tradebot-crypto.service
+install -m 0644 deploy/tradebot-crypto-dashboard.service /etc/systemd/system/tradebot-crypto-dashboard.service
 systemctl daemon-reload
 systemctl enable --now tradebot.timer
 systemctl enable tradebot-dashboard.service
@@ -39,3 +41,5 @@ echo "  2. sudo -u tradebot $APP_DIR/.venv/bin/python -m tradebot check   (from 
 echo "  3. systemctl start tradebot-dashboard   # then ssh -L 8765:127.0.0.1:8765 root@DROPLET"
 echo "  4. The bot starts automatically weekdays at 09:00 ET: systemctl list-timers tradebot.timer"
 echo "     Start today's session by hand: systemctl start tradebot ; logs: journalctl -u tradebot -f"
+echo "  5. 24/7 crypto bot (optional): copy .env.crypto, then"
+echo "     systemctl enable --now tradebot-crypto tradebot-crypto-dashboard"

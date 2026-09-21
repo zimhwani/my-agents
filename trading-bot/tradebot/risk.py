@@ -12,16 +12,22 @@ from .models import TradeRecord
 
 
 def position_size(equity: float, entry: float, stop: float, risk_pct: float,
-                  max_risk_usd: float, max_position_pct: float) -> int:
-    """Shares such that (entry - stop) * shares <= min(risk_pct% of equity, cap),
-    and shares * entry <= max_position_pct% of equity. 0 if the trade doesn't fit."""
+                  max_risk_usd: float, max_position_pct: float, fractional: bool = False,
+                  min_notional: float = 10.0):
+    """Quantity such that (entry - stop) * qty <= min(risk_pct% of equity, cap),
+    and qty * entry <= max_position_pct% of equity. 0 if the trade doesn't fit.
+    Whole shares by default; ``fractional`` (crypto) returns a float to 6 dp."""
     risk_per_share = abs(entry - stop)
     if risk_per_share <= 0 or equity <= 0 or entry <= 0:
         return 0
     risk_budget = min(equity * risk_pct / 100.0, max_risk_usd)
-    by_risk = math.floor(risk_budget / risk_per_share)
-    by_size = math.floor(equity * max_position_pct / 100.0 / entry)
-    return max(0, min(by_risk, by_size))
+    by_risk = risk_budget / risk_per_share
+    by_size = equity * max_position_pct / 100.0 / entry
+    qty = min(by_risk, by_size)
+    if fractional:
+        qty = math.floor(qty * 1e6) / 1e6
+        return qty if qty * entry >= min_notional else 0.0
+    return max(0, math.floor(qty))
 
 
 @dataclass
@@ -53,6 +59,6 @@ class RiskGate:
             dd = (equity - day.start_equity) / day.start_equity * 100.0
             if dd <= -abs(self.s.max_daily_loss_pct):
                 out.append(f"daily equity drawdown {dd:.2f}% beyond limit")
-        if now.time() >= self.s.force_close_time:
+        if not getattr(self.s, "continuous", False) and now.time() >= self.s.force_close_time:
             out.append("past force-close time")
         return out

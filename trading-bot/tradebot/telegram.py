@@ -19,11 +19,13 @@ log = logging.getLogger("tradebot.telegram")
 
 
 class Notifier:
-    def __init__(self, token: str = "", chat_id: str = "", timeout: float = 10.0, quiet: bool = False):
+    def __init__(self, token: str = "", chat_id: str = "", timeout: float = 10.0, quiet: bool = False,
+                 prefix: str = ""):
         self.token = token
         self.chat_id = chat_id
         self.timeout = timeout
         self.quiet = quiet
+        self.prefix = prefix
         self.sent: list[str] = []  # kept for tests / status
 
     @property
@@ -31,6 +33,8 @@ class Notifier:
         return bool(self.token and self.chat_id)
 
     def send(self, text: str, silent: bool = False) -> bool:
+        if self.prefix:
+            text = f"[{self.prefix}] {text}"
         self.sent.append(text)
         if not self.configured:
             if not self.quiet:

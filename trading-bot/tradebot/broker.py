@@ -299,6 +299,7 @@ class SimBroker:
     now: datetime | None = None
     connected: bool = False
     realized_pnl: float = 0.0
+    bar_minutes: int = 5
 
     def connect(self) -> None:
         self.connected = True
@@ -437,7 +438,7 @@ class SimBroker:
     def process_bar(self, symbol: str, bar: Bar) -> list[OrderRef]:
         """Advance one bar: fill any working stop that the bar traded through.
         Returns the stop orders that filled."""
-        self.now = bar.time + timedelta(minutes=5)
+        self.now = bar.time + timedelta(minutes=self.bar_minutes)
         self.prices[symbol] = bar.close
         filled = []
         for o in list(self._orders.values()):

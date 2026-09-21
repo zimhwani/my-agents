@@ -58,10 +58,11 @@ class Backtester:
         self.intraday = intraday
         # explicit daily history when given (needed for 200-day filters); else aggregate
         self.daily = {sym: (daily or {}).get(sym) or aggregate_daily(b) for sym, b in intraday.items()}
-        self.sim = SimBroker(equity=equity, slippage_bps=slippage_bps, intraday=intraday, daily=self.daily)
+        self.sim = SimBroker(equity=equity, slippage_bps=slippage_bps, intraday=intraday, daily=self.daily,
+                             bar_minutes=self.bar_minutes)
         self.journal = Journal(None)
         self.exec = Executor(self.sim, self.journal, Notifier(quiet=True))
-        self.exits = ExitManager(self.loaded.exits, settings.force_close_time)
+        self.exits = ExitManager(self.loaded.exits, None if self.loaded.continuous else settings.force_close_time)
         self.gate = RiskGate(settings)
 
     def _atr(self, symbol: str, now: datetime) -> float:
@@ -69,6 +70,8 @@ class Backtester:
         return atr_of(bars[-(self.atr_period * 4):], self.atr_period) or 0.0
 
     def run(self, start=None, end=None) -> BacktestResult:
+        if self.loaded.continuous:
+            return self.run_continuous(start, end)
         width = timedelta(minutes=self.bar_minutes)
         by_day: dict = {}
         for sym, bars in self.intraday.items():
@@ -159,3 +162,68 @@ class Backtester:
         trades = self.journal.load()
         return BacktestResult(trades=trades, stats=compute_stats(trades), start_equity=start_equity,
                               end_equity=self.sim.net_liquidation(), days=len(by_day))
+
+
+    # -- 24/7 markets: one timeline across the whole dataset -----------------------------
+    def run_continuous(self, start=None, end=None) -> BacktestResult:
+        width = timedelta(minutes=self.bar_minutes)
+        by_slot: dict = {}
+        for sym, bars in self.intraday.items():
+            for b in bars:
+                d = b.time.date()
+                if (start and d < start) or (end and d > end):
+                    continue
+                by_slot.setdefault(b.time, {})[sym] = b
+        start_equity = self.sim.net_liquidation()
+        day = None
+        day_date = None
+        days = set()
+        last_exit: dict[str, datetime] = {}
+        cd = timedelta(minutes=self.loaded.cooldown_minutes)
+        for slot in sorted(by_slot):
+            now = slot + width
+            if day_date != now.date():
+                day_date = now.date()
+                days.add(day_date)
+                day = DayStats(start_equity=self.sim.net_liquidation())
+            bar_at = by_slot[slot]
+            for sym, b in bar_at.items():
+                self.sim.process_bar(sym, b)
+            self.sim.now = now
+            self.exec.check_stop_fills(now)
+            for t in list(self.exec.open_trades):
+                b = bar_at.get(t.symbol)
+                if b is None:
+                    continue
+                recent = self.sim.intraday_bars(t.symbol, self.bar_minutes, 3)[-120:]
+                actions = self.exits.manage(t, b.close, self._atr(t.symbol, now), now, b.high, b.low, bars=recent)
+                if actions:
+                    self.exec.apply(t, actions, now)
+                    if t.status == "CLOSED":
+                        last_exit[t.symbol] = now
+            for t in self.exec.closed_today:
+                if t.last_exit_time and (t.symbol not in last_exit or t.last_exit_time > last_exit[t.symbol]):
+                    last_exit[t.symbol] = t.last_exit_time
+            day.realized_r = sum(t.r_multiple for t in self.exec.closed_today if t.entry_time.date() == day_date)
+            equity = self.sim.net_liquidation()
+            if self.gate.blockers(self.exec.open_trades, day, equity, now):
+                continue
+            held = {t.symbol for t in self.exec.open_trades}
+            for sym in sorted(bar_at):
+                if sym in held or len(self.exec.open_trades) >= self.s.max_positions:
+                    continue
+                if sym in last_exit and now - last_exit[sym] < cd:
+                    continue
+                sig = self.strategy.evaluate(sym, self.sim.intraday_bars(sym, self.bar_minutes, self.loaded.intraday_days, True),
+                                             self.sim.daily_bars(sym, 60), now)
+                if sig is None:
+                    continue
+                qty = position_size(equity, sig.entry, sig.stop, self.s.risk_per_trade_pct,
+                                    self.s.max_risk_per_trade_usd, self.s.max_position_pct, fractional=True)
+                if qty > 0 and self.exec.open_trade(sig, qty, now):
+                    held.add(sym)
+        if self.exec.open_trades:
+            self.exec.flatten_all("end", self.sim.now)
+        trades = self.journal.load()
+        return BacktestResult(trades=trades, stats=compute_stats(trades), start_equity=start_equity,
+                              end_equity=self.sim.net_liquidation(), days=len(days))

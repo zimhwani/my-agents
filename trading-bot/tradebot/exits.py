@@ -37,6 +37,7 @@ class ExitRules:
     final_target_r: float = 3.0       # close the remainder here (0 = none)
     time_stop_minutes: int = 120      # 0 = none
     time_stop_min_r: float = 0.5
+    fractional: bool = False          # crypto: partial quantities are fractional
 
 
 @dataclass
@@ -69,8 +70,8 @@ def swing_highs(bars: list[Bar], left: int = 2, right: int = 2) -> list[Bar]:
 
 
 class ExitManager:
-    def __init__(self, rules, force_close_time: time = time(15, 50)):
-        # accept a StrategyParams (ORB) as well as an ExitRules
+    def __init__(self, rules, force_close_time: time | None = time(15, 50)):
+        # accept a StrategyParams (ORB) as well as an ExitRules; force_close_time=None = 24/7 market
         self.r: ExitRules = rules.to_exit_rules() if hasattr(rules, "to_exit_rules") else rules
         self.force_close_time = force_close_time
 
@@ -88,8 +89,8 @@ class ExitManager:
         if bar_low is not None:
             trade.touch(bar_low)
 
-        # 1. forced flat before the close
-        if now.time() >= self.force_close_time:
+        # 1. forced flat before the close (not for 24/7 markets)
+        if self.force_close_time is not None and now.time() >= self.force_close_time:
             return [ExitAction(CLOSE, trade.qty_open, price, "eod")]
 
         r = trade.unrealized_r(price)
@@ -107,7 +108,8 @@ class ExitManager:
 
         # 4. partial
         if rules.partial_r > 0 and not trade.partial_taken and r >= rules.partial_r:
-            qty = int(round(trade.qty_open * rules.partial_fraction))
+            qty = round(trade.qty_open * rules.partial_fraction, 6) if rules.fractional \
+                else int(round(trade.qty_open * rules.partial_fraction))
             if 0 < qty < trade.qty_open:
                 actions.append(ExitAction(PARTIAL, qty, price, "partial"))
             trade.partial_taken = True  # a 1-share trade just carries on to breakeven

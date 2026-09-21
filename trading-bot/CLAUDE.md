@@ -5,7 +5,7 @@ Trading 212 (default) or Interactive Brokers. Treat every change as one that
 can lose money.
 
 ## Never
-- Set `T212_ENV=live` or `IB_PORT` to a live port, remove the `LIVE_TRADING_ACK`
+- Set `T212_ENV=live`, `ALPACA_ENV=live` or `IB_PORT` to a live port, remove the `LIVE_TRADING_ACK`
   check in `tradebot/config.py`, or weaken `Settings.validate()`.
 - Remove or bypass: the kill-switch file, `MAX_POSITIONS`, `MAX_DAILY_LOSS_*`,
   the forced close at `FORCE_CLOSE_TIME`, or the protective stop placed after
@@ -45,6 +45,8 @@ can lose money.
 | `universe.py` | pre-market scan -> watchlist |
 | `strategy.py` | ORB signals, `load_strategy()` factory, `LoadedStrategy` |
 | `tjl.py` | Trend Join Long (gap-and-go) from `rules.json` |
+| `crypto.py` | Crypto Momentum Breakout (24/7, continuous mode) from `crypto.json` |
+| `alpaca_broker.py` | Alpaca trading API as a crypto broker + crypto data |
 | `risk.py` | position size, daily limits, kill switch |
 | `execution.py` | orders, partials, stop moves, state persistence |
 | `exits.py` | partial / breakeven / trail / target / time / EOD rules |

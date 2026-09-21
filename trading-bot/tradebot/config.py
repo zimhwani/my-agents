@@ -76,7 +76,7 @@ class UnsafeConfig(RuntimeError):
     pass
 
 
-BROKERS = {"t212", "ib"}
+BROKERS = {"t212", "ib", "alpaca"}
 
 
 @dataclass
@@ -93,6 +93,9 @@ class Settings:
     alpaca_api_key: str = ""
     alpaca_api_secret: str = ""
     alpaca_feed: str = "iex"
+    alpaca_env: str = "paper"  # paper | live (BROKER=alpaca)
+    continuous: bool = False   # set by a 24/7 strategy (crypto)
+    telegram_prefix: str = ""
     # interactive brokers
     ib_host: str = "127.0.0.1"
     ib_port: int = 7497
@@ -137,6 +140,8 @@ class Settings:
     def is_paper(self) -> bool:
         if self.broker == "t212":
             return self.t212_env == "demo"
+        if self.broker == "alpaca":
+            return self.alpaca_env == "paper"
         return self.ib_port in PAPER_PORTS
 
     @property
@@ -177,6 +182,13 @@ class Settings:
                 raise UnsafeConfig("T212_STOP_MODE must be 'software' or 'broker'.")
         if self.data_provider not in ("yfinance", "alpaca"):
             raise UnsafeConfig("DATA_PROVIDER must be 'yfinance' or 'alpaca'.")
+        elif self.broker == "alpaca":
+            if self.alpaca_env not in ("paper", "live"):
+                raise UnsafeConfig("ALPACA_ENV must be 'paper' or 'live'.")
+            if self.alpaca_env == "live" and self.live_ack != LIVE_ACK:
+                raise UnsafeConfig(f"ALPACA_ENV=live means real money. Refusing to start without LIVE_TRADING_ACK={LIVE_ACK}.")
+            if not self.alpaca_api_key or not self.alpaca_api_secret:
+                raise UnsafeConfig("BROKER=alpaca needs ALPACA_API_KEY and ALPACA_API_SECRET.")
         elif self.ib_port not in PAPER_PORTS:
             if self.live_ack != LIVE_ACK:
                 raise UnsafeConfig(
@@ -190,7 +202,7 @@ class Settings:
             raise UnsafeConfig("MAX_POSITIONS must be 1..10.")
         if self.max_daily_loss_r >= 0:
             raise UnsafeConfig("MAX_DAILY_LOSS_R must be negative (e.g. -3).")
-        if self.force_close_time >= time(16, 0):
+        if not self.continuous and self.force_close_time >= time(16, 0):
             raise UnsafeConfig("FORCE_CLOSE_TIME must be before 16:00.")
 
     @classmethod
@@ -211,6 +223,8 @@ class Settings:
             alpaca_api_key=_env("ALPACA_API_KEY"),
             alpaca_api_secret=_env("ALPACA_API_SECRET"),
             alpaca_feed=_env("ALPACA_FEED", "iex").lower(),
+            alpaca_env=_env("ALPACA_ENV", "paper").lower(),
+            telegram_prefix=_env("TELEGRAM_PREFIX"),
             ib_host=_env("IB_HOST", "127.0.0.1"),
             ib_port=_int("IB_PORT", 7497),
             ib_client_id=_int("IB_CLIENT_ID", 7),
@@ -251,6 +265,8 @@ class Settings:
         mode = "PAPER" if self.is_paper else "*** LIVE ***"
         if self.broker == "t212":
             where = f"Trading 212 {self.t212_env} (data: {self.data_provider}, stops: {self.t212_stop_mode})"
+        elif self.broker == "alpaca":
+            where = f"Alpaca {self.alpaca_env} (24/7 crypto, software stops)"
         else:
             where = f"IB {self.ib_host}:{self.ib_port} client={self.ib_client_id}"
         return (

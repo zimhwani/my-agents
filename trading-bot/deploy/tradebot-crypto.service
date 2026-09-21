@@ -1,0 +1,17 @@
+[Unit]
+Description=Crypto trading bot (24/7, Alpaca paper)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=tradebot
+WorkingDirectory=/opt/my-agents/trading-bot
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/opt/my-agents/trading-bot/.venv/bin/python -m tradebot --env .env.crypto run
+Restart=always
+RestartSec=30
+TimeoutStopSec=90
+
+[Install]
+WantedBy=multi-user.target

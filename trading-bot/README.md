@@ -334,7 +334,46 @@ The hosted page shows practice trades only and contains no keys, but it is
 public unless you enable Vercel's deployment protection. Free Blob storage is
 plenty: two small JSON files, rewritten in place.
 
-## 10. Run it every day on your own machine instead
+## 10. The 24/7 crypto bot (second service)
+
+Trading 212's API is equities-only, so round-the-clock trading runs as a
+**second bot on Alpaca's paper account**, with its own strategy file, journal,
+dashboard and Telegram tag. Nothing is shared with the equities bot except
+the code.
+
+**Strategy** (`crypto.json`, Crypto Momentum Breakout): long-only spot on a
+fixed list of liquid pairs (BTC, ETH, SOL, …), 15-minute bars. Enter on the
+first bar that closes above the previous 20 bars' high, above the 200-bar EMA,
+on 1.5x volume. Stop 2 ATR below entry (skip if wider than 6%). A third off at
++1.5R, breakeven at +1.5R, then a 3-ATR trail with **no target**, so winners
+can run for days; time stop after 24 h if it never reached +0.5R; 2-hour
+cooldown per symbol. 1% risk, 25% max position, 4 positions. Software stops
+(Alpaca has no stop orders for crypto).
+
+**Backtest first**, on real bars:
+
+```bash
+python -m tradebot --env .env.crypto fetch-crypto --days 365
+python -m tradebot --env .env.crypto backtest --data data/crypto
+python -m tradebot --env .env.crypto analyze
+```
+
+**Setup**
+
+1. `cp .env.crypto.example .env.crypto`, paste the same Alpaca keys, Telegram
+   token and chat id. In the Alpaca dashboard, reset the paper account to a
+   realistic balance (Settings → Reset) so sizing matches what you'd trade.
+2. `python -m tradebot --env .env.crypto check`
+3. Locally: `python -m tradebot --env .env.crypto run` (runs until stopped).
+   On the droplet: copy `.env.crypto` next to `.env`, then
+   `systemctl enable --now tradebot-crypto tradebot-crypto-dashboard`
+   (tunnel port 8766 for its dashboard). It restarts itself if it crashes and
+   re-attaches to open positions from `data-crypto/state.json`.
+
+Telegram messages from it are prefixed `[CRYPTO]`. A day summary arrives at
+midnight ET; status every hour.
+
+## 11. Run it every day on your own machine instead
 
 The loop waits for the open and exits after the close, so schedule it once
 per weekday shortly before 09:30 ET (14:30 London / 15:30 Paris in summer).
@@ -346,7 +385,7 @@ logged in (enable its auto-restart):
 - **macOS / Linux** cron: `0 9 * * 1-5 cd /path/to/trading-bot && .venv/bin/python -m tradebot run >> data/cron.log 2>&1`
   (adjust for your timezone; the bot itself always thinks in ET).
 
-## 11. Going live (only after weeks of clean practice results)
+## 12. Going live (only after weeks of clean practice results)
 
 1. Review `data/dashboard.html` and `data/trades.jsonl`: is expectancy
    positive, is drawdown tolerable, did every day end flat?

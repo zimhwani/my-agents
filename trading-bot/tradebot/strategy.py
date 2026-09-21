@@ -228,6 +228,10 @@ class LoadedStrategy:
     scan_at: time = time(9, 0)    # earliest time the watchlist scan may run
     force_close: time | None = None
     risk_overrides: dict = None   # settings fields the strategy file dictates
+    continuous: bool = False      # 24/7 market: no session, no forced close
+    fractional: bool = False      # fractional quantities (crypto)
+    cooldown_minutes: int = 0     # wait this long after closing a symbol before re-entering it
+    universe: list[str] | None = None  # strategy-defined universe (overrides settings)
 
     def apply(self, settings) -> None:
         """Let the strategy file override risk/time settings it specifies."""
@@ -235,6 +239,9 @@ class LoadedStrategy:
             setattr(settings, k, v)
         if self.force_close is not None:
             settings.force_close_time = self.force_close
+        settings.continuous = self.continuous
+        if self.universe:
+            settings.universe = list(self.universe)
         settings.validate()
 
 
@@ -246,6 +253,9 @@ def load_strategy(path: str | Path, allow_shorts: bool = False) -> LoadedStrateg
     """``rules.json`` (Trend Join Long) or ``strategy.json`` (ORB), by content."""
     p = Path(path)
     raw = json.loads(p.read_text()) if p.exists() else {}
+    if raw.get("market") == "crypto":
+        from .crypto import load_crypto
+        return load_crypto(p)
     if "strategy_name" in raw or "daily_filters" in raw:
         from .tjl import load_tjl
         return load_tjl(p)

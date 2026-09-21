@@ -28,7 +28,7 @@ from .models import Bar
 from .risk import DayStats, RiskGate, position_size
 from .strategy import LoadedStrategy, completed_bars, rth_bars, session_bars
 from .telegram import Notifier, esc
-from .universe import Candidate, GapScanner, UniverseScanner
+from .universe import Candidate, GapScanner, StaticScanner, UniverseScanner
 
 log = logging.getLogger("tradebot.loop")
 
@@ -64,9 +64,11 @@ class TradingLoop:
         self.journal = journal or Journal(settings.journal_file)
         self.exec = executor or Executor(broker, self.journal, notifier,
                                          StateStore(settings.state_file), dry_run=settings.dry_run)
-        self.exits = ExitManager(loaded.exits, settings.force_close_time)
+        self.exits = ExitManager(loaded.exits, None if loaded.continuous else settings.force_close_time)
         self.gate = RiskGate(settings)
-        if loaded.scan_kind == "gap":
+        if loaded.scan_kind == "static":
+            self.scanner = StaticScanner(broker, settings, loaded.universe or settings.universe)
+        elif loaded.scan_kind == "gap":
             r = getattr(self.strategy, "r", None)
             self.scanner = GapScanner(broker, settings, min_gap_pct=getattr(r, "min_gap_pct", 3.0),
                                       min_price=getattr(r, "min_price_usd", 3.0),
@@ -110,14 +112,30 @@ class TradingLoop:
         return self._daily[symbol]
 
     def today_bars(self, symbol: str, now: datetime) -> list[Bar]:
-        return session_bars(completed_bars(self.bars_for(symbol, now), now, self.bar_minutes), now.date())
+        done = completed_bars(self.bars_for(symbol, now), now, self.bar_minutes)
+        if self.loaded.continuous:
+            return done[-120:]
+        return session_bars(done, now.date())
 
     def atr_for(self, symbol: str, now: datetime) -> float:
-        bars = rth_bars(completed_bars(self.bars_for(symbol, now), now, self.bar_minutes))
+        done = completed_bars(self.bars_for(symbol, now), now, self.bar_minutes)
+        bars = done if self.loaded.continuous else rth_bars(done)
         return atr_of(bars[-(self.atr_period * 4):], self.atr_period) or 0.0
+
+    def _cooling(self, symbol: str, now: datetime) -> bool:
+        """True if this symbol was closed less than cooldown_minutes ago."""
+        cd = self.loaded.cooldown_minutes
+        if cd <= 0:
+            return False
+        for t in self.exec.closed_today:
+            if t.symbol == symbol and t.last_exit_time and (now - t.last_exit_time) < timedelta(minutes=cd):
+                return True
+        return False
 
     def _ensure_day(self, now: datetime) -> None:
         if self.day is None or self._scanned_for != now.date():
+            if self.day is not None and self.loaded.continuous:
+                self._daily_summary(now)  # 24/7: summarise the day that just ended
             equity = self.b.net_liquidation()
             self.day = DayStats(start_equity=equity)
             self.day_done = False
@@ -150,12 +168,13 @@ class TradingLoop:
     # -- one iteration -----------------------------------------------------------
     def tick(self, now: datetime | None = None) -> None:
         now = clock.to_et(now or clock.now_et())
-        if not clock.is_trading_day(now.date()):
+        continuous = self.loaded.continuous
+        if not continuous and not clock.is_trading_day(now.date()):
             return
         self._ensure_day(now)
         if self.day_done:
             return
-        if now < clock.session_open(now.date()):
+        if not continuous and now < clock.session_open(now.date()):
             mins = (clock.session_open(now.date()) - now).total_seconds() / 60.0
             self.write_live(now, self.day.start_equity, [f"waiting for the open ({mins:.0f} min)"])
             return
@@ -172,8 +191,8 @@ class TradingLoop:
                 self.exec.apply(t, actions, now)
         self._update_day_stats()
 
-        # 2. force close
-        if now.time() >= self.s.force_close_time:
+        # 2. force close (session markets only)
+        if not continuous and now.time() >= self.s.force_close_time:
             self.exec.flatten_all("eod", now)
             self._update_day_stats()
             self._daily_summary(now)
@@ -186,17 +205,22 @@ class TradingLoop:
         equity = self.b.net_liquidation()
         blockers = self.gate.blockers(self.exec.open_trades, self.day, equity, now)
         if not blockers and self.scanned and clock.in_window(now, self.strategy.window_start, self.strategy.window_end):
-            held = {t.symbol for t in self.exec.open_trades} | {t.symbol for t in self.exec.closed_today}
+            held = {t.symbol for t in self.exec.open_trades}
+            if not continuous:  # session markets: one trade per symbol per day
+                held |= {t.symbol for t in self.exec.closed_today}
             for c in self.watchlist:
                 if c.symbol in held or len(self.exec.open_trades) >= self.s.max_positions:
+                    continue
+                if continuous and self._cooling(c.symbol, now):
                     continue
                 sig = self.strategy.evaluate(c.symbol, self.bars_for(c.symbol, now),
                                              self.daily_for(c.symbol), now)
                 if sig is None:
                     continue
                 qty = position_size(equity, sig.entry, sig.stop, self.s.risk_per_trade_pct,
-                                    self.s.max_risk_per_trade_usd, self.s.max_position_pct)
-                log.info("SIGNAL %s qty=%d %s", sig.symbol, qty, sig.reason)
+                                    self.s.max_risk_per_trade_usd, self.s.max_position_pct,
+                                    fractional=self.loaded.fractional)
+                log.info("SIGNAL %s qty=%s %s", sig.symbol, qty, sig.reason)
                 if qty <= 0:
                     continue
                 t = self.exec.open_trade(sig, qty, now)
@@ -312,6 +336,28 @@ class TradingLoop:
         try:
             while True:
                 now = clock.now_et()
+                if self.loaded.continuous:
+                    try:
+                        if not self.b.is_connected():
+                            raise ConnectionError("broker disconnected")
+                        self.tick(now)
+                        backoff = 5
+                    except (ConnectionError, OSError) as exc:
+                        log.error("Connection problem: %s; reconnecting in %ss", exc, backoff)
+                        _time.sleep(backoff)
+                        backoff = min(backoff * 2, 120)
+                        try:
+                            self.b.disconnect()
+                            self.b.connect()
+                            self.exec.restore()
+                        except Exception as exc2:  # pragma: no cover
+                            log.error("Reconnect failed: %s", exc2)
+                        continue
+                    except Exception as exc:
+                        log.error("tick failed: %s\n%s", exc, traceback.format_exc())
+                        self.notify.send(f"🚨 tick error: {esc(exc)}")
+                    self.b.sleep(self.s.poll_seconds)
+                    continue
                 if not clock.is_trading_day(now.date()) or now.time() >= clock.MARKET_CLOSE or self.day_done:
                     if self.day_done or now.time() >= clock.MARKET_CLOSE:
                         log.info("Session over; exiting.")

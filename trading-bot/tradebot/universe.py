@@ -146,3 +146,27 @@ class GapScanner:
             log.info("GAP %-6s $%8.2f  gap %+5.1f%%", c.symbol, c.price, c.gap_pct)
         log.info("Gap scan via %s: %d candidates", source, len(found))
         return found[: self.s.max_watchlist]
+
+
+class StaticScanner:
+    """A fixed universe (crypto): every symbol is on the watchlist; ranked by 24h change."""
+
+    def __init__(self, broker: Broker, settings: Settings, symbols: list[str]):
+        self.b = broker
+        self.s = settings
+        self.symbols = symbols
+
+    def scan(self, symbols: list[str] | None = None) -> list[Candidate]:
+        out = []
+        for sym in symbols or self.symbols:
+            try:
+                price = self.b.last_price(sym)
+                daily = self.b.daily_bars(sym, 3)
+                prev = daily[-1].close if daily else None
+                gap = (price - prev) / prev * 100.0 if price and prev else 0.0
+                out.append(Candidate(symbol=sym, price=price or 0.0, avg_volume=0.0, avg_dollar_volume=0.0,
+                                     atr_pct=0.0, gap_pct=gap, score=gap))
+            except Exception as exc:
+                log.warning("%s: scan error %s", sym, exc)
+        out.sort(key=lambda c: -c.gap_pct)
+        return out

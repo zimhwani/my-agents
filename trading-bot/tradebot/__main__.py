@@ -46,7 +46,7 @@ def _settings(args) -> Settings:
 
 
 def _notifier(s: Settings) -> Notifier:
-    return Notifier(s.telegram_bot_token, s.telegram_chat_id)
+    return Notifier(s.telegram_bot_token, s.telegram_chat_id, prefix=s.telegram_prefix)
 
 
 def _data(s: Settings):
@@ -65,7 +65,24 @@ def _data(s: Settings):
 
 
 def _broker(s: Settings, connect: bool = True):
-    """Build the configured broker (Trading 212 by default, IB with BROKER=ib)."""
+    """Build the configured broker (Trading 212 by default, IB with BROKER=ib, Alpaca crypto with BROKER=alpaca)."""
+    if s.broker == "alpaca":
+        from .alpaca import AlpacaError
+        from .alpaca_broker import AlpacaBroker, AlpacaCryptoData
+        aux = None
+        try:
+            from .marketdata import YFinanceData
+            aux = YFinanceData()
+        except Exception:
+            pass
+        b = AlpacaBroker(s, AlpacaCryptoData(s.alpaca_api_key, s.alpaca_api_secret, aux=aux))
+        if connect:
+            try:
+                b.connect()
+            except AlpacaError as exc:
+                print(f"Alpaca: {exc}")
+                sys.exit(1)
+        return b
     if s.broker == "t212":
         from .t212 import T212Broker, T212Error
         b = T212Broker(s, _data(s))
@@ -109,19 +126,23 @@ def cmd_check(args) -> None:
           f"{f' from {s.universe_file}' if s.universe_file else ''}")
     b = _broker(s)
     try:
+        sample = "SPY"
         if s.broker == "t212":
             print(f"Account: {b.account_id} ({b.account_currency}) on Trading 212 {s.t212_env}")
             missing = [sym for sym in s.universe if sym not in b._instruments]
             if missing:
                 print("Not tradable on this account (remove from UNIVERSE):", ", ".join(missing))
+        elif s.broker == "alpaca":
+            print(f"Account: {b.account_id} ({b.account_currency}) on Alpaca {s.alpaca_env}")
+            sample = s.universe[0] if s.universe else "BTC/USD"
         else:
             print("Account:", b.account)
         print(f"Equity ({s.trading_currency}): {b.net_liquidation():,.2f}")
         print("Positions:", b.positions() or "none")
-        bars = b.daily_bars("SPY", 5)
-        print("SPY daily bars (%d): last close %.2f" % (len(bars), bars[-1].close if bars else 0))
-        px = b.last_price("SPY")
-        print("SPY last price:", px if px else "unavailable (check your data provider / IB_MARKET_DATA_TYPE)")
+        bars = b.daily_bars(sample, 5)
+        print("%s daily bars (%d): last close %.4g" % (sample, len(bars), bars[-1].close if bars else 0))
+        px = b.last_price(sample)
+        print(f"{sample} last price:", px if px else "unavailable (check your data provider / IB_MARKET_DATA_TYPE)")
     finally:
         b.disconnect()
     n = _notifier(s)
@@ -335,6 +356,30 @@ def cmd_fetch_gappers(args) -> None:
     print(f"done -> {out}   next: python -m tradebot backtest --data {out} && python -m tradebot analyze")
 
 
+def cmd_fetch_crypto(args) -> None:
+    """Crypto bars for the strategy's universe -> data/crypto/*.csv (Alpaca, no keys needed for data)."""
+    s = _settings(args)
+    _logging(s)
+    from datetime import timedelta
+    from .alpaca_broker import AlpacaCryptoData, fname
+    from .data import save_csv
+    loaded = load_strategy(s.strategy_file, s.allow_shorts)
+    symbols = args.symbols or loaded.universe or s.universe
+    minutes = getattr(loaded.strategy, "bar_minutes", 15)
+    d = AlpacaCryptoData(s.alpaca_api_key, s.alpaca_api_secret)
+    out = Path(args.out)
+    out.mkdir(parents=True, exist_ok=True)
+    start = clock.now_et() - timedelta(days=args.days)
+    print(f"Fetching {args.days} days of {minutes}-min crypto bars for {len(symbols)} symbols -> {out}")
+    for sym in symbols:
+        bars = d.bars(sym, f"{minutes}Min", start)
+        daily = d.bars(sym, "1Day", start - timedelta(days=30))
+        save_csv(bars, out / f"{fname(sym)}_{minutes}min.csv")
+        save_csv(daily, out / f"{fname(sym)}_1d.csv")
+        print(f"{sym}: {len(bars)} bars, {len(daily)} daily")
+    print(f"done -> {out}   next: python -m tradebot backtest --data {out}")
+
+
 def cmd_backtest(args) -> None:
     s = _settings(args)
     _logging(s)
@@ -346,7 +391,14 @@ def cmd_backtest(args) -> None:
     loaded = load_strategy(strategy_file, s.allow_shorts)
     loaded.apply(s)
     daily = None
-    if args.demo:
+    if args.demo and loaded.continuous:
+        from .data import synthetic_continuous
+        syms = args.symbols or (loaded.universe or ["BTC/USD", "ETH/USD", "SOL/USD"])[:4]
+        minutes = getattr(loaded.strategy, "bar_minutes", 15)
+        bars = {sym: synthetic_continuous(sym, args.days, minutes, seed=i + 1, start_price=50 * (i + 1))
+                for i, sym in enumerate(syms)}
+        print(f"Synthetic 24/7 data: {len(syms)} symbols x {args.days} days")
+    elif args.demo:
         syms = args.symbols or ["AAPL", "NVDA", "TSLA", "AMD", "META", "AMZN"]
         gap_share = 0.12 if loaded.scan_kind == "gap" else 0.0
         bars = {sym: synthetic_bars(sym, args.days, seed=i + 1, start_price=80 + 40 * i, gap_days=gap_share)
@@ -355,12 +407,17 @@ def cmd_backtest(args) -> None:
                  for i, (sym, b) in enumerate(bars.items())}
         print(f"Synthetic data: {len(syms)} symbols x {args.days} days")
     else:
-        bars = load_dir(args.data)
+        minutes = getattr(loaded.strategy, "bar_minutes", 5)
+        bars = load_dir(args.data, suffix=f"_{minutes}min.csv")
+        if loaded.continuous:  # crypto files are named BTC-USD_15min.csv
+            bars = {k.replace("-", "/"): v for k, v in bars.items()}
         daily = load_daily_dir(args.data) or None
+        if daily and loaded.continuous:
+            daily = {k.replace("-", "/"): v for k, v in daily.items()}
         if args.symbols:
             bars = {k: v for k, v in bars.items() if k in args.symbols}
         if not bars:
-            print(f"No *_5min.csv files in {args.data}. Run `fetch-data` first or use --demo.")
+            print(f"No *_{minutes}min.csv files in {args.data}. Run `fetch-data`/`fetch-crypto` first or use --demo.")
             sys.exit(1)
         if loaded.scan_kind == "gap" and not daily:
             print("Note: no *_1d.csv daily files found; the 200-day SMA filter needs them. "
@@ -506,6 +563,10 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--max-events", type=int, default=0, help="cap events (keeps the largest gaps)")
     p.add_argument("--workers", type=int, default=4)
     p.add_argument("--skip-existing", action="store_true")
+    p = sub.add_parser("fetch-crypto", help="download crypto bars for the crypto strategy's universe (Alpaca)")
+    p.add_argument("--days", type=int, default=365)
+    p.add_argument("--symbols", nargs="*")
+    p.add_argument("--out", default="data/crypto")
     p = sub.add_parser("backtest", help="run the strategy over CSV history (or --demo synthetic data)")
     p.add_argument("--data", default="data/bars")
     p.add_argument("--symbols", nargs="*")
@@ -534,7 +595,7 @@ def main(argv: list[str] | None = None) -> None:
     {"check": cmd_check, "scan": cmd_scan, "run": cmd_run, "flatten": cmd_flatten, "kill": cmd_kill,
      "telegram-test": cmd_telegram_test, "fetch-data": cmd_fetch_data, "backtest": cmd_backtest,
      "analyze": cmd_analyze, "sweep": cmd_sweep, "dashboard": cmd_dashboard,
-     "fetch-gappers": cmd_fetch_gappers}[args.cmd](args)
+     "fetch-gappers": cmd_fetch_gappers, "fetch-crypto": cmd_fetch_crypto}[args.cmd](args)
 
 
 if __name__ == "__main__":
