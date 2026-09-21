@@ -35,7 +35,7 @@ def test_crypto_rules_and_exits():
     assert ls.continuous and ls.fractional and ls.force_close is None and ls.scan_kind == "static"
     assert ls.exits.trail_mode == "atr" and ls.exits.trail_atr_mult == 3.0 and ls.exits.fractional
     assert ls.exits.final_target_r == 0 and ls.exits.time_stop_minutes == 1440
-    assert ls.cooldown_minutes == 120 and "BTC/USD" in ls.universe
+    assert ls.cooldown_minutes == 0 and "BTC/USD" in ls.universe
     assert ls.risk_overrides["max_positions"] == 4
 
 
@@ -75,6 +75,7 @@ def test_fractional_sizing():
 def test_continuous_backtest_on_synthetic(settings):
     from tradebot.backtest import Backtester
     ls = load_strategy("crypto.json")
+    ls.cooldown_minutes = 120  # crypto.json ships with no cooldown; exercise the mechanism here
     ls.apply(settings)
     settings.max_risk_per_trade_usd = 1e9
     bars = {s: synthetic_continuous(s, 30, 15, seed=i + 1, start_price=100 * (i + 1),

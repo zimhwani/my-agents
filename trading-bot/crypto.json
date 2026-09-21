@@ -21,7 +21,7 @@
     "trail": "atr_3.0",
     "time_stop_minutes": 1440,
     "time_stop_min_r": 0.5,
-    "cooldown_minutes": 120
+    "cooldown_minutes": 0
   },
 
   "risk": {

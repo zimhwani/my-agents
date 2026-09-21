@@ -10,7 +10,7 @@
            no fixed target (winners can run for days); time stop after 24h if
            the trade never reached +0.5R. No forced close: crypto never closes.
     Risk   1% per trade, 25% of equity per position, 4 positions,
-           2-hour cooldown per symbol after an exit.
+           optional cooldown per symbol after an exit (crypto.json, 0 = none).
 """
 
 from __future__ import annotations
