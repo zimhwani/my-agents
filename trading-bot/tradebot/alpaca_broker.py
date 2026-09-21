@@ -26,7 +26,7 @@ from .alpaca import AlpacaError, _parse_ts, _urllib_transport
 from .broker import OrderRef, PositionInfo
 from .config import Settings
 from .marketdata import Gapper
-from .models import LONG, Bar
+from .models import LONG, Bar, px
 
 log = logging.getLogger("tradebot.alpaca_broker")
 
@@ -318,16 +318,16 @@ class AlpacaBroker:
         if ref.order_id < 0:  # software stop
             if ref.status != "Submitted":
                 return ref
-            px = self.last_price(ref.symbol)
-            if px is None or px > ref.price:
+            last = self.last_price(ref.symbol)
+            if last is None or last > ref.price:
                 return ref
-            log.warning("%s software stop hit: %.4f <= %.4f; selling %s", ref.symbol, px, ref.price, ref.qty)
+            log.warning("%s software stop hit: %s <= %s; selling %s", ref.symbol, px(last), px(ref.price), ref.qty)
             try:
                 fill = self._sell(ref.symbol, ref.qty)
             except AlpacaError as exc:
                 log.error("%s stop sell failed: %s", ref.symbol, exc)
                 return ref
-            ref.status, ref.filled, ref.avg_fill = "Filled", fill.filled or ref.qty, fill.avg_fill or px
+            ref.status, ref.filled, ref.avg_fill = "Filled", fill.filled or ref.qty, fill.avg_fill or last
             self._stops.pop(ref.symbol, None)
             return ref
         oid = ref.raw["id"] if isinstance(ref.raw, dict) else None

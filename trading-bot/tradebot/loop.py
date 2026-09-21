@@ -24,7 +24,7 @@ from .execution import Executor, StateStore
 from .exits import ExitManager
 from .indicators import atr as atr_of
 from .journal import Journal, compute_stats
-from .models import Bar
+from .models import Bar, px
 from .risk import DayStats, RiskGate, position_size
 from .strategy import LoadedStrategy, completed_bars, rth_bars, session_bars
 from .telegram import Notifier, esc
@@ -297,8 +297,8 @@ class TradingLoop:
         if self.exec.open_trades:
             for t in self.exec.open_trades:
                 px = self.b.last_price(t.symbol) or t.entry_price
-                lines.append(f"• {esc(t.symbol)} {esc(t.side)} x{t.qty_open} @ {t.entry_price:.2f} "
-                             f"now {px:.2f} ({t.unrealized_r(px):+.2f}R) stop {t.stop:.2f}"
+                lines.append(f"• {esc(t.symbol)} {esc(t.side)} x{t.qty_open} @ {px(t.entry_price)} "
+                             f"now {px(last)} ({t.unrealized_r(last):+.2f}R) stop {px(t.stop)}"
                              f"{' · partial taken' if t.partial_taken else ''}")
         else:
             lines.append("• no open positions")

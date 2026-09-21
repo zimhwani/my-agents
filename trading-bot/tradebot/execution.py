@@ -17,7 +17,7 @@ from .broker import Broker, OrderRef
 from .clock import now_et
 from .exits import CLOSE, MOVE_STOP, PARTIAL, ExitAction
 from .journal import Journal
-from .models import Signal, TradeRecord
+from .models import Signal, TradeRecord, px
 from .telegram import Notifier, esc
 
 log = logging.getLogger("tradebot.execution")
@@ -74,7 +74,7 @@ class Executor:
                 self._stops[t.id] = ref
                 t.stop_order_id, t.stop_perm_id = ref.order_id, ref.perm_id
             self.open_trades.append(t)
-            log.info("Restored open trade %s %s x%s stop %.2f", t.side, t.symbol, t.qty_open, t.stop)
+            log.info("Restored open trade %s %s x%s stop %s", t.side, t.symbol, t.qty_open, px(t.stop))
         return extra
 
     # -- entries ---------------------------------------------------------------
@@ -84,7 +84,7 @@ class Executor:
             return None
         if self.dry_run:
             msg = (f"DRY RUN: would {'BUY' if sig.is_long else 'SELL'} {qty} {sig.symbol} "
-                   f"@ ~{sig.entry:.2f} stop {sig.stop:.2f} target {sig.target:.2f}")
+                   f"@ ~{px(sig.entry)} stop {px(sig.stop)} target {px(sig.target)}")
             log.info(msg)
             self.notify.send("🧪 " + esc(msg))
             return None
@@ -109,8 +109,8 @@ class Executor:
         self.open_trades.append(t)
         self.persist()
         self.notify.send(
-            f"🟢 <b>ENTRY {esc(t.side)} {esc(t.symbol)}</b> x{t.qty_initial} @ {t.entry_price:.2f}\n"
-            f"stop {t.stop:.2f} (risk ${t.initial_risk_usd:.0f}) · target {t.target:.2f}\n"
+            f"🟢 <b>ENTRY {esc(t.side)} {esc(t.symbol)}</b> x{t.qty_initial} @ {px(t.entry_price)}\n"
+            f"stop {px(t.stop)} (risk ${t.initial_risk_usd:.0f}) · target {px(t.target)}\n"
             f"<i>{esc(t.reason)}</i>")
         return t
 
@@ -124,8 +124,8 @@ class Executor:
             icon = "✅" if t.r_multiple > 0.1 else ("❌" if t.r_multiple < -0.1 else "➖")
             self.notify.send(
                 f"{icon} <b>CLOSED {esc(t.symbol)}</b> {t.r_multiple:+.2f}R  (${t.realized_pnl:+.0f})\n"
-                f"entry {t.entry_price:.2f} → avg exit {t.exit_price_avg:.2f} · "
-                f"{esc(', '.join(f'{f.reason} x{f.qty}@{f.price:.2f}' for f in t.exits))}")
+                f"entry {px(t.entry_price)} → avg exit {px(t.exit_price_avg)} · "
+                f"{esc(', '.join(f'{f.reason} x{f.qty}@{px(f.price)}' for f in t.exits))}")
         self.persist()
 
     def apply(self, t: TradeRecord, actions: list[ExitAction], now: datetime | None = None) -> None:
@@ -139,14 +139,14 @@ class Executor:
                 t.record_exit(now, qty, ref.avg_fill or a.price, "partial")
                 if t.id in self._stops and t.qty_open > 0:
                     self._stops[t.id] = self.b.modify_stop(self._stops[t.id], qty=t.qty_open)
-                self.notify.send(f"💰 partial {esc(t.symbol)} x{qty} @ {ref.avg_fill or a.price:.2f} "
+                self.notify.send(f"💰 partial {esc(t.symbol)} x{qty} @ {px(ref.avg_fill or a.price)} "
                                  f"(+{t.unrealized_r(ref.avg_fill or a.price):.1f}R), {t.qty_open} left", silent=True)
             elif a.kind == MOVE_STOP:
                 if t.id in self._stops:
                     self._stops[t.id] = self.b.modify_stop(self._stops[t.id], price=a.price)
                 t.stop = a.price
-                log.info("%s stop -> %.2f (%s)", t.symbol, a.price, a.reason)
-                self.notify.send(f"🔒 {esc(t.symbol)} stop → {a.price:.2f} ({esc(a.reason)})", silent=True)
+                log.info("%s stop -> %s (%s)", t.symbol, px(a.price), a.reason)
+                self.notify.send(f"🔒 {esc(t.symbol)} stop → {px(a.price)} ({esc(a.reason)})", silent=True)
             elif a.kind == CLOSE:
                 if t.id in self._stops:
                     self.b.cancel(self._stops[t.id])

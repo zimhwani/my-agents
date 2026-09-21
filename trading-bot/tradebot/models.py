@@ -12,6 +12,16 @@ LONG = "LONG"
 SHORT = "SHORT"
 
 
+def px(price: float) -> str:
+    """Price for humans: 2dp for normal prices, more for sub-dollar and sub-cent coins."""
+    a = abs(price)
+    if a >= 1:
+        return f"{price:.2f}"
+    if a >= 0.01:
+        return f"{price:.4f}"
+    return f"{price:.6g}"
+
+
 @dataclass(slots=True)
 class Bar:
     time: datetime  # bar START time, tz-aware ET
