@@ -19,6 +19,7 @@ on:
     branches: [main, claude/magical-allen-jan8gi]
     paths:
       - "trading-bot/deploy/trading-dashboard/**"
+      - "trading-bot/deploy/crypto-dashboard/**"
       - ".github/workflows/dashboard-deploy.yml"
   workflow_dispatch:
 
