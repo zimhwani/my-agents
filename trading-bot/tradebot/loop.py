@@ -244,10 +244,10 @@ class TradingLoop:
         assert self.day is not None
         open_rows = []
         for t in self.exec.open_trades:
-            px = self.b.last_price(t.symbol) or t.entry_price
+            last = self.b.last_price(t.symbol) or t.entry_price
             open_rows.append({"symbol": t.symbol, "side": t.side, "qty": t.qty_open, "qty_initial": t.qty_initial,
-                              "entry": round(t.entry_price, 2), "stop": round(t.stop, 2), "price": round(px, 2),
-                              "r": round(t.unrealized_r(px), 2), "pnl": round(t.open_pnl(px), 2),
+                              "entry": float(px(t.entry_price)), "stop": float(px(t.stop)), "price": float(px(last)),
+                              "r": round(t.unrealized_r(last), 2), "pnl": round(t.open_pnl(last), 2),
                               "partial": t.partial_taken, "entry_time": t.entry_time.strftime("%H:%M"),
                               "reason": t.reason})
         focus = open_rows[0]["symbol"] if open_rows else (self.watchlist[0].symbol if self.watchlist else None)
@@ -296,7 +296,7 @@ class TradingLoop:
                  f"({(equity - self.day.start_equity):+,.0f} today)"]
         if self.exec.open_trades:
             for t in self.exec.open_trades:
-                px = self.b.last_price(t.symbol) or t.entry_price
+                last = self.b.last_price(t.symbol) or t.entry_price
                 lines.append(f"• {esc(t.symbol)} {esc(t.side)} x{t.qty_open} @ {px(t.entry_price)} "
                              f"now {px(last)} ({t.unrealized_r(last):+.2f}R) stop {px(t.stop)}"
                              f"{' · partial taken' if t.partial_taken else ''}")
