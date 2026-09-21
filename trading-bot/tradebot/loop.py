@@ -82,6 +82,8 @@ class TradingLoop:
         self._bars: dict[str, list[Bar]] = {}
         self._daily: dict[str, list[Bar]] = {}
         self._bars_at: dict[str, datetime] = {}
+        self._stale: set[str] = set()          # symbols whose newest completed bar hasn't arrived yet
+        self._gates_logged: datetime | None = None
         self._last_status: datetime | None = None
         self._scanned_for: object = None
         self._closed_seen = -1
@@ -97,13 +99,36 @@ class TradingLoop:
         m = self.bar_minutes
         return now.replace(minute=(now.minute // m) * m, second=0, microsecond=0)
 
+    def _fresh_grace(self) -> timedelta:
+        """How long after a bar boundary we keep re-fetching until the newest bar shows up."""
+        return timedelta(seconds=min(180, self.bar_minutes * 30))
+
+    def _has_newest_bar(self, bars: list[Bar], boundary: datetime, now: datetime) -> bool:
+        width = timedelta(minutes=self.bar_minutes)
+        want = boundary - width  # start time of the bar that has just completed
+        return any(b.time >= want and b.time + width <= now for b in bars)
+
     def bars_for(self, symbol: str, now: datetime) -> list[Bar]:
-        """Intraday bars, refreshed only once per completed bar (data pacing)."""
+        """Intraday bars, refreshed once per completed bar (data pacing).
+
+        The provider may not have published the just-closed bar on the first tick after the
+        boundary; if it is missing we keep re-fetching for a short grace period instead of
+        caching the stale list for the whole bar (which silently skipped every breakout)."""
         boundary = self._bar_boundary(now)
         if self._bars_at.get(symbol) != boundary or symbol not in self._bars:
-            self._bars[symbol] = self.b.intraday_bars(symbol, self.bar_minutes, self.loaded.intraday_days,
-                                                      self.loaded.include_premarket)
-            self._bars_at[symbol] = boundary
+            bars = self.b.intraday_bars(symbol, self.bar_minutes, self.loaded.intraday_days,
+                                        self.loaded.include_premarket)
+            self._bars[symbol] = bars
+            if self._has_newest_bar(bars, boundary, now):
+                self._bars_at[symbol] = boundary
+                self._stale.discard(symbol)
+            elif now - boundary >= self._fresh_grace():
+                self._bars_at[symbol] = boundary  # give up for this bar; a gap in the data
+                self._stale.add(symbol)
+                log.warning("%s: newest %d-min bar still missing %.0fs after %s; using what we have",
+                            symbol, self.bar_minutes, (now - boundary).total_seconds(), boundary.strftime("%H:%M"))
+            else:
+                self._stale.add(symbol)
         return self._bars[symbol]
 
     def daily_for(self, symbol: str) -> list[Bar]:
@@ -159,6 +184,20 @@ class TradingLoop:
                              f"equity ${equity:,.0f}\n<pre>{names}</pre>")
             log.info("Watchlist: %s", [c.symbol for c in self.watchlist])
 
+    def _log_gates(self, now: datetime, gates: dict[str, int]) -> None:
+        """One line per completed bar: which entry gate stopped each watched symbol."""
+        if not gates:
+            return
+        boundary = self._bar_boundary(now)
+        if boundary == self._gates_logged:
+            return
+        if self._stale and now - boundary < self._fresh_grace():
+            return  # wait for the newest bar before summarising
+        self._gates_logged = boundary
+        parts = " · ".join(f"{k} {v}" for k, v in sorted(gates.items(), key=lambda kv: -kv[1]))
+        stale = f" · stale bars: {', '.join(sorted(self._stale))}" if self._stale else ""
+        log.info("bar %s gates: %s%s", boundary.strftime("%H:%M"), parts, stale)
+
     def _update_day_stats(self) -> None:
         assert self.day is not None
         closed = self.exec.closed_today
@@ -208,13 +247,19 @@ class TradingLoop:
             held = {t.symbol for t in self.exec.open_trades}
             if not continuous:  # session markets: one trade per symbol per day
                 held |= {t.symbol for t in self.exec.closed_today}
+            explained = getattr(self.strategy, "evaluate_explained", None)
+            gates: dict[str, int] = {}
             for c in self.watchlist:
                 if c.symbol in held or len(self.exec.open_trades) >= self.s.max_positions:
                     continue
                 if continuous and self._cooling(c.symbol, now):
                     continue
-                sig = self.strategy.evaluate(c.symbol, self.bars_for(c.symbol, now),
-                                             self.daily_for(c.symbol), now)
+                bars = self.bars_for(c.symbol, now)
+                if explained is not None:
+                    sig, why = explained(c.symbol, bars, self.daily_for(c.symbol), now)
+                    gates[why] = gates.get(why, 0) + 1
+                else:
+                    sig = self.strategy.evaluate(c.symbol, bars, self.daily_for(c.symbol), now)
                 if sig is None:
                     continue
                 sizing_equity = min(equity, self.s.equity_cap_usd) if self.s.equity_cap_usd > 0 else equity
@@ -228,6 +273,7 @@ class TradingLoop:
                 if t is not None:
                     self.day.trades_opened += 1
                     held.add(t.symbol)
+            self._log_gates(now, gates)
         elif blockers and self._last_status is None:
             log.info("Entries blocked: %s", "; ".join(blockers))
 

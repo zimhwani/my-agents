@@ -131,3 +131,40 @@ def test_aggregate_daily():
     d = aggregate_daily(bars)
     assert len(d) == 1 and d[0].open == 1 and d[0].close == 3 and d[0].volume == 30
     assert d[0].high == 3.5 and d[0].low == 0.5
+
+
+def test_bars_for_refetches_until_newest_bar_arrives(settings, params, tmp_path):
+    """A provider that hasn't published the just-closed bar must not be cached for the whole bar."""
+    sim = SimBroker(equity=100_000)
+    n = Notifier(quiet=True)
+    from tradebot.backtest import _as_loaded
+    loop = TradingLoop(settings, sim, _as_loaded(params, settings), n, journal=Journal(tmp_path / "j.jsonl"),
+                       executor=Executor(sim, Journal(tmp_path / "j.jsonl"), n, StateStore(tmp_path / "s.json")))
+    bars = session(DAY, [100 + 0.1 * i for i in range(20)])  # 5-min bars from 09:30
+    calls = []
+    state = {"published_until": clock.at(DAY, clock.parse_hhmm("09:55"))}
+
+    def feed(symbol, minutes, days, pre):
+        calls.append(symbol)
+        return [b for b in bars if b.time < state["published_until"]]
+
+    sim.intraday_bars = feed
+    t = clock.at(DAY, clock.parse_hhmm("10:00"))  # the 09:55 bar has just completed
+    out = loop.bars_for("GOOD", t)
+    assert out[-1].time == clock.at(DAY, clock.parse_hhmm("09:50")) and len(calls) == 1 and "GOOD" in loop._stale
+    loop.bars_for("GOOD", t + timedelta(seconds=30))
+    assert len(calls) == 2  # still missing -> fetched again
+    state["published_until"] = clock.at(DAY, clock.parse_hhmm("10:00"))
+    out = loop.bars_for("GOOD", t + timedelta(seconds=60))
+    assert out[-1].time == clock.at(DAY, clock.parse_hhmm("09:55")) and len(calls) == 3 and "GOOD" not in loop._stale
+    loop.bars_for("GOOD", t + timedelta(seconds=90))
+    assert len(calls) == 3  # fresh -> cached for the rest of the bar
+    # a genuine gap in the data: give up after the grace period instead of hammering the provider
+    t2 = clock.at(DAY, clock.parse_hhmm("10:05"))
+    loop.bars_for("GOOD", t2)
+    loop.bars_for("GOOD", t2 + timedelta(seconds=60))
+    assert len(calls) == 5 and "GOOD" in loop._stale
+    loop.bars_for("GOOD", t2 + loop._fresh_grace())
+    assert len(calls) == 6 and loop._bars_at["GOOD"] == t2
+    loop.bars_for("GOOD", t2 + loop._fresh_grace() + timedelta(seconds=30))
+    assert len(calls) == 6

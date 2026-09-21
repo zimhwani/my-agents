@@ -108,6 +108,11 @@ class CryptoMomentum:
     def evaluate(self, symbol: str, intraday: list[Bar], daily: list[Bar], now: datetime) -> Signal | None:
         return self._eval(symbol, intraday, now)[0]
 
+    def evaluate_explained(self, symbol: str, intraday: list[Bar], daily: list[Bar],
+                           now: datetime) -> tuple[Signal | None, str]:
+        """evaluate() plus the name of the gate that decided it (the live loop logs these)."""
+        return self._eval(symbol, intraday, now)
+
     def explain(self, symbol: str, intraday: list[Bar], now: datetime) -> str:
         """Name of the gate that rejected the latest completed bar ('signal' if it passed)."""
         return self._eval(symbol, intraday, now)[1]
