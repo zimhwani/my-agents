@@ -102,42 +102,52 @@ class CryptoMomentum:
         bars_needed = self.r.trend_ema_bars + self.r.breakout_bars + 5
         self.intraday_days = max(3, int(bars_needed * self.bar_minutes / 1440) + 2)
 
+    # gates, in the order they are checked; explain() reports the first one that fails
+    GATES = ("history", "no_breakout", "not_first_bar", "below_ema", "low_relvol", "no_atr", "stop_too_wide", "signal")
+
     def evaluate(self, symbol: str, intraday: list[Bar], daily: list[Bar], now: datetime) -> Signal | None:
+        return self._eval(symbol, intraday, now)[0]
+
+    def explain(self, symbol: str, intraday: list[Bar], now: datetime) -> str:
+        """Name of the gate that rejected the latest completed bar ('signal' if it passed)."""
+        return self._eval(symbol, intraday, now)[1]
+
+    def _eval(self, symbol: str, intraday: list[Bar], now: datetime) -> tuple[Signal | None, str]:
         now = clock.to_et(now)
         r = self.r
         width = timedelta(minutes=self.bar_minutes)
         bars = [b for b in intraday if b.time + width <= now]
         need = r.trend_ema_bars + r.breakout_bars + 2
         if len(bars) < need:
-            return None
+            return None, "history"
         last, prev = bars[-1], bars[-2]
         window = bars[-(r.breakout_bars + 1):-1]
         hh = max(b.high for b in window)
         if last.close <= hh:
-            return None
+            return None, "no_breakout"
         prev_window = bars[-(r.breakout_bars + 2):-2]
         if prev.close > max(b.high for b in prev_window):
-            return None  # already broke out on the previous bar; take the first bar only
+            return None, "not_first_bar"  # already broke out on the previous bar; take the first bar only
         closes = [b.close for b in bars]
         trend = ema(closes, r.trend_ema_bars)
         if trend is None or last.close <= trend:
-            return None
+            return None, "below_ema"
         vols = [b.volume for b in window]
         avg_vol = sum(vols) / len(vols) if vols else 0.0
         rel = last.volume / avg_vol if avg_vol > 0 else 0.0
         if rel < r.min_rel_volume:
-            return None
+            return None, "low_relvol"
         a = atr_of(bars[-(r.atr_bars * 4):], r.atr_bars)
         if not a or a <= 0:
-            return None
+            return None, "no_atr"
         entry = last.close
         stop = entry - r.stop_atr_mult * a
         risk = entry - stop
         if risk <= 0 or risk / entry * 100.0 > r.max_initial_risk_pct:
-            return None
+            return None, "stop_too_wide"
         reason = f"breakout > {hh:.4g} ({r.breakout_bars} bars), EMA{r.trend_ema_bars} {trend:.4g}, relvol {rel:.2f}, ATR {a:.4g}"
         return Signal(symbol=symbol, side=LONG, entry=entry, stop=round(stop, 6), target=round(entry + 3 * risk, 6),
-                      atr=a, time=now, reason=reason)
+                      atr=a, time=now, reason=reason), "signal"
 
 
 def load_crypto(path: str | Path = "crypto.json") -> LoadedStrategy:

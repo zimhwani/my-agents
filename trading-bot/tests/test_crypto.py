@@ -202,3 +202,15 @@ def test_alpaca_broker_sells_what_it_holds_after_fees(settings, monkeypatch):
     bad = AlpacaBroker(settings, data, transport=lambda m, u, h, body: (403, b'{"message":"forbidden"}'))
     with pytest.raises(AlpacaError, match="ALPACA_API_KEY"):
         bad._req("GET", "/v2/account")
+
+
+def test_crypto_explain_names_the_failing_gate():
+    s = CryptoMomentum(CryptoRules(breakout_bars=20, trend_ema_bars=100, min_rel_volume=1.5))
+    now = clock.at(DAY, clock.parse_hhmm("00:00"))
+    assert s.explain("BTC/USD", bars_24h(breakout_at=259), now) == "signal"
+    assert s.explain("BTC/USD", bars_24h(), now) == "no_breakout"
+    quiet = bars_24h(breakout_at=259)
+    quiet[-1].volume = 100.0
+    assert s.explain("BTC/USD", quiet, now) == "low_relvol"
+    assert s.explain("BTC/USD", bars_24h()[-50:], now) == "history"
+    assert set(s.GATES) >= {"signal", "no_breakout", "low_relvol", "history", "below_ema"}

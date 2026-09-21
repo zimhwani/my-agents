@@ -380,6 +380,49 @@ def cmd_fetch_crypto(args) -> None:
     print(f"done -> {out}   next: python -m tradebot backtest --data {out}")
 
 
+def cmd_crypto_explain(args) -> None:
+    """Replay the last N days bar by bar and count which gate rejected each bar, per pair."""
+    s = _settings(args)
+    _logging(s)
+    from datetime import timedelta
+    from .alpaca_broker import AlpacaCryptoData
+    from .crypto import CryptoMomentum, ema
+    loaded = load_strategy(s.strategy_file, s.allow_shorts)
+    strat = loaded.strategy
+    if not isinstance(strat, CryptoMomentum):
+        raise SystemExit("crypto-explain needs STRATEGY_FILE=crypto.json")
+    symbols = args.symbols or loaded.universe or s.universe
+    minutes = strat.bar_minutes
+    width = timedelta(minutes=minutes)
+    d = AlpacaCryptoData(s.alpaca_api_key, s.alpaca_api_secret)
+    warmup = strat.intraday_days
+    start = clock.now_et() - timedelta(days=args.days + warmup)
+    gates = [g for g in strat.GATES if g != "history"]
+    print(f"{strat.r.name}: last {args.days} days, {minutes}-min bars, counting the gate that stopped each bar")
+    print(f"{'pair':<10}{'bars':>6}{'above_ema':>11}" + "".join(f"{g:>15}" for g in gates))
+    totals = {g: 0 for g in gates}
+    for sym in symbols:
+        bars = d.bars(sym, f"{minutes}Min", start)
+        cutoff = clock.now_et() - timedelta(days=args.days)
+        counts = {g: 0 for g in gates}
+        n = 0
+        for i, b in enumerate(bars):
+            if b.time < cutoff:
+                continue
+            why = strat.explain(sym, bars[: i + 1], b.time + width)
+            if why in counts:
+                counts[why] += 1
+                n += 1
+        trend = ema([b.close for b in bars], strat.r.trend_ema_bars) if bars else None
+        above = "yes" if bars and trend and bars[-1].close > trend else "no"
+        print(f"{sym:<10}{n:>6}{above:>11}" + "".join(f"{counts[g]:>15}" for g in gates))
+        for g in gates:
+            totals[g] += counts[g]
+    print(f"{'total':<10}{'':>6}{'':>11}" + "".join(f"{totals[g]:>15}" for g in gates))
+    print("\nRead left to right: a bar has to clear every gate before the one that stopped it. 'signal' bars are the"
+          " ones the live bot would have bought (before cooldown/max positions).")
+
+
 def cmd_backtest(args) -> None:
     s = _settings(args)
     _logging(s)
@@ -574,6 +617,9 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--days", type=int, default=365)
     p.add_argument("--symbols", nargs="*")
     p.add_argument("--out", default="data/crypto")
+    p = sub.add_parser("crypto-explain", help="why isn't the crypto bot trading? count the gate that rejected each bar")
+    p.add_argument("--days", type=int, default=3)
+    p.add_argument("--symbols", nargs="*")
     p = sub.add_parser("backtest", help="run the strategy over CSV history (or --demo synthetic data)")
     p.add_argument("--data", default="data/bars")
     p.add_argument("--symbols", nargs="*")
@@ -603,7 +649,8 @@ def main(argv: list[str] | None = None) -> None:
     {"check": cmd_check, "scan": cmd_scan, "run": cmd_run, "flatten": cmd_flatten, "kill": cmd_kill,
      "telegram-test": cmd_telegram_test, "fetch-data": cmd_fetch_data, "backtest": cmd_backtest,
      "analyze": cmd_analyze, "sweep": cmd_sweep, "dashboard": cmd_dashboard,
-     "fetch-gappers": cmd_fetch_gappers, "fetch-crypto": cmd_fetch_crypto}[args.cmd](args)
+     "fetch-gappers": cmd_fetch_gappers, "fetch-crypto": cmd_fetch_crypto,
+     "crypto-explain": cmd_crypto_explain}[args.cmd](args)
 
 
 if __name__ == "__main__":
