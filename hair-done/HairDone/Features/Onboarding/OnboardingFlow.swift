@@ -123,7 +123,6 @@ private struct OnboardingError: View {
 
 private struct OnboardingWelcome: View {
     @Environment(AppState.self) private var app
-    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     var onPhone: () -> Void
 
@@ -131,78 +130,81 @@ private struct OnboardingWelcome: View {
     @State private var appleError: String? = nil
     @State private var isSigningIn = false
 
-    /// Three tiles from three different pros, fanned like photos on a fridge.
-    private var fanTiles: [WorkItem] {
-        Array(MockData.pros.prefix(3).compactMap { $0.work.first })
-    }
+    /// Paper-coloured ink for everything sitting on the video.
+    private let onVideo = Color(hex: 0xF4ECE4)
+    private let onVideoSoft = Color(hex: 0xF4ECE4).opacity(0.78)
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Spacer(minLength: Space.xl)
+        ZStack(alignment: .bottom) {
+            IntroBackdrop()
 
-            fan
-                .frame(height: 190)
-                .frame(maxWidth: .infinity)
-                .padding(.bottom, Space.xxl)
-                .opacity(appeared ? 1 : 0)
-                .offset(y: appeared ? 0 : 16)
+            VStack(alignment: .leading, spacing: 0) {
+                Spacer()
 
-            DropMark(size: 40)
-                .padding(.bottom, Space.l)
-
-            Wordmark(size: 40)
-                .padding(.bottom, Space.l)
-
-            Text("A vetted pro comes to you. Melbourne, for now.")
-                .font(HDFont.body)
-                .foregroundStyle(Palette.inkSoft)
-                .fixedSize(horizontal: false, vertical: true)
-
-            Spacer(minLength: Space.xl)
-
-            VStack(spacing: Space.m) {
-                PrimaryButton(title: "Continue with phone", isLoading: false, isEnabled: !isSigningIn, action: onPhone)
-
-                SignInWithAppleButton(.continue) { request in
-                    request.requestedScopes = [.fullName]
-                } onCompletion: { result in
-                    handleApple(result)
+                HStack(alignment: .lastTextBaseline, spacing: 0) {
+                    Text("hd").italic()
+                    Text(".").foregroundStyle(Palette.lacquer)
+                    Text(" nd").italic()
+                    Text(".").foregroundStyle(Palette.lacquer)
                 }
-                .signInWithAppleButtonStyle(colorScheme == .dark ? .white : .black)
-                .frame(height: 52)
-                .clipShape(Capsule())
-                .accessibilityLabel("Continue with Apple")
+                .font(.system(size: 22, weight: .medium, design: .serif))
+                .foregroundStyle(onVideo)
+                .padding(.bottom, Space.l)
+                .accessibilityHidden(true)
 
-                OnboardingError(text: appleError)
+                VStack(alignment: .leading, spacing: -2) {
+                    Text("hair done.")
+                    Text("nails done.")
+                    HStack(spacing: 0) {
+                        Text("everything ") + Text("done").italic()
+                        Text(".").foregroundStyle(Palette.lacquer)
+                    }
+                }
+                .font(.system(size: 40, weight: .medium, design: .serif))
+                .foregroundStyle(onVideo)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("Hair done, nails done, everything done")
+                .padding(.bottom, Space.l)
 
-                Text("By continuing you agree to the [terms](https://hairdone.app/terms) and [privacy policy](https://hairdone.app/privacy).")
-                    .font(HDFont.caption)
-                    .foregroundStyle(Palette.inkSoft)
-                    .tint(Palette.ink)
-                    .multilineTextAlignment(.center)
-                    .frame(maxWidth: .infinity)
-                    .padding(.top, Space.xs)
+                Text("A vetted pro comes to you. Melbourne, for now.")
+                    .font(HDFont.body)
+                    .foregroundStyle(onVideoSoft)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.bottom, Space.xxl)
+
+                VStack(spacing: Space.m) {
+                    PrimaryButton(title: "Continue with phone", isLoading: false, isEnabled: !isSigningIn, action: onPhone)
+
+                    SignInWithAppleButton(.continue) { request in
+                        request.requestedScopes = [.fullName]
+                    } onCompletion: { result in
+                        handleApple(result)
+                    }
+                    .signInWithAppleButtonStyle(.white)
+                    .frame(height: 52)
+                    .clipShape(Capsule())
+                    .accessibilityLabel("Continue with Apple")
+
+                    OnboardingError(text: appleError)
+
+                    Text("By continuing you agree to the [terms](https://hairdone.app/terms) and [privacy policy](https://hairdone.app/privacy).")
+                        .font(HDFont.caption)
+                        .foregroundStyle(onVideoSoft)
+                        .tint(onVideo)
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: .infinity)
+                        .padding(.top, Space.xs)
+                }
+                .padding(.bottom, Space.l)
             }
-            .padding(.bottom, Space.l)
+            .screenGutter()
+            .opacity(appeared ? 1 : 0)
+            .offset(y: appeared ? 0 : 12)
         }
-        .screenGutter()
+        .preferredColorScheme(.dark)
         .onAppear {
-            if reduceMotion { appeared = true } else { withAnimation(Motion.springSlow.delay(0.1)) { appeared = true } }
+            if reduceMotion { appeared = true } else { withAnimation(Motion.springSlow.delay(0.15)) { appeared = true } }
         }
-    }
-
-    private var fan: some View {
-        ZStack {
-            ForEach(Array(fanTiles.enumerated()), id: \.element.id) { i, item in
-                WorkTile(item: item, cornerRadius: Radius.tile)
-                    .frame(width: 130, height: 160)
-                    .overlay(RoundedRectangle(cornerRadius: Radius.tile, style: .continuous).strokeBorder(Palette.paper, lineWidth: 3))
-                    .rotationEffect(.degrees(Double(i - 1) * 8))
-                    .offset(x: CGFloat(i - 1) * 88, y: i == 1 ? -10 : 6)
-                    .zIndex(i == 1 ? 1 : 0)
-            }
-        }
-        .accessibilityHidden(true)
     }
 
     private func handleApple(_ result: Result<ASAuthorization, Error>) {

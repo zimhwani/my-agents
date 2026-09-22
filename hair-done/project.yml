@@ -37,6 +37,8 @@ targets:
     platform: iOS
     sources:
       - path: HairDone
+        excludes:
+          - "Resources/Intro/README.md"
     info:
       path: HairDone/Resources/Info.plist
       properties:

@@ -53,40 +53,44 @@ In that order. Warm first: she's on your side. Direct second: she says the price
 - Tracking: default. Don't letterspace a serif.
 - Short form in running copy and as the home-screen label: `Hair Done`. Never "HairDone", "HAIR DONE" or "hair done" mid-sentence.
 
+## Where the name comes from
+
+Drake, "Fancy": *nails done, hair done, everything did.* The app flips the order
+and finishes the verb, but the meaning is the lyric's: a woman who is
+completely put together, every single thing ticked off, and unbothered about
+it. Everything in the brand should feel like the second half of that line.
+Nod to it; don't quote the verse, and don't use "Fancy" as a name. It's his.
+
 ## The mark
 
-The full stop.
+**hd. nd.** Two lines of lowercase serif italic, the initials of *hair done*
+and *nails done*, each finished with a lacquer-red full stop. It's the wordmark
+compressed to four letters, so the icon and the first screen are the same
+object, and a stacked lowercase monogram reads as fashion, not banking.
 
-The wordmark ends every line with one: *hair done.* *nails done.* *everything done.* The mark is that last full stop on its own: a lacquer-red dot with one soft highlight, like a drop of polish seen from above. It is the one thing in the brand that says "done" without a word.
+The full stops are the point. They're the "done".
 
-It replaced an earlier nail-polish teardrop, which read as a drop of blood, especially on dark backgrounds. A dot can't.
+History, so nobody repeats it: v1 was a red nail-polish drop (read as blood).
+v2 was a single red full stop (read as nothing). v3 was three stacked full stops
+(read as the "more" menu). A nail-polish bottle came second in the designer's
+scoring and is a good alternate icon later; see docs/design/icon-concepts.md.
 
-In SwiftUI it's a `Circle` filled `lacquer` with an `Ellipse` highlight on top:
+Geometry, on a 1024 canvas: type at 31% of the height per line, lines set
+solid (line height 98% of the size), block centred, italic New York medium.
+Each full stop is a circle of diameter 6.2% of the canvas, sitting on the
+baseline just after the *d*, in `lacquer`. Light: ink on paper. Dark: paper on
+ink, lacquer at its dark value. Tinted: everything white as a mask.
 
-```swift
-struct DropMark: View {          // name kept for existing call sites
-    var size: CGFloat = 28
-    var body: some View {
-        Circle().fill(Palette.lacquer)
-            .overlay(
-                Ellipse().fill(Color.white.opacity(0.85))
-                    .frame(width: size * 0.2, height: size * 0.3)
-                    .rotationEffect(.degrees(22))
-                    .offset(x: -size * 0.17, y: -size * 0.2)
-            )
-            .frame(width: size, height: size)
-    }
-}
-```
-
-Highlight: an ellipse one fifth the dot's width and three tenths its height, rotated 22°, sitting in the upper left. Below 16pt, drop the highlight and use the plain dot.
+`tools/render-icon.swift` draws it with the real New York on a Mac. The
+committed PNGs were drawn with a stand-in serif and should be regenerated once.
 
 Rules:
-- In the wordmark, the final full stop of *done.* is set in `lacquer`. Every other full stop is `ink`.
-- App icon: the dot at about half the icon's height, sitting low and right like the end of a word, on `paper`. Dark icon: on `#171210`. Tinted icon: the dot as the mask.
-- Minimum clear space around it: half its diameter.
-- Never: outline it, gradient it, put it in a ring, pair it with a second dot, use it as a bullet, make it a red flag by centring it on a plain white square, animate it on every screen.
-- The check that draws itself on "You're booked" is its own stroke. Not the mark.
+- The in-app mark is `DropMark` (now a dot) only where a small glyph is needed;
+  prefer the wordmark. On the welcome screen the `hd. nd.` line sits above the
+  full wordmark.
+- Never set it in roman, never all-caps, never add a third line, never let the
+  dots be anything but lacquer.
+- Minimum clear space: the height of the *h* on all sides.
 
 ## Colour
 

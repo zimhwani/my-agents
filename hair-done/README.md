@@ -28,6 +28,15 @@ the app runs on seeded mock data so every screen works on first launch. The
 On a real phone: `tools/set_team.sh` writes your Team ID into
 `HairDone.xcconfig`, then Run.
 
+## The icon and the welcome video
+
+- The icon is `hd. nd.` in italic serif with lacquer full stops. The committed
+  PNGs were drawn with a stand-in serif; run `swift tools/render-icon.swift`
+  once on a Mac to redraw them with the real New York, then `xcodegen generate`.
+- The welcome screen plays three muted clips (hair, makeup, nails) from
+  `HairDone/Resources/Intro/`. Until the files are there it shows crossfading
+  placeholder art. Spec, shot list and sourcing: `docs/design/video-intro.md`.
+
 ## Ship to TestFlight
 
 Same pipeline as the Caddy app. One-time setup:
