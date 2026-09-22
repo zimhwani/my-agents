@@ -1,0 +1,37 @@
+# Supabase CLI config for Hair Done. `supabase start` for local, `supabase link` for the cloud project.
+project_id = "hair-done"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public", "storage"]
+max_rows = 200
+
+[db]
+port = 54322
+major_version = 17
+
+[auth]
+enabled = true
+site_url = "hairdone://auth"
+additional_redirect_urls = ["hairdone://auth"]
+enable_signup = true
+
+[auth.sms]
+enable_signup = true
+enable_confirmations = true
+# Twilio (or any provider) for the sign-in code. Keys go in `supabase secrets`, never here.
+
+[auth.external.apple]
+enabled = true
+client_id = "com.hairdone.app"
+secret = "env(SUPABASE_AUTH_EXTERNAL_APPLE_SECRET)"
+
+[functions.create-payment-intent]
+verify_jwt = true
+
+[functions.connect-onboarding]
+verify_jwt = true
+
+[functions.stripe-webhook]
+verify_jwt = false
