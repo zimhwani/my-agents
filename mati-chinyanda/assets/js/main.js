@@ -1,4 +1,4 @@
-/* Mati Chinyanda — site behaviour. Vanilla JS, no dependencies. */
+/* Mati — site behaviour. Vanilla JS, no dependencies. */
 (function () {
   'use strict';
   const d = document, root = d.documentElement;
@@ -95,8 +95,8 @@
         // No backend configured yet: fall back to a pre-filled email.
         const subject = encodeURIComponent('Booking enquiry: ' + (data.get('event_type') || 'Event') + ' — ' + data.get('name'));
         const body = encodeURIComponent([...data.entries()].filter(([k]) => !k.startsWith('_')).map(([k, v]) => k.replace(/_/g, ' ') + ': ' + v).join('\n'));
-        window.location.href = 'mailto:' + (form.dataset.mailto || 'hello@matichinyanda.com') + '?subject=' + subject + '&body=' + body;
-        setStatus('Opening your email client with the enquiry pre-filled…', 'ok');
+        window.location.href = 'mailto:' + (form.dataset.mailto || 'hello@mati.com.au') + '?subject=' + subject + '&body=' + body;
+        setStatus('Opening your email app with the details filled in.', 'ok');
         return;
       }
       btn.disabled = true; btn.classList.add('is-loading'); setStatus('Sending…', 'pending');
@@ -105,9 +105,9 @@
         if (!res.ok) throw new Error('Request failed');
         form.reset();
         form.classList.add('is-sent');
-        setStatus('Thank you — your enquiry is in. Expect a reply within two business days.', 'ok');
+        setStatus('Thanks, got it. I will be in touch within two business days.', 'ok');
       } catch (err) {
-        setStatus('Something went wrong. Please email hello@matichinyanda.com directly.', 'error');
+        setStatus('Something went wrong. Please email hello@mati.com.au directly.', 'error');
       } finally { btn.disabled = false; btn.classList.remove('is-loading'); }
     });
     // Pre-select event type from ?type=

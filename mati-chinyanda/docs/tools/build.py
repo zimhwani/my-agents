@@ -3,8 +3,8 @@ Usage: python3 docs/tools/build.py   (run from mati-chinyanda/)
 Each fragment starts with a JSON front-matter block on the first line: {"path": "/speaking", "title": ..., "description": ..., "nav": "speaking", "og": "..."}"""
 import json, os, re, glob
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-SITE = "https://matichinyanda.vercel.app"
-EMAIL = "hello@matichinyanda.com"
+SITE = "https://mati.com.au"
+EMAIL = "hello@mati.com.au"
 
 NAV = [("speaking", "/speaking", "Speaking"), ("podcast", "/podcast", "Podcast"),
        ("freeka", "/freeka-runway", "FreekÀ Runway"), ("about", "/about", "About")]
@@ -32,7 +32,7 @@ def head(p):
 <link rel="canonical" href="{url}">
 <meta name="theme-color" content="#0B0A0A">
 <meta property="og:type" content="website">
-<meta property="og:site_name" content="Mati Chinyanda">
+<meta property="og:site_name" content="Mati">
 <meta property="og:title" content="{p["title"]}">
 <meta property="og:description" content="{p["description"]}">
 <meta property="og:url" content="{url}">
@@ -42,7 +42,7 @@ def head(p):
 <link rel="preload" href="/assets/fonts/fraunces-latin-full-normal.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="/assets/fonts/figtree-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="/assets/css/fonts.css?v=1">
-<link rel="stylesheet" href="/assets/css/style.css?v=1">
+<link rel="stylesheet" href="/assets/css/style.css?v=2">
 <script>document.documentElement.classList.replace('no-js','js')</script>
 {ld}
 </head>
@@ -58,7 +58,7 @@ def header(p):
     light = " site-header--light" if p.get("header") == "light" else ""
     return f'''<header class="site-header{light}">
   <div class="container">
-    <a class="brand" href="/" aria-label="Mati Chinyanda — home">Mati <span class="brand__mark">Chinyanda</span></a>
+    <a class="brand" href="/" aria-label="Mati — home">Mati<span class="brand__mark">.</span></a>
     <button class="nav-toggle" aria-expanded="false" aria-controls="site-nav"><span class="nav-toggle__label">Menu</span><span class="nav-toggle__bars" aria-hidden="true"></span></button>
     <nav class="site-nav" id="site-nav" aria-label="Primary">
       <ul>{items}</ul>
@@ -74,11 +74,11 @@ def footer(p):
     return f'''</main>
 <section class="cta-band grain" aria-labelledby="cta-title">
   <div class="container" data-reveal>
-    <p class="eyebrow" style="color:var(--gold-400)">Let's talk</p>
-    <h2 id="cta-title">Got a room that needs <em>energy</em>?</h2>
+    <p class="eyebrow" style="color:var(--gold-400)">Get in touch</p>
+    <h2 id="cta-title">Planning something? <em>Let's talk.</em></h2>
     <div class="btn-row">
       <a class="btn btn--gold btn--lg" href="/book">Book Mati {ICONS["arrow"]}</a>
-      <a class="btn btn--outline btn--lg" href="mailto:{EMAIL}" style="color:var(--ivory-50)">Email directly</a>
+      <a class="btn btn--outline btn--lg" href="mailto:{EMAIL}" style="color:var(--ivory-50)">Email me</a>
     </div>
   </div>
 </section>
@@ -86,8 +86,8 @@ def footer(p):
   <div class="container">
     <div class="cols">
       <div>
-        <a class="brand" href="/">Mati <span class="brand__mark">Chinyanda</span></a>
-        <p style="margin-top:1rem;max-width:36ch">Speaker, MC &amp; event host. Co-founder and co-host of <em>What Left The Group Chat</em>. Founder of FreekÀ Runway.</p>
+        <a class="brand" href="/">Mati<span class="brand__mark">.</span></a>
+        <p style="margin-top:1rem;max-width:36ch">Speaker, MC and event host. Co-host of <em>What Left The Group Chat</em>. Founder of FreekÀ Runway.</p>
         <div class="social" style="margin-top:1.25rem">
           <a href="https://www.youtube.com/@Whatleftthegroupchat" aria-label="What Left The Group Chat on YouTube" rel="noopener" target="_blank">{ICONS["youtube"]}</a>
           <a href="https://www.tiktok.com/@what.left.the.gro" aria-label="What Left The Group Chat on TikTok" rel="noopener" target="_blank">{ICONS["tiktok"]}</a>
@@ -99,12 +99,12 @@ def footer(p):
       <div><h4>Connect</h4><ul><li><a href="mailto:{EMAIL}">{EMAIL}</a></li><li>Melbourne / Naarm, Australia</li><li>Available Australia-wide &amp; internationally</li></ul></div>
     </div>
     <div class="legal">
-      <span>© <span data-year>2026</span> Mati Chinyanda. All rights reserved.</span>
-      <span>Made on the lands of the Wurundjeri people of the Kulin Nation. Sovereignty was never ceded.</span>
+      <span>© <span data-year>2026</span> Mati. All rights reserved.</span>
+      <span>I live and work on Wurundjeri Country. Always was, always will be.</span>
     </div>
   </div>
 </footer>
-<script src="/assets/js/main.js?v=1" defer></script>
+<script src="/assets/js/main.js?v=2" defer></script>
 </body>
 </html>
 '''
@@ -126,6 +126,11 @@ def build(out_dir=None, relative=False):
         p = json.loads(first.strip().removeprefix("<!--").removesuffix("-->"))
         body = body.replace("{{email}}", EMAIL)
         for k, v in ICONS.items(): body = body.replace("{{icon:%s}}" % k, v)
+        def has(name): return os.path.exists(os.path.join(ROOT, "assets/img", name + ".webp"))
+        def cond(m):
+            yes, no = (m.group(2).split("{{else}}") + [""])[:2]
+            return yes if has(m.group(1)) else no
+        body = re.sub(r"\{\{ifimg:([\w-]+)\}\}(.*?)\{\{endimg\}\}", cond, body, flags=re.S)
         out = head(p) + header(p) + body + footer(p)
         name = "index.html" if p["path"] == "/" else p["path"].strip("/") + ".html"
         if p.get("file"): name = p["file"]

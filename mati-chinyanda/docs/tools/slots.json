@@ -60,5 +60,116 @@
       0.42
     ],
     "q": 82
+  },
+  "wltgc-cover": {
+    "src": "wltgc-cover.jpg",
+    "width": 1200,
+    "q": 82
+  },
+  "wltgc-banner": {
+    "src": "wltgc-banner.jpg",
+    "width": 1800,
+    "crop": "16:9",
+    "q": 80
+  },
+  "wltgc-still-01": {
+    "src": "wltgc-still-01.jpg",
+    "width": 1280,
+    "q": 80
+  },
+  "wltgc-still-02": {
+    "src": "wltgc-still-02.jpg",
+    "width": 1280,
+    "q": 80
+  },
+  "wltgc-still-03": {
+    "src": "wltgc-still-03.jpg",
+    "width": 1280,
+    "q": 80
+  },
+  "wltgc-still-04": {
+    "src": "wltgc-still-04.jpg",
+    "width": 1280,
+    "q": 80
+  },
+  "wltgc-still-05": {
+    "src": "wltgc-still-05.jpg",
+    "width": 1280,
+    "q": 80
+  },
+  "wltgc-still-06": {
+    "src": "wltgc-still-06.jpg",
+    "width": 1280,
+    "q": 80
+  },
+  "wltgc-still-07": {
+    "src": "wltgc-still-07.jpg",
+    "width": 1280,
+    "q": 80
+  },
+  "wltgc-still-08": {
+    "src": "wltgc-still-08.jpg",
+    "width": 1280,
+    "q": 80
+  },
+  "wltgc-still-09": {
+    "src": "wltgc-still-09.jpg",
+    "width": 1280,
+    "q": 80
+  },
+  "wltgc-still-10": {
+    "src": "wltgc-still-10.jpg",
+    "width": 1280,
+    "q": 80
+  },
+  "wltgc-still-11": {
+    "src": "wltgc-still-11.jpg",
+    "width": 1280,
+    "q": 80
+  },
+  "wltgc-still-12": {
+    "src": "wltgc-still-12.jpg",
+    "width": 1280,
+    "q": 80
+  },
+  "freeka-01": {
+    "src": "freeka-01.jpg",
+    "width": 1400,
+    "q": 82
+  },
+  "freeka-02": {
+    "src": "freeka-02.jpg",
+    "width": 1400,
+    "q": 82
+  },
+  "freeka-03": {
+    "src": "freeka-03.jpg",
+    "width": 1400,
+    "q": 82
+  },
+  "freeka-04": {
+    "src": "freeka-04.jpg",
+    "width": 1400,
+    "q": 82
+  },
+  "freeka-05": {
+    "src": "freeka-05.jpg",
+    "width": 1400,
+    "q": 82
+  },
+  "freeka-06": {
+    "src": "freeka-06.jpg",
+    "width": 1400,
+    "q": 82
+  },
+  "freeka-07": {
+    "src": "freeka-07.jpg",
+    "width": 1400,
+    "q": 82
+  },
+  "freeka-08": {
+    "src": "freeka-08.jpg",
+    "width": 1400,
+    "q": 82
   }
 }
