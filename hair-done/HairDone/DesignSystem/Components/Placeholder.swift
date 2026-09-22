@@ -76,11 +76,14 @@ struct WorkTile: View {
         .accessibilityLabel(item.caption)
     }
 
-    @ViewBuilder
-    private func art(colors: [Color], r: Rng, w: CGFloat, h: CGFloat) -> some View {
+    private static func numbers(from r: Rng) -> (CGFloat, CGFloat, CGFloat, CGFloat, CGFloat) {
         var rng = r
-        let a = rng.next(), b = rng.next(), c = rng.next(), d = rng.next(), e = rng.next()
-        ZStack {
+        return (rng.next(), rng.next(), rng.next(), rng.next(), rng.next())
+    }
+
+    private func art(colors: [Color], r: Rng, w: CGFloat, h: CGFloat) -> some View {
+        let (a, b, c, d, e) = Self.numbers(from: r)
+        return ZStack {
             LinearGradient(colors: [colors[0], colors[1]], startPoint: .topLeading, endPoint: .bottomTrailing)
             Circle()
                 .fill(colors[2].opacity(0.55))

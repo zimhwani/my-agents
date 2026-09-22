@@ -72,7 +72,7 @@ extension Int {
 extension Double {
     /// 1.2 → "1.2 km", 0.8 → "800 m", 12.4 → "12 km"
     var distanceLabel: String {
-        if self < 1 { return "\(Int((self * 1000).rounded(.toNearestOrEven) / 50 * 50)) m" }
+        if self < 1 { return "\(Int((self * 1000 / 50).rounded(.toNearestOrEven) * 50)) m" }
         if self < 10 { return String(format: "%.1f km", self) }
         return "\(Int(self.rounded())) km"
     }

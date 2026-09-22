@@ -141,7 +141,7 @@ struct HomeView: View {
     /// "1.2 km away, free from 5 pm"
     private func whosFreeLine(_ pro: Pro) -> String {
         let label = nextFreeLabel(pro, on: listDay) ?? "Free today"
-        let lowered = label.prefix(1).lowercased() + label.dropFirst()
+        let lowered = label.prefix(1).lowercased() + String(label.dropFirst())
         return "\(distance(pro).distanceLabel) away, \(lowered)"
     }
 
