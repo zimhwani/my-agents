@@ -53,6 +53,8 @@ those names. Until then those slots show typographic tiles.
 
 ## Deploy to Vercel
 
+Live at https://mati-gamma.vercel.app (Vercel project `mati`, production branch `claude/awesome-faraday-syn8sp`, root directory `mati-chinyanda`).
+
 **Path A — Vercel Git integration (no secrets, recommended)**
 1. vercel.com → *Add New → Project* → import `zimhwani/my-agents` (already connected from earlier sites).
 2. **Root Directory = `mati-chinyanda`**, Framework Preset = *Other*, leave build/output blank
