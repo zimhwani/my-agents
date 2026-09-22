@@ -83,6 +83,11 @@ enum ProFlow {
         return "Auto-declines in \(minutes.minutesLabel)"
     }
 
+    /// A stable seed for a client's avatar tint. `hashValue` changes every launch; this doesn't.
+    static func seed(for id: String) -> Int {
+        id.unicodeScalars.reduce(7) { ($0 &* 31 &+ Int($1.value)) & 0xFFFF }
+    }
+
     static func greeting(for name: String, at date: Date = Date()) -> String {
         switch date.hourOfDay {
         case 5..<12: return "Morning, \(name)."

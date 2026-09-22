@@ -62,7 +62,7 @@ struct BookingsView: View {
             }
         } else {
             ForEach(list) { booking in
-                UpcomingCard(booking: booking, pro: app.pro(booking.proID))
+                UpcomingBookingCard(booking: booking, pro: app.pro(booking.proID))
             }
         }
     }
@@ -79,7 +79,7 @@ struct BookingsView: View {
             EmptyState(symbol: "clock", title: "Nothing yet. Your first one goes here.")
         } else {
             ForEach(list) { booking in
-                PastCard(booking: booking, pro: app.pro(booking.proID)) {
+                PastBookingCard(booking: booking, pro: app.pro(booking.proID)) {
                     if let pro = app.pro(booking.proID) { path.append(Route.pro(pro)) }
                 } onRate: {
                     reviewing = booking
@@ -120,7 +120,7 @@ struct BookingsView: View {
 // MARK: - Cards
 
 /// A booking that's still to come. If it's today, it breathes.
-struct UpcomingCard: View {
+struct UpcomingBookingCard: View {
     var booking: Booking
     var pro: Pro?
 
@@ -170,7 +170,7 @@ struct UpcomingCard: View {
 }
 
 /// A booking that's been. Muted, with a way back to her.
-struct PastCard: View {
+struct PastBookingCard: View {
     var booking: Booking
     var pro: Pro?
     var onBookAgain: () -> Void

@@ -1,4 +1,5 @@
 import SwiftUI
+import CoreLocation
 
 /// Small shared helpers for the Bookings, Inbox and You screens. Copy here follows docs/copy-deck.md.
 

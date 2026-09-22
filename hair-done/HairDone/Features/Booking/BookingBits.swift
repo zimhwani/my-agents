@@ -143,7 +143,7 @@ struct SummaryRow: View {
     var value: String
     var detail: String? = nil
     var changeTitle: String? = nil
-    var onChange: (() -> Void)? = nil
+    var onEdit: (() -> Void)? = nil
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: Space.m) {
@@ -153,8 +153,8 @@ struct SummaryRow: View {
                 if let detail { Text(detail).font(HDFont.caption).foregroundStyle(Palette.inkSoft) }
             }
             Spacer(minLength: 0)
-            if let changeTitle, let onChange {
-                Button(action: { Haptics.light(); onChange() }) {
+            if let changeTitle, let onEdit {
+                Button(action: { Haptics.light(); onEdit() }) {
                     Text(changeTitle).font(HDFont.subStrong).foregroundStyle(Palette.lacquer)
                         .frame(minHeight: 44)
                 }
@@ -202,6 +202,12 @@ extension String {
 }
 
 extension Date {
+    /// "today", "tomorrow" or "Thu 12 Mar", for use mid-sentence.
+    var friendlyDayInSentence: String {
+        let day = friendlyDay
+        return (day == "Today" || day == "Tomorrow" || day == "Yesterday") ? day.lowercased() : day
+    }
+
     /// "Nothing free today." / "Nothing free on Thu 12 Mar."
     var nothingFreeLine: String {
         let cal = Calendar.current

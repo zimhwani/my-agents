@@ -34,7 +34,7 @@ struct BookingDetailView: View {
         return ScrollView {
             VStack(alignment: .leading, spacing: Space.section) {
                 header(booking, pro: pro, proName: proName)
-                Timeline(booking: booking, pro: pro)
+                BookingTimeline(booking: booking, pro: pro)
                 whenSection(booking)
                 whereSection(booking)
                 whatSection(booking)
@@ -61,7 +61,7 @@ struct BookingDetailView: View {
                 .presentationDragIndicator(.visible)
         }
         .sheet(isPresented: $showCancel) {
-            CancelSheet(booking: booking, proName: proName, isWorking: cancelling) {
+            CancelBookingSheet(booking: booking, proName: proName, isWorking: cancelling) {
                 cancelling = true
                 Task {
                     let line = booking.cancelDoneLine(proName: proName)
@@ -119,7 +119,7 @@ struct BookingDetailView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             if booking.status == .declined, let reason = booking.declineReason, !reason.isEmpty {
-                Text(reason).font(HDFont.sub).foregroundStyle(Palette.inkSoft).italic()
+                Text(reason).italic().font(HDFont.sub).foregroundStyle(Palette.inkSoft)
             }
         }
     }
@@ -188,7 +188,6 @@ struct BookingDetailView: View {
                 PriceRow(label: "Travel fee", cents: booking.price.travelFeeCents)
                 PriceRow(label: "Hair Done booking fee", cents: booking.price.bookingFeeCents)
                 if booking.price.tipCents > 0 { PriceRow(label: "Tip", cents: booking.price.tipCents, note: "All of it went to her") }
-                if booking.price.discountCents > 0 { PriceRow(label: "Discount", cents: -booking.price.discountCents) }
                 Hairline()
                 PriceRow(label: "Total", cents: booking.price.clientTotalCents, emphasis: true)
             }
@@ -359,7 +358,7 @@ struct BookingDetailView: View {
 
 /// requested → confirmed → on her way → here → done → paid, as a vertical stepper.
 /// A cancelled or declined booking ends on a grey step with the reason.
-struct Timeline: View {
+struct BookingTimeline: View {
     var booking: Booking
     var pro: Pro?
 
@@ -369,7 +368,9 @@ struct Timeline: View {
 
     private var steps: [BookingStatus] {
         if isOffPath {
-            let happened = BookingStatus.timeline.filter { booking.eventTime(for: $0) != nil }
+            // Only steps that can come before a cancel or decline. Nothing after "here".
+            let possible = BookingStatus.timeline.prefix(through: BookingStatus.timeline.firstIndex(of: .arrived) ?? 3)
+            let happened = possible.filter { booking.eventTime(for: $0) != nil }
             return happened + [booking.status]
         }
         return BookingStatus.timeline
@@ -466,7 +467,7 @@ struct Timeline: View {
 // MARK: - Cancel sheet
 
 /// Says exactly what cancelling costs before you do it.
-struct CancelSheet: View {
+struct CancelBookingSheet: View {
     @Environment(\.dismiss) private var dismiss
     var booking: Booking
     var proName: String
