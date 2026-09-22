@@ -203,6 +203,7 @@ struct Booking: Identifiable, Hashable, Codable {
     /// What the client owes if she cancels right now.
     var cancellationChargeCents: Int {
         guard status.isUpcoming, status != .requested else { return 0 }
+        if status == .arrived || status == .inProgress { return price.servicesCents + price.travelFeeCents + price.bookingFeeCents }
         if hoursUntil >= Double(Fees.freeCancellationHours) { return 0 }
         return Int((Double(price.servicesCents + price.travelFeeCents) * Fees.lateCancellationRate).rounded())
     }

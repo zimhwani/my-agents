@@ -170,8 +170,19 @@ final class AppState {
         do {
             let updated = try await data.updateStatus(bookingID: booking.id, to: status, reason: reason)
             replace(updated)
+            if status == .done { scheduleMockCapture(for: updated) }
             return updated
         } catch { lastError = error.localizedDescription; return nil }
+    }
+
+    /// Stands in for the 12-hour auto-capture: in the mock, a done booking is charged a few seconds later.
+    private func scheduleMockCapture(for booking: Booking) {
+        Task {
+            try? await Task.sleep(for: .seconds(6))
+            guard let current = self.bookings.first(where: { $0.id == booking.id }) ?? self.proBookings.first(where: { $0.id == booking.id }),
+                  current.status == .done else { return }
+            _ = await self.update(current, to: .paid)
+        }
     }
 
     func reschedule(_ booking: Booking, to start: Date) async {

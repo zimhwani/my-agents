@@ -24,13 +24,18 @@ create table profiles (
   id            uuid primary key references auth.users (id) on delete cascade,
   first_name    text not null,
   last_name     text not null default '',
-  phone         text,
-  email         text,
   avatar_url    text,
   seed          int  not null default floor(random() * 1000)::int,
   notifications_on boolean not null default true,
   created_at    timestamptz not null default now(),
   updated_at    timestamptz not null default now()
+);
+
+-- Phone and email live apart from the profile so a counterparty can read a first name without them.
+create table profile_contacts (
+  profile_id    uuid primary key references profiles (id) on delete cascade,
+  phone         text,
+  email         text
 );
 
 create table addresses (
@@ -126,6 +131,7 @@ create table work_items (
 create index work_items_pro_idx on work_items (pro_id);
 
 -- Weekly template: one row per weekday range. 0 = Sunday … 6 = Saturday (Postgres dow).
+-- The app's `Weekday` enum is 1 = Sunday … 7 = Saturday, so weekday = Weekday.rawValue - 1.
 create table availability (
   id            uuid primary key default gen_random_uuid(),
   pro_id        uuid not null references pros (id) on delete cascade,

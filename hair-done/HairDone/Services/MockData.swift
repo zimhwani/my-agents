@@ -339,8 +339,8 @@ enum MockData {
 
     static func payouts() -> [Payout] {
         [
-            Payout(id: "po_1", amountCents: 36960, date: now.adding(days: 1), status: .pending, bookingIDs: ["pb_1", "pb_2", "pb_7"]),
-            Payout(id: "po_2", amountCents: 24120, date: daysAgo(2), status: .paid, bookingIDs: ["pb_8", "pb_9"]),
+            Payout(id: "po_1", amountCents: 37700, date: now.adding(days: 1), status: .pending, bookingIDs: ["pb_1", "pb_2", "pb_7"]),
+            Payout(id: "po_2", amountCents: 17660, date: daysAgo(2), status: .paid, bookingIDs: ["pb_8", "pb_9"]),
             Payout(id: "po_3", amountCents: 41800, date: daysAgo(9), status: .paid, bookingIDs: []),
             Payout(id: "po_4", amountCents: 38200, date: daysAgo(16), status: .paid, bookingIDs: []),
             Payout(id: "po_5", amountCents: 29900, date: daysAgo(23), status: .paid, bookingIDs: [])

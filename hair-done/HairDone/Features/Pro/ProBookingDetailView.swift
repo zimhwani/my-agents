@@ -165,7 +165,7 @@ struct ProBookingDetailView: View {
                         Button("Cancel the booking", role: .destructive) { Task { await cancel(b) } }
                         Button("Keep it", role: .cancel) {}
                     } message: {
-                        Text("\(client) is refunded in full and told straight away. Your reliability score drops, and clients see it.")
+                        Text("\(client) is refunded in full and told straight away. Your reliability score drops. We see it, clients don't.")
                     }
                 }
             }

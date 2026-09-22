@@ -9,14 +9,14 @@ Deno.serve(async (req) => {
 
   const { data: pro } = await admin.from("pros").select("id, stripe_account_id, abn").eq("id", user.id).single();
   if (!pro) return json({ error: "not_a_pro" }, 403);
-  const { data: profile } = await admin.from("profiles").select("email, phone, first_name, last_name").eq("id", user.id).single();
+  const { data: contact } = await admin.from("profile_contacts").select("email, phone").eq("profile_id", user.id).maybeSingle();
 
   let accountId = pro.stripe_account_id;
   if (!accountId) {
     const acct = await stripe.accounts.create({
       type: "express",
       country: "AU",
-      email: profile?.email ?? undefined,
+      email: contact?.email ?? undefined,
       business_type: "individual",
       capabilities: { transfers: { requested: true } },
       business_profile: { mcc: "7230", product_description: "Mobile beauty services", url: "https://hairdone.app" },

@@ -35,6 +35,9 @@ create policy profiles_counterparty on profiles for select using (
   exists (select 1 from bookings b where (b.client_id = profiles.id and b.pro_id = auth.uid()) or (b.pro_id = profiles.id and b.client_id = auth.uid()))
 );
 
+alter table profile_contacts enable row level security;
+create policy contacts_own on profile_contacts for all using (profile_id = auth.uid()) with check (profile_id = auth.uid());
+
 create policy addresses_own on addresses for all using (profile_id = auth.uid()) with check (profile_id = auth.uid());
 create policy payment_methods_own on payment_methods for all using (profile_id = auth.uid()) with check (profile_id = auth.uid());
 
@@ -58,6 +61,19 @@ create policy days_off_own_write   on days_off for all using (pro_id = auth.uid(
 create policy bookings_party_read on bookings for select using (is_party(pro_id, client_id));
 create policy bookings_client_insert on bookings for insert with check (client_id = auth.uid() and status = 'requested');
 -- Updates go through the RPC below (security definer) so the state machine can't be skipped.
+
+-- What a pro reads: the street address and access notes appear only once she's confirmed.
+create view bookings_for_pro with (security_invoker = true) as
+  select b.id, b.reference, b.pro_id, b.client_id, b.status, b.starts_at, b.ends_at,
+    case when b.status = 'requested' then null else b.address_label end as address_label,
+    case when b.status = 'requested' then null else b.address_line1 end as address_line1,
+    b.address_suburb, b.address_state, b.address_postcode,
+    case when b.status = 'requested' then null else b.address_location end as address_location,
+    case when b.status = 'requested' then '' else b.address_instructions end as address_instructions,
+    b.notes, b.services_cents, b.travel_fee_cents, b.booking_fee_cents, b.tip_cents, b.discount_cents,
+    b.platform_fee_cents, b.cancellation_charge_cents, b.decline_reason, b.created_at, b.updated_at
+  from bookings b where b.pro_id = auth.uid();
+grant select on bookings_for_pro to authenticated;
 
 create policy booking_services_party on booking_services for select using (
   exists (select 1 from bookings b where b.id = booking_id and is_party(b.pro_id, b.client_id)));
@@ -122,22 +138,24 @@ begin
   hours_until := extract(epoch from (b.starts_at - now())) / 3600;
 
   -- Who may move what, from where.
-  if new_status = 'confirmed'        and not (is_pro and b.status = 'requested') then raise exception 'bad_transition'; end if;
-  if new_status = 'declined'         and not (is_pro and b.status = 'requested') then raise exception 'bad_transition'; end if;
+  -- Instant book: the client's own request confirms itself once the hold is placed; otherwise the pro (or the service role) confirms.
+  if new_status = 'confirmed'        and not ((is_pro or me is null or (is_client and (select instant_book from pros where id = b.pro_id))) and b.status = 'requested') then raise exception 'bad_transition'; end if;
+  if new_status = 'declined'         and not ((is_pro or me is null) and b.status = 'requested') then raise exception 'bad_transition'; end if;
   if new_status = 'onHerWay'         and not (is_pro and b.status = 'confirmed') then raise exception 'bad_transition'; end if;
   if new_status = 'arrived'          and not (is_pro and b.status = 'onHerWay') then raise exception 'bad_transition'; end if;
   if new_status = 'inProgress'       and not (is_pro and b.status in ('arrived','confirmed')) then raise exception 'bad_transition'; end if;
   if new_status = 'done'             and not (is_pro and b.status in ('inProgress','arrived','onHerWay','confirmed')) then raise exception 'bad_transition'; end if;
   if new_status = 'noShow'           and not (is_pro and b.status in ('arrived','onHerWay') and now() > b.starts_at + interval '20 minutes') then raise exception 'bad_transition'; end if;
   if new_status = 'cancelledByPro'   and not (is_pro and b.status in ('requested','confirmed','onHerWay')) then raise exception 'bad_transition'; end if;
-  if new_status = 'cancelledByClient' and not (is_client and b.status in ('requested','confirmed','onHerWay','arrived')) then raise exception 'bad_transition'; end if;
+  if new_status = 'cancelledByClient' and not ((is_client or me is null) and b.status in ('requested','confirmed','onHerWay','arrived')) then raise exception 'bad_transition'; end if;
   if new_status = 'paid'             and me is not null then raise exception 'bad_transition'; end if; -- only the webhook, with the service role
 
   if new_status = 'cancelledByClient' then
     if b.status = 'requested' or hours_until >= 24 then b.cancellation_charge_cents := 0;
+    elsif b.status = 'arrived' then b.cancellation_charge_cents := b.services_cents + b.travel_fee_cents + b.booking_fee_cents;
     else b.cancellation_charge_cents := round((b.services_cents + b.travel_fee_cents) * 0.5); end if;
   elsif new_status = 'noShow' then
-    b.cancellation_charge_cents := b.services_cents + b.travel_fee_cents;
+    b.cancellation_charge_cents := b.services_cents + b.travel_fee_cents + b.booking_fee_cents;
   end if;
 
   update bookings set status = new_status, decline_reason = coalesce(reason, decline_reason),

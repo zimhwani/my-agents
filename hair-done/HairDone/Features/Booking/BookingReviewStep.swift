@@ -140,7 +140,7 @@ struct ReviewStep: View {
                     }
                     .card(padding: Space.m)
 
-                    Text("We hold \(Money.format(price.clientTotalCents)) on your card now. It's charged when \(pro.firstName) marks you done, or 12 hours after your booking, whichever's first. Cancel in time and the hold just drops off.")
+                    Text("We hold \(Money.format(price.clientTotalCents)) on your card now. It's charged when \(pro.firstName) marks you done, or 12 hours after that if she forgets. Cancel in time and the hold just drops off.")
                         .font(HDFont.caption)
                         .foregroundStyle(Palette.inkSoft)
                     Text("Card details go to Stripe, not to us.")

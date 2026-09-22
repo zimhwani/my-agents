@@ -15,11 +15,12 @@ Deno.serve(async (req) => {
   if (b.stripe_payment_intent_id) return json({ error: "already_held" }, 409);
 
   // One Stripe customer per profile.
-  const { data: profile } = await admin.from("profiles").select("id, first_name, email, phone").eq("id", user.id).single();
+  const { data: profile } = await admin.from("profiles").select("id, first_name, profile_contacts(email, phone)").eq("id", user.id).single();
   const { data: existing } = await admin.from("payment_methods").select("stripe_customer_id").eq("profile_id", user.id).limit(1).maybeSingle();
   let customerId = existing?.stripe_customer_id;
   if (!customerId) {
-    const c = await stripe.customers.create({ name: profile?.first_name, email: profile?.email ?? undefined, phone: profile?.phone ?? undefined, metadata: { profile_id: user.id } });
+    const contact = (profile as unknown as { profile_contacts?: { email?: string; phone?: string } | null })?.profile_contacts;
+    const c = await stripe.customers.create({ name: profile?.first_name, email: contact?.email ?? undefined, phone: contact?.phone ?? undefined, metadata: { profile_id: user.id } });
     customerId = c.id;
   }
 

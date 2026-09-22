@@ -13,6 +13,12 @@ Postgres on Supabase, Stripe for money. The iOS app ships against `MockDataServi
 | `functions/connect-onboarding` | Stripe Connect Express link for a pro's payouts |
 | `config.toml` | Supabase CLI config (phone auth, Apple sign-in, function JWT settings) |
 
+## Privacy, as the code does it
+
+- `profiles` holds names only. Phone and email are in `profile_contacts`, readable by the owner alone. Edge functions read them with the service role.
+- A pro reads bookings through the `bookings_for_pro` view: suburb and postcode always, the street address and access notes only once the booking is confirmed.
+- `availability.weekday` uses Postgres `dow` (0 = Sunday). The app's `Weekday` is 1 = Sunday, so store `Weekday.rawValue - 1`.
+
 ## Money, as the code does it
 
 - Client total = services + travel fee + $3 booking fee (`bookings.booking_fee_cents`).
