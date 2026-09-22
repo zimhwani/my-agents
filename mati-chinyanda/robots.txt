@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://matichinyanda.vercel.app/sitemap.xml

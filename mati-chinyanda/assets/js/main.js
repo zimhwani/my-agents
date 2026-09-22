@@ -138,3 +138,15 @@
   /* Current year */
   d.querySelectorAll('[data-year]').forEach(el => el.textContent = new Date().getFullYear());
 })();
+
+/* Copy-to-clipboard for bios */
+(function () {
+  const status = document.querySelector('#copy-status');
+  document.querySelectorAll('[data-copy]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const el = document.querySelector(btn.dataset.copy); if (!el) return;
+      try { await navigator.clipboard.writeText(el.textContent.trim()); if (status) { status.textContent = 'Copied to clipboard.'; status.className = 'form-status is-ok mt-6'; } btn.textContent = 'Copied'; setTimeout(() => btn.textContent = btn.textContent.replace('Copied', 'Copy ' + btn.dataset.copy.replace('#bio-', '').replace('s', 'short').replace('m', 'medium').replace('l', 'long') + ' bio'), 1800); }
+      catch (e) { if (status) { status.textContent = 'Copy failed. Select the text and copy manually.'; status.className = 'form-status is-error mt-6'; } }
+    });
+  });
+})();

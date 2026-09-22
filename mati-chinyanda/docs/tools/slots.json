@@ -1,7 +1,64 @@
 {
-  "hero":        { "src": "mati-portrait-user.webp", "width": 1600, "q": 84, "jpg": true },
-  "hero-md":     { "src": "mati-portrait-user.webp", "width": 900,  "q": 82 },
-  "portrait-sq": { "src": "mati-portrait-user.webp", "width": 1200, "crop": "1:1", "center": [0.5, 0.3], "q": 82 },
-  "portrait-45": { "src": "mati-portrait-user.webp", "width": 1200, "crop": "4:5", "center": [0.5, 0.3], "q": 82 },
-  "og":          { "src": "mati-portrait-user.webp", "width": 1200, "crop": "1200:630", "center": [0.5, 0.25], "q": 82, "jpg": true }
+  "hero": {
+    "src": "mati-portrait-user.webp",
+    "width": 1600,
+    "q": 84,
+    "jpg": true
+  },
+  "hero-md": {
+    "src": "mati-portrait-user.webp",
+    "width": 900,
+    "q": 82
+  },
+  "portrait-sq": {
+    "src": "mati-portrait-user.webp",
+    "width": 1200,
+    "crop": "1:1",
+    "center": [
+      0.5,
+      0.3
+    ],
+    "q": 82
+  },
+  "portrait-45": {
+    "src": "mati-portrait-user.webp",
+    "width": 1200,
+    "crop": "4:5",
+    "center": [
+      0.5,
+      0.3
+    ],
+    "q": 82
+  },
+  "og": {
+    "src": "mati-portrait-user.webp",
+    "width": 1200,
+    "crop": "1200:630",
+    "center": [
+      0.5,
+      0.25
+    ],
+    "q": 82,
+    "jpg": true
+  },
+  "detail": {
+    "src": "mati-portrait-user.webp",
+    "width": 1400,
+    "crop": "3:2",
+    "center": [
+      0.55,
+      0.28
+    ],
+    "q": 82
+  },
+  "detail-tight": {
+    "src": "mati-portrait-user.webp",
+    "width": 1000,
+    "crop": "1:1",
+    "center": [
+      0.6,
+      0.42
+    ],
+    "q": 82
+  }
 }
