@@ -9,6 +9,9 @@ RAW = os.path.join(ROOT, 'assets/img/raw'); OUT = os.path.join(ROOT, 'assets/img
 SLOTS = json.load(open(os.path.join(os.path.dirname(__file__), 'slots.json')))
 for out_name, spec in SLOTS.items():
     src = os.path.join(RAW, spec['src'])
+    if not os.path.exists(src):
+        alts = [os.path.splitext(src)[0] + e for e in ('.jpeg', '.png', '.webp')]
+        src = next((a for a in alts if os.path.exists(a)), src)
     if not os.path.exists(src): print('missing', src); continue
     im = ImageOps.exif_transpose(Image.open(src)).convert('RGB')
     w = spec.get('width', 1600)
