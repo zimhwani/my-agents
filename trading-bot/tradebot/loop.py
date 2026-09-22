@@ -312,7 +312,7 @@ class TradingLoop:
             "equity": round(equity, 2), "day_start_equity": round(self.day.start_equity, 2),
             "realized_r": round(self.day.realized_r, 2), "realized_pnl": round(self.day.realized_pnl, 2),
             "closed_today": len(self.exec.closed_today), "open": open_rows,
-            "watchlist": [{"symbol": c.symbol, "price": round(c.price, 2), "gap_pct": round(c.gap_pct, 2),
+            "watchlist": [{"symbol": c.symbol, "price": float(px(c.price)), "gap_pct": round(c.gap_pct, 2),
                            "atr_pct": round(c.atr_pct, 2)} for c in self.watchlist],
             "blockers": blockers, "scanned": self.scanned, "day_done": self.day_done,
         }

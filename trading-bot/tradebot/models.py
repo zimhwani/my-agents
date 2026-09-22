@@ -19,7 +19,18 @@ def px(price: float) -> str:
         return f"{price:.2f}"
     if a >= 0.01:
         return f"{price:.4f}"
-    return f"{price:.6g}"
+    if a == 0:
+        return "0.00"
+    s = f"{price:.10f}".rstrip("0")  # plain decimals, 6 significant digits, no exponent
+    digits = 0
+    out = []
+    for ch in s:
+        out.append(ch)
+        if ch.isdigit() and (digits or ch != "0"):
+            digits += 1
+        if digits == 6:
+            break
+    return "".join(out).rstrip("0") if "." in "".join(out) else "".join(out)
 
 
 @dataclass(slots=True)

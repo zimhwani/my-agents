@@ -169,6 +169,9 @@ const $ = s => document.querySelector(s);
 const tip = $('#tip');
 const fmtR = r => (r>0?'+':'') + (+r).toFixed(2) + 'R';
 const fmt$ = v => (v<0?'-$':'$') + Math.abs(v).toLocaleString(undefined,{maximumFractionDigits:0});
+// Price for humans (mirrors models.px): 2dp >= 1, 4dp >= 0.01, else 6 significant digits, trailing zeros trimmed.
+const fmtPx = p => { p=+p; if (!isFinite(p)) return '—'; const a=Math.abs(p); if (a>=1) return p.toFixed(2); if (a>=0.01) return p.toFixed(4); if (a===0) return '0.00';
+  return p.toFixed(Math.min(20, 5-Math.floor(Math.log10(a)))).replace(/0+$/,'').replace(/\.$/,''); };
 const cls = v => v>0?'up':(v<0?'down':'');
 let LIVE = null;
 
@@ -197,7 +200,7 @@ function stats(rows){
 function showTip(e,html){ tip.innerHTML=html; tip.style.display='block'; moveTip(e); }
 function moveTip(e){ tip.style.left=Math.min(e.clientX+12, innerWidth-tip.offsetWidth-8)+'px'; tip.style.top=Math.min(e.clientY+12, innerHeight-tip.offsetHeight-8)+'px'; }
 function hideTip(){ tip.style.display='none'; }
-function niceTicks(lo,hi,n){ const span=hi-lo||1, raw=span/n, mag=Math.pow(10,Math.floor(Math.log10(raw))), norm=raw/mag; const step=(norm<1.5?1:norm<3?2:norm<7?5:10)*mag; const out=[]; for (let v=Math.ceil(lo/step)*step; v<=hi+1e-9; v+=step) out.push(+v.toFixed(6)); return out; }
+function niceTicks(lo,hi,n){ const span=hi-lo||1, raw=span/n, mag=Math.pow(10,Math.floor(Math.log10(raw))), norm=raw/mag; const step=(norm<1.5?1:norm<3?2:norm<7?5:10)*mag; const out=[]; for (let v=Math.ceil(lo/step)*step; v<=hi+1e-9; v+=step) out.push(+v.toPrecision(10)); return out; }
 
 // ---------- header + account ----------
 function header(st, rows){
@@ -230,24 +233,26 @@ function candles(){
   const el=$('#candles'); const C = LIVE && LIVE.chart;
   if (!C || !C.bars || !C.bars.length){ $('#chSym').textContent='Chart'; return; }
   $('#chSym').textContent = C.symbol; const last = C.last || C.bars[C.bars.length-1][4]; const first = C.bars[0][1];
-  $('#chLast').innerHTML = `<span class="neon">$${(+last).toFixed(2)}</span>`; const chg=(last-first)/first*100; $('#chChg').innerHTML = `<span class="${cls(chg)}">${chg>=0?'▲':'▼'}${Math.abs(chg).toFixed(2)}%</span>`;
-  const W=720,H=250,m={t:10,r:56,b:20,l:8}, iw=W-m.l-m.r, ih=H-m.t-m.b;
-  const bars=C.bars; const lo=Math.min(...bars.map(b=>b[3])), hi=Math.max(...bars.map(b=>b[2])); const pad=(hi-lo)*.08||1;
-  const y=v=>m.t+ih-(v-(lo-pad))/((hi+pad)-(lo-pad))*ih, x=i=>m.l+(i+0.5)*iw/bars.length, w=Math.max(2, iw/bars.length*0.6);
+  $('#chLast').innerHTML = `<span class="neon">$${fmtPx(last)}</span>`; const chg=(last-first)/first*100; $('#chChg').innerHTML = `<span class="${cls(chg)}">${chg>=0?'▲':'▼'}${Math.abs(chg).toFixed(2)}%</span>`;
+  const bars=C.bars; const lo=Math.min(...bars.map(b=>b[3])), hi=Math.max(...bars.map(b=>b[2])); const pad=(hi-lo)*.08||Math.abs(hi)*.01||1;
   const ticks=niceTicks(lo-pad,hi+pad,5);
+  // right margin grows with the longest price label (~6.2px per monospace char at 9-10px) so "0.0000123" is never clipped
+  const lblW=Math.max(fmtPx(last).length, ...ticks.map(t=>fmtPx(t).length))*6.2+12;
+  const W=720,H=250,m={t:10,r:Math.max(56,Math.ceil(lblW)),b:20,l:8}, iw=W-m.l-m.r, ih=H-m.t-m.b;
+  const y=v=>m.t+ih-(v-(lo-pad))/((hi+pad)-(lo-pad))*ih, x=i=>m.l+(i+0.5)*iw/bars.length, w=Math.max(2, iw/bars.length*0.6);
   let s=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${C.symbol} 5-minute candles">`;
   s+='<g class="grid">'+ticks.map(t=>`<line x1="${m.l}" x2="${W-m.r}" y1="${y(t)}" y2="${y(t)}"/>`).join('')+'</g>';
-  s+='<g class="axis">'+ticks.map(t=>`<text x="${W-m.r+6}" y="${y(t)+3}">${t.toFixed(2)}</text>`).join('')+'</g>';
+  s+='<g class="axis">'+ticks.map(t=>`<text x="${W-m.r+6}" y="${y(t)+3}">${fmtPx(t)}</text>`).join('')+'</g>';
   bars.forEach((b,i)=>{ const up=b[4]>=b[1]; const top=y(Math.max(b[1],b[4])), h=Math.max(1,Math.abs(y(b[1])-y(b[4])));
     s+=`<line class="candle wick ${up?'up':'down'}" x1="${x(i)}" x2="${x(i)}" y1="${y(b[2])}" y2="${y(b[3])}"/>`;
     s+=`<rect class="candle ${up?'up':'down'}" x="${x(i)-w/2}" y="${top}" width="${w}" height="${h}" rx="1"/>`;
     s+=`<rect class="hit" data-i="${i}" x="${x(i)-iw/bars.length/2}" y="${m.t}" width="${iw/bars.length}" height="${ih}"/>`; });
   const ly=y(last); s+=`<line class="cross" x1="${m.l}" x2="${W-m.r}" y1="${ly}" y2="${ly}"/>`;
-  s+=`<g class="tag"><rect x="${W-m.r-2}" y="${ly-9}" width="${m.r}" height="18" rx="2"/><text x="${W-m.r+4}" y="${ly+4}">${(+last).toFixed(2)}</text></g>`;
+  s+=`<g class="tag"><rect x="${W-m.r-2}" y="${ly-9}" width="${m.r}" height="18" rx="2"/><text x="${W-m.r+4}" y="${ly+4}">${fmtPx(last)}</text></g>`;
   const step=Math.max(1,Math.ceil(bars.length/8)); s+='<g class="axis">'+bars.map((b,i)=> i%step===0? `<text x="${x(i)}" y="${H-6}" text-anchor="middle">${b[0]}</text>`:'').join('')+'</g>';
   s+='</svg>'; el.innerHTML=s;
   el.querySelectorAll('.hit').forEach(h=>{ const b=bars[+h.dataset.i];
-    h.addEventListener('mouseenter',e=>showTip(e,`<b>${C.symbol} ${b[0]}</b><br>O ${b[1].toFixed(2)} H ${b[2].toFixed(2)} L ${b[3].toFixed(2)} C ${b[4].toFixed(2)}<br>vol ${Math.round(b[5]).toLocaleString()}`));
+    h.addEventListener('mouseenter',e=>showTip(e,`<b>${C.symbol} ${b[0]}</b><br>O ${fmtPx(b[1])} H ${fmtPx(b[2])} L ${fmtPx(b[3])} C ${fmtPx(b[4])}<br>vol ${Math.round(b[5]).toLocaleString()}`));
     h.addEventListener('mousemove',moveTip); h.addEventListener('mouseleave',hideTip); });
 }
 
@@ -256,7 +261,7 @@ function watchlist(){
   const L=LIVE; const rows = L? L.watchlist : [];
   $('#wlCount').textContent = rows.length;
   $('#wl').innerHTML = '<tr><th class="l">Sym</th><th>Last</th><th>Gap</th><th class="l">State</th></tr>' +
-    (rows.map(w=>{ const o = L.open.find(p=>p.symbol===w.symbol); return `<tr><td class="l sym">${w.symbol}</td><td>${(+w.price).toFixed(2)}</td><td class="${cls(w.gap_pct)}">${w.gap_pct? (w.gap_pct>0?'+':'')+w.gap_pct.toFixed(1)+'%':'—'}</td><td class="l">${o? `<span class="neon">IN ${fmtR(o.r)}</span>`:'<span class="sub">watching</span>'}</td></tr>`; }).join('')
+    (rows.map(w=>{ const o = L.open.find(p=>p.symbol===w.symbol); return `<tr><td class="l sym">${w.symbol}</td><td>${fmtPx(w.price)}</td><td class="${cls(w.gap_pct)}">${w.gap_pct? (w.gap_pct>0?'+':'')+w.gap_pct.toFixed(1)+'%':'—'}</td><td class="l">${o? `<span class="neon">IN ${fmtR(o.r)}</span>`:'<span class="sub">watching</span>'}</td></tr>`; }).join('')
      || `<tr><td colspan="4" class="empty">${L? (L.scanned?'nothing passed the scan':'scan pending') : 'offline'}</td></tr>`);
 }
 
@@ -294,8 +299,8 @@ function curve(rows){
 // ---------- positions + trades table ----------
 function tradesTable(rows){
   const L=LIVE; let h='<tr><th class="l">#</th><th class="l">Sym</th><th class="l">Time</th><th>Qty</th><th>Entry</th><th>Stop</th><th>Exit</th><th>R</th><th>P&amp;L</th><th class="l">Status</th></tr>';
-  const open=(L?L.open:[]).map(o=>`<tr><td class="l neon">●</td><td class="l" style="color:#fff;font-weight:700">${o.symbol}</td><td class="l">${o.entry_time}</td><td>${o.qty}${o.partial?' ½':''}</td><td>${o.entry.toFixed(2)}</td><td>${o.stop.toFixed(2)}</td><td>${o.price.toFixed(2)}</td><td class="${cls(o.r)}"><b>${fmtR(o.r)}</b></td><td class="${cls(o.pnl)}">${fmt$(o.pnl)}</td><td class="l neon">OPEN</td></tr>`).join('');
-  const closed=[...rows].reverse().slice(0,40).map(r=>`<tr><td class="l">${r.n}</td><td class="l" style="color:#fff;font-weight:700">${r.symbol}</td><td class="l">${r.date.slice(5)} ${r.entry_time}</td><td>${r.qty}</td><td>${r.entry.toFixed(2)}</td><td>${r.stop.toFixed(2)}</td><td>${r.exit==null?'—':r.exit.toFixed(2)}</td><td class="${cls(r.r)}"><b>${fmtR(r.r)}</b></td><td class="${cls(r.pnl)}">${fmt$(r.pnl)}</td><td class="l" style="color:var(--text-3)">${r.exits.split(',').map(x=>x.trim().split(' ')[0]).join('/')}</td></tr>`).join('');
+  const open=(L?L.open:[]).map(o=>`<tr><td class="l neon">●</td><td class="l" style="color:#fff;font-weight:700">${o.symbol}</td><td class="l">${o.entry_time}</td><td>${o.qty}${o.partial?' ½':''}</td><td>${fmtPx(o.entry)}</td><td>${fmtPx(o.stop)}</td><td>${fmtPx(o.price)}</td><td class="${cls(o.r)}"><b>${fmtR(o.r)}</b></td><td class="${cls(o.pnl)}">${fmt$(o.pnl)}</td><td class="l neon">OPEN</td></tr>`).join('');
+  const closed=[...rows].reverse().slice(0,40).map(r=>`<tr><td class="l">${r.n}</td><td class="l" style="color:#fff;font-weight:700">${r.symbol}</td><td class="l">${r.date.slice(5)} ${r.entry_time}</td><td>${r.qty}</td><td>${fmtPx(r.entry)}</td><td>${fmtPx(r.stop)}</td><td>${r.exit==null?'—':fmtPx(r.exit)}</td><td class="${cls(r.r)}"><b>${fmtR(r.r)}</b></td><td class="${cls(r.pnl)}">${fmt$(r.pnl)}</td><td class="l" style="color:var(--text-3)">${r.exits.split(',').map(x=>x.trim().split(' ')[0]).join('/')}</td></tr>`).join('');
   $('#trades').innerHTML = h + open + (closed || (open?'':'<tr><td colspan="10" class="empty">No trades yet.</td></tr>'));
 }
 

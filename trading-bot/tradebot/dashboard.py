@@ -10,7 +10,7 @@ from pathlib import Path
 
 from .clock import now_et
 from .journal import compute_stats
-from .models import TradeRecord
+from .models import TradeRecord, px
 
 
 def trade_rows(trades: list[TradeRecord]) -> list[dict]:
@@ -20,11 +20,11 @@ def trade_rows(trades: list[TradeRecord]) -> list[dict]:
             "n": i, "id": t.id, "symbol": t.symbol, "side": t.side, "qty": t.qty_initial,
             "date": t.entry_time.strftime("%Y-%m-%d"), "entry_time": t.entry_time.strftime("%H:%M"),
             "exit_time": t.last_exit_time.strftime("%H:%M") if t.last_exit_time else "",
-            "entry": round(t.entry_price, 2), "stop": round(t.stop_initial, 2),
-            "exit": round(t.exit_price_avg, 2) if t.exit_price_avg else None,
+            "entry": float(px(t.entry_price)), "stop": float(px(t.stop_initial)),
+            "exit": float(px(t.exit_price_avg)) if t.exit_price_avg else None,
             "r": round(t.r_multiple, 2), "pnl": round(t.realized_pnl, 2),
             "risk": round(t.initial_risk_usd, 2),
-            "exits": ", ".join(f"{f.reason} {f.qty}@{f.price:.2f}" for f in t.exits),
+            "exits": ", ".join(f"{f.reason} {f.qty}@{px(f.price)}" for f in t.exits),
             "reason": t.reason,
         })
     return rows
