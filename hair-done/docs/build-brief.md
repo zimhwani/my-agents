@@ -61,6 +61,18 @@ Rules:
 8. Australian English. "Mum", "arvo" is fine in a push notification, not in a
    receipt.
 
+Rules added after the first copy audit (docs/qa/copy-audit.md):
+
+9. Model strings are UI. Anything returned from a `label`, `errorDescription` or `localizedDescription` ends up on a screen. Write it from the deck.
+10. Money verbs only: held, charged, refunded, lands, drops off. Never "processing", "transaction", "pending payment" or "said no". Every money line says what has happened to her dollars right now.
+11. No symbols standing in for words: "about" not "~", "to" not "–", "and" not "+". The middle dot separates facts, not clauses.
+12. Day words are lowercase mid-sentence: "today", "tomorrow" after any other word.
+13. One name per thing, everywhere it appears. If two screens name it differently, the review screen wins.
+14. Say what the system does in her words: "lapses" not "auto-declines", "ID checked" not "verified", "booking since" not "member since".
+15. No social counters. No likes, followers, views or hearts. Stars and reviews are the only numbers a pro is judged by.
+16. A cute error is a failed error. Three sentences, in order: what happened, what happened to the money, what to do.
+17. Debug-only copy is exempt, but only behind `#if DEBUG`.
+
 Banned words and patterns (these read as machine-written; do not use them
 anywhere, including code comments that might leak into UI):
 `elevate`, `unlock`, `seamless(ly)`, `effortless(ly)`, `journey`, `empower`,

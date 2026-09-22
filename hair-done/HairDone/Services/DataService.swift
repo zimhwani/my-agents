@@ -60,7 +60,7 @@ enum DataError: LocalizedError {
         switch self {
         case .notSignedIn: return "You're not signed in."
         case .notFound: return "We couldn't find that one."
-        case .slotTaken: return "Someone just took that time. Pick another?"
+        case .slotTaken: return "Someone just took that time. Here's what's still free."
         case .network: return "That didn't go through. Check your connection and try again."
         }
     }

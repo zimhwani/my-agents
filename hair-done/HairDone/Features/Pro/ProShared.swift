@@ -75,12 +75,12 @@ enum ProFlow {
         "Something else"
     ]
 
-    /// "Auto-declines in 1 hr 20 min", or "Auto-declines any minute" once it's up.
+    /// "Reply by 11:40 am or it lapses.", or "About to lapse." once it's up.
     static func autoDeclineLine(for booking: Booking) -> String {
         let deadline = booking.createdAt.adding(hours: Fees.autoDeclineHours)
         let minutes = Int(deadline.timeIntervalSinceNow / 60)
-        if minutes <= 0 { return "Auto-declines any minute" }
-        return "Auto-declines in \(minutes.minutesLabel)"
+        if minutes <= 0 { return "About to lapse." }
+        return "Reply by \(deadline.clock) or it lapses."
     }
 
     /// "today", "tomorrow" or "Tue 24 Sep", for the middle of a sentence.
@@ -128,7 +128,7 @@ struct StatusActionButton: View {
         } else if booking.status == .done {
             HStack(spacing: 8) {
                 ProgressView().tint(Palette.inkSoft)
-                Text("Payment's processing. \(Money.format(booking.price.proPayoutCents)) to you tomorrow.")
+                Text("Done. \(Money.format(booking.price.proPayoutCents)) to you tomorrow.")
                     .font(HDFont.sub).foregroundStyle(Palette.inkSoft)
             }
             .frame(maxWidth: .infinity, minHeight: 44)

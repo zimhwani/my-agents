@@ -26,7 +26,7 @@ struct TimeRange: Hashable, Codable {
 
     static func hours(_ start: Int, _ end: Int) -> TimeRange { TimeRange(startMinutes: start * 60, endMinutes: end * 60) }
 
-    var label: String { "\(clock(startMinutes)) – \(clock(endMinutes))" }
+    var label: String { "\(clock(startMinutes)) to \(clock(endMinutes))" }
     func clock(_ m: Int) -> String {
         let h = m / 60, min = m % 60
         let suffix = h >= 12 ? "pm" : "am"

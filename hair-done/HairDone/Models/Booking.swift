@@ -30,7 +30,7 @@ struct PaymentMethod: Identifiable, Hashable, Codable {
     var label: String {
         switch kind {
         case .applePay: return "Apple Pay"
-        case .card: return "\(brand) ····\(last4)"
+        case .card: return "\(brand) ending \(last4)"
         }
     }
 }
@@ -72,7 +72,7 @@ enum BookingStatus: String, Codable, CaseIterable, Hashable {
         case .cancelledByClient: return "You cancelled"
         case .cancelledByPro: return "She cancelled"
         case .declined: return "Declined"
-        case .noShow: return "No-show"
+        case .noShow: return "Missed"
         }
     }
 
@@ -84,12 +84,12 @@ enum BookingStatus: String, Codable, CaseIterable, Hashable {
         case .onHerWay: return "\(pro) is on her way."
         case .arrived: return "\(pro) is at the door."
         case .inProgress: return "Happening now."
-        case .done: return "All done. Your card gets charged in a bit."
+        case .done: return "Done. Charging your card now."
         case .paid: return "Paid. Receipt's in your inbox."
         case .cancelledByClient: return "You cancelled this one."
         case .cancelledByPro: return "\(pro) had to cancel. You weren't charged."
         case .declined: return "\(pro) couldn't make it this time."
-        case .noShow: return "Marked as a no-show."
+        case .noShow: return "Missed. Charged in full."
         }
     }
 
@@ -101,7 +101,7 @@ enum BookingStatus: String, Codable, CaseIterable, Hashable {
         case .onHerWay: return "You're on your way."
         case .arrived: return "You've arrived."
         case .inProgress: return "In progress."
-        case .done: return "Done. Payment's processing."
+        case .done: return "Done. Your payout lands tomorrow."
         case .paid: return "Paid. It'll be in your next payout."
         case .cancelledByClient: return "\(client) cancelled."
         case .cancelledByPro: return "You cancelled."

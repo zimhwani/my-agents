@@ -108,8 +108,8 @@ final class MockDataService: DataService {
         )
         bookings.append(booking)
         let intro = status == .confirmed
-            ? "Booking confirmed for \(start.friendlyDayTime)."
-            : "You asked \(draft.pro.firstName) for \(start.friendlyDayTime)."
+            ? "Confirmed for \(start.friendlyDayInSentence) at \(start.clock)."
+            : "You asked for \(start.friendlyDayInSentence) at \(start.clock)."
         threads.append(MessageThread(id: "th_\(id)", bookingID: id, proID: draft.pro.id, clientID: clientID, messages: [
             Message(id: "m_\(id)_0", threadID: "th_\(id)", senderID: "system", text: intro, sentAt: now, isSystem: true)
         ]))

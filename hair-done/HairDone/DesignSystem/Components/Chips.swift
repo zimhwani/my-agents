@@ -42,16 +42,16 @@ struct StatusBadge: View {
     }
 }
 
-/// Small "Verified" mark next to a name.
+/// Small "ID checked" mark next to a name.
 struct VerifiedBadge: View {
     var compact = false
     var body: some View {
         HStack(spacing: 3) {
             Image(systemName: "checkmark.seal.fill").font(.system(size: compact ? 12 : 13, weight: .semibold))
-            if !compact { Text("Verified").font(HDFont.label) }
+            if !compact { Text("ID checked").font(HDFont.label) }
         }
         .foregroundStyle(Palette.success)
-        .accessibilityLabel("Verified pro")
+        .accessibilityLabel("ID checked")
     }
 }
 

@@ -34,7 +34,7 @@ struct RescheduleSheet: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: Space.xl) {
                     VStack(alignment: .leading, spacing: Space.xs) {
-                        Text("Now \(booking.start.friendlyDayTime) · \(booking.minutes.minutesLabel)")
+                        Text("Booked for \(booking.start.friendlyDayInSentence) at \(booking.start.clock) · \(booking.minutes.minutesLabel)")
                             .font(HDFont.sub)
                             .foregroundStyle(Palette.inkSoft)
                         if !pro.instantBook {

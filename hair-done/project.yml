@@ -20,7 +20,7 @@ targets:
         INFOPLIST_KEY_CFBundleDisplayName: "Hair Done"
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait
-        INFOPLIST_KEY_NSLocationWhenInUseUsageDescription: "So we can show you who's near you right now. We never share your location with anyone."
+        INFOPLIST_KEY_NSLocationWhenInUseUsageDescription: "Hair Done shows pros near you and works out travel fees. Only while you're in the app."
         INFOPLIST_KEY_NSCameraUsageDescription: "So you can add photos of your work, or show a pro the look you're after."
         INFOPLIST_KEY_NSPhotoLibraryUsageDescription: "So you can add inspo photos to a booking, or show off your work."
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon

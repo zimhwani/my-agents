@@ -19,9 +19,9 @@ enum PaymentError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .declined: return "Your card said no. Try another one, or Apple Pay."
+        case .declined: return "That card didn't go through. Nothing's been charged. Try another, or Apple Pay."
         case .cancelled: return "No worries, nothing was charged."
-        case .unavailable: return "Payments are having a moment. Try again in a minute."
+        case .unavailable: return "Couldn't place the hold. Nothing's been charged. Try again in a minute."
         }
     }
 }

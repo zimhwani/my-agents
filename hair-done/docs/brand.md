@@ -55,42 +55,38 @@ In that order. Warm first: she's on your side. Direct second: she says the price
 
 ## The mark
 
-A nail-polish drop. Lacquer red, one highlight, nothing else. Chosen over a circle-with-h because it reads at 16pt, needs no font to render, and is the same shape whether the bottle holds polish, gloss or hair oil.
+The full stop.
 
-Geometry in a 100 × 100 unit box, scaled by the shorter side of the rect. Draw it as a `Shape`:
+The wordmark ends every line with one: *hair done.* *nails done.* *everything done.* The mark is that last full stop on its own: a lacquer-red dot with one soft highlight, like a drop of polish seen from above. It is the one thing in the brand that says "done" without a word.
+
+It replaced an earlier nail-polish teardrop, which read as a drop of blood, especially on dark backgrounds. A dot can't.
+
+In SwiftUI it's a `Circle` filled `lacquer` with an `Ellipse` highlight on top:
 
 ```swift
-struct DropMark: Shape {
-    func path(in rect: CGRect) -> Path {
-        let s = min(rect.width, rect.height) / 100
-        let ox = rect.midX - 50 * s
-        let oy = rect.midY - 50 * s
-        func p(_ x: CGFloat, _ y: CGFloat) -> CGPoint {
-            CGPoint(x: ox + x * s, y: oy + y * s)
-        }
-        var path = Path()
-        path.move(to: p(50, 6))                                                // tip
-        path.addCurve(to: p(80, 64), control1: p(52, 32), control2: p(80, 46)) // right shoulder
-        path.addCurve(to: p(50, 94), control1: p(80, 81), control2: p(67, 94)) // right of the bowl
-        path.addCurve(to: p(20, 64), control1: p(33, 94), control2: p(20, 81)) // left of the bowl
-        path.addCurve(to: p(50, 6), control1: p(20, 46), control2: p(48, 32))  // left shoulder
-        path.closeSubpath()
-        return path
+struct DropMark: View {          // name kept for existing call sites
+    var size: CGFloat = 28
+    var body: some View {
+        Circle().fill(Palette.lacquer)
+            .overlay(
+                Ellipse().fill(Color.white.opacity(0.85))
+                    .frame(width: size * 0.2, height: size * 0.3)
+                    .rotationEffect(.degrees(22))
+                    .offset(x: -size * 0.17, y: -size * 0.2)
+            )
+            .frame(width: size, height: size)
     }
 }
 ```
 
-Highlight: an ellipse 9 wide by 15 tall, centred at (37, 60), rotated −22°. Fill `card` at 80% opacity in light, `paper` at 60% in dark. Draw it as a second `Ellipse()` layered on the drop, not as part of the path, so it can be dropped at small sizes.
+Highlight: an ellipse one fifth the dot's width and three tenths its height, rotated 22°, sitting in the upper left. Below 16pt, drop the highlight and use the plain dot.
 
-Usage:
-
-- Fill `lacquer`. On a `lacquer` background, fill `paper`. Monochrome: `ink`.
-- Clear space: 25 units (a quarter of the box) on every side.
-- Minimum 16pt. Below 24pt, omit the highlight.
-- App icon: the drop at 62% of icon height, centred, on `paper`. Dark icon: on `#171210`. Tinted icon: the drop as the mask.
-- It draws itself once, on the splash, with `trim(from: 0, to: progress)` over 0.6s on the default spring. After that it holds still. Respect `accessibilityReduceMotion`: no trim, just fade.
-- Never: outline it, gradient it, tilt it, put it in a circle, pair it with a second drop, use it as a bullet, animate it on every screen.
-- The check that draws itself on "You're booked" is its own stroke. Not the drop.
+Rules:
+- In the wordmark, the final full stop of *done.* is set in `lacquer`. Every other full stop is `ink`.
+- App icon: the dot at about half the icon's height, sitting low and right like the end of a word, on `paper`. Dark icon: on `#171210`. Tinted icon: the dot as the mask.
+- Minimum clear space around it: half its diameter.
+- Never: outline it, gradient it, put it in a ring, pair it with a second dot, use it as a bullet, make it a red flag by centring it on a plain white square, animate it on every screen.
+- The check that draws itself on "You're booked" is its own stroke. Not the mark.
 
 ## Colour
 

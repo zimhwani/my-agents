@@ -74,7 +74,7 @@ struct AccountView: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text(client.fullName).font(HDFont.heading).foregroundStyle(Palette.ink)
                 Text(client.phone).font(HDFont.sub).foregroundStyle(Palette.inkSoft)
-                Text("Member since \(client.joined.monthShort) \(String(client.joined.yearNumber))")
+                Text("Booking since \(client.joined.monthShort) \(String(client.joined.yearNumber))")
                     .font(HDFont.caption)
                     .foregroundStyle(Palette.inkFaint)
             }
@@ -550,7 +550,7 @@ struct AccountLegalSheet: View {
                     Text("Hair Done connects you with a mobile pro and takes payment for the booking. The pro is her own business; the work is hers, the booking terms are ours. We charge you what's on the review screen and nothing else.")
                         .font(HDFont.body).foregroundStyle(Palette.ink).fixedSize(horizontal: false, vertical: true)
                     Text("Your data").font(HDFont.heading).foregroundStyle(Palette.ink)
-                    Text("We keep your name, mobile, email, addresses and bookings so the app works. Your address goes to a pro only once she's confirmed. Your card is held by our payment provider, never by us. Location is used only while you're in the app, to show who's near.")
+                    Text("We keep your name, mobile, email, addresses and bookings so the app works. Your address goes to a pro only once she's confirmed. Your card details go to Stripe, not to us. Location is used only while you're in the app, to show who's near.")
                         .font(HDFont.body).foregroundStyle(Palette.ink).fixedSize(horizontal: false, vertical: true)
                     Text("The full terms and privacy policy are on hairdone.app. Questions go to Help.")
                         .font(HDFont.sub).foregroundStyle(Palette.inkSoft).fixedSize(horizontal: false, vertical: true)

@@ -203,41 +203,27 @@ struct CheckShape: Shape {
     }
 }
 
-/// The brand mark: a lacquer drop. Draws with Path so it scales anywhere.
+/// The brand mark: the full stop. A lacquer dot with a soft highlight, like polish seen from above.
+/// It's the "." in "done." — the one thing in the brand that says done without a word.
 struct DropMark: View {
     var size: CGFloat = 28
     var color: Color = Palette.lacquer
     var body: some View {
-        DropShape()
+        Circle()
             .fill(color)
             .overlay(
-                Ellipse().fill(Color.white.opacity(0.8))
-                    .frame(width: size * 0.16, height: size * 0.24)
-                    .rotationEffect(.degrees(18))
-                    .offset(x: -size * 0.15, y: -size * 0.02)
+                Ellipse().fill(Color.white.opacity(0.85))
+                    .frame(width: size * 0.2, height: size * 0.3)
+                    .rotationEffect(.degrees(22))
+                    .offset(x: -size * 0.17, y: -size * 0.2)
             )
             .frame(width: size, height: size)
             .accessibilityHidden(true)
     }
 }
 
-struct DropShape: Shape {
-    func path(in rect: CGRect) -> Path {
-        var p = Path()
-        let cx = rect.midX
-        let r = rect.width * 0.32
-        let cy = rect.maxY - r - rect.height * 0.04
-        let apex = CGPoint(x: cx, y: rect.minY + rect.height * 0.04)
-        let d = cy - apex.y
-        let th = acos(r / d)
-        p.move(to: apex)
-        let start = Angle(radians: -Double.pi / 2 + th)
-        let end = Angle(radians: -Double.pi / 2 - th + 2 * Double.pi)
-        p.addArc(center: CGPoint(x: cx, y: cy), radius: r, startAngle: start, endAngle: end, clockwise: false)
-        p.closeSubpath()
-        return p
-    }
-}
+/// Kept for callers that used the old name.
+typealias DotMark = DropMark
 
 /// The wordmark, three lines, lowercase serif.
 struct Wordmark: View {
@@ -246,7 +232,7 @@ struct Wordmark: View {
         VStack(alignment: .leading, spacing: -2) {
             Text("hair done.")
             Text("nails done.")
-            Text("everything ") + Text("done.").italic()
+            Text("everything ") + Text("done").italic() + Text(".").foregroundStyle(Palette.lacquer)
         }
         .font(.system(size: size, weight: .medium, design: .serif))
         .foregroundStyle(Palette.ink)

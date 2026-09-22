@@ -44,7 +44,7 @@ extension Booking {
         lines.append("")
         for s in services { lines.append("\(s.name) (\(s.durationLabel))  \(Money.format(s.priceCents))") }
         lines.append("Travel fee  \(Money.format(price.travelFeeCents))")
-        lines.append("Hair Done booking fee  \(Money.format(price.bookingFeeCents))")
+        lines.append("Hair Done fee  \(Money.format(price.bookingFeeCents))")
         if price.tipCents > 0 { lines.append("Tip  \(Money.format(price.tipCents))") }
         lines.append("Total  \(Money.format(price.clientTotalCents))")
         lines.append("")
@@ -54,7 +54,7 @@ extension Booking {
 
     /// What you'd text a friend so she knows where you are.
     func shareText(proName: String) -> String {
-        "I'm getting my \(servicesLine.lowercased()) done with \(proName) from Hair Done. \(start.friendlyDayTime), at \(address.full). Booking \(reference)."
+        "I've got \(proName) coming \(start.friendlyDayInSentence) at \(start.clock), \(address.short). Booked on Hair Done. Booking \(reference)."
     }
 
     /// Rough minutes for her to drive from her base to your door. Used for the on-her-way line.

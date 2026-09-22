@@ -186,7 +186,7 @@ struct BookingDetailView: View {
                     PriceRow(label: s.name, cents: s.priceCents, note: s.durationLabel)
                 }
                 PriceRow(label: "Travel fee", cents: booking.price.travelFeeCents)
-                PriceRow(label: "Hair Done booking fee", cents: booking.price.bookingFeeCents)
+                PriceRow(label: "Hair Done fee", cents: booking.price.bookingFeeCents)
                 if booking.price.tipCents > 0 { PriceRow(label: "Tip", cents: booking.price.tipCents, note: "All of it went to her") }
                 Hairline()
                 PriceRow(label: "Total", cents: booking.price.clientTotalCents, emphasis: true)

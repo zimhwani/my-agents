@@ -315,7 +315,7 @@ enum MockData {
     static func threads() -> [MessageThread] {
         [
             MessageThread(id: "th_1", bookingID: "bk_1", proID: "pro_kiara", clientID: clientID, messages: [
-                Message(id: "m1", threadID: "th_1", senderID: "system", text: "Booking confirmed for tonight, 6:15 pm.", sentAt: daysAgo(2), isSystem: true),
+                Message(id: "m1", threadID: "th_1", senderID: "system", text: "Confirmed for tonight at 6:15 pm.", sentAt: daysAgo(2), isSystem: true),
                 Message(id: "m2", threadID: "th_1", senderID: "pro_kiara", text: "Hi Tash, see you tonight. Still milky pink? I've got a new one that's a touch warmer if you want to try it.", sentAt: now.adding(hours: -3)),
                 Message(id: "m3", threadID: "th_1", senderID: clientID, text: "Ooh yes, warmer sounds good. Door's the blue one.", sentAt: now.adding(hours: -2)),
                 Message(id: "m4", threadID: "th_1", senderID: "pro_kiara", text: "Perfect. I'll message when I'm five minutes out.", sentAt: now.adding(minutes: -90))

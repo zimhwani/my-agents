@@ -190,11 +190,6 @@ struct WorkDetailSheet: View {
                 VStack(alignment: .leading, spacing: Space.xl) {
                     WorkTile(item: WorkItem(id: item.id, category: category, caption: caption, seed: item.seed, imageURL: item.imageURL), cornerRadius: Radius.card)
                         .aspectRatio(1, contentMode: .fit)
-                    HStack(spacing: 6) {
-                        Image(systemName: "heart.fill").font(.system(size: 13, weight: .semibold)).foregroundStyle(Palette.lacquer)
-                        Text(item.likes == 1 ? "1 like" : "\(item.likes) likes").font(HDFont.sub).foregroundStyle(Palette.inkSoft)
-                    }
-                    .accessibilityElement(children: .combine)
                     HDTextField(label: "Caption", placeholder: "Chrome on a short almond", text: $caption)
                     VStack(alignment: .leading, spacing: Space.s) {
                         Text("Tag it").font(HDFont.subStrong).foregroundStyle(Palette.ink)

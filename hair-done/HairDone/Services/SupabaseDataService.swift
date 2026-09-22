@@ -19,8 +19,8 @@ final class SupabaseDataService: DataService {
     func signInWithApple() async throws -> Client { try notWired() }
     func currentClient() async -> Client? { nil }
     func currentPro() async -> Pro? { nil }
-    func updateClient(_ client: Client) async throws { try notWired() }
-    func updatePro(_ pro: Pro) async throws { try notWired() }
+    func updateClient(_ client: Client) async throws { throw DataError.network }
+    func updatePro(_ pro: Pro) async throws { throw DataError.network }
     func pros(near coordinate: CLLocationCoordinate2D, category: Category?) async throws -> [Pro] { try notWired() }
     func pro(id: String) async throws -> Pro? { try notWired() }
     func slots(for pro: Pro, on day: Date, minutes: Int) async throws -> [TimeSlot] { try notWired() }

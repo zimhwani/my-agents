@@ -212,9 +212,9 @@ struct ProProfileView: View {
 
     private var replyLabel: String {
         let m = live.responseMinutes
-        if m < 60 { return "Replies in ~\(m) min" }
+        if m < 60 { return "Replies in about \(m) min" }
         let h = max(1, Int((Double(m) / 60).rounded()))
-        return "Replies in ~\(h) hr"
+        return h == 1 ? "Replies in about an hour" : "Replies in about \(h) hours"
     }
 
     private var replyWithin: String {
