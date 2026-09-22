@@ -24,8 +24,14 @@ func serifItalic(_ size: CGFloat) -> NSFont {
 }
 
 func render(bg: NSColor?, ink: NSColor, lacquer: NSColor, to file: String) {
-    let image = NSImage(size: NSSize(width: S, height: S))
-    image.lockFocus()
+    // A fixed 1024 px bitmap, not NSImage.lockFocus, which renders at the screen's scale
+    // (2048 px on a Retina Mac) and then fails "did not have any applicable content".
+    guard let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: Int(S), pixelsHigh: Int(S),
+                                     bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+                                     colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0) else { fatalError("bitmap") }
+    rep.size = NSSize(width: S, height: S)
+    NSGraphicsContext.saveGraphicsState()
+    NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
     if let bg { bg.setFill(); NSRect(x: 0, y: 0, width: S, height: S).fill() }
     let font = serifItalic(S * 0.31)
     let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: ink]
@@ -48,11 +54,10 @@ func render(bg: NSColor?, ink: NSColor, lacquer: NSColor, to file: String) {
         lacquer.setFill(); NSBezierPath(ovalIn: dot).fill()
         top -= lineH
     }
-    image.unlockFocus()
-    guard let tiff = image.tiffRepresentation, let rep = NSBitmapImageRep(data: tiff),
-          let png = rep.representation(using: .png, properties: [:]) else { fatalError("could not encode \(file)") }
+    NSGraphicsContext.restoreGraphicsState()
+    guard let png = rep.representation(using: .png, properties: [:]) else { fatalError("could not encode \(file)") }
     try! png.write(to: out.appendingPathComponent(file))
-    print("wrote \(file)")
+    print("wrote \(file) (\(rep.pixelsWide) px)")
 }
 
 render(bg: rgb(0xF8F3EC), ink: rgb(0x241A16), lacquer: rgb(0xC8323A), to: "icon-1024.png")
