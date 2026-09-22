@@ -175,3 +175,26 @@ def test_sim_broker_fee_is_adverse_on_both_sides():
     sim = SimBroker(equity=10_000, slippage_bps=0.0, fee_bps=25.0)
     assert sim._slip(100.0, buying=True) == pytest.approx(100.25)
     assert sim._slip(100.0, buying=False) == pytest.approx(99.75)
+
+
+def test_sim_stop_fill_can_be_pessimistic():
+    from tradebot.models import Bar
+    from datetime import datetime
+    from tradebot import clock
+    t = clock.at(DAY, clock.parse_hhmm("10:00"))
+    bar = Bar(t, 100.0, 100.5, 96.0, 97.0, 1000)
+    for lam, slip, expect in ((0.0, 0.0, 98.0), (0.5, 0.0, 97.0), (1.0, 0.0, 96.0), (0.0, 100.0, 98.0 * 0.99)):
+        sim = SimBroker(equity=10_000, slippage_bps=0.0, fee_bps=0.0, stop_fill_lambda=lam, stop_slippage_bps=slip)
+        sim.prices["X"] = 100.0
+        sim.place_entry_with_stop("X", LONG, 10, 98.0)
+        filled = sim.process_bar("X", bar)
+        assert len(filled) == 1 and filled[0].avg_fill == pytest.approx(expect), (lam, slip)
+
+
+def test_sub_dollar_stops_are_not_rounded():
+    sim = SimBroker(equity=10_000, slippage_bps=0.0, fee_bps=0.0)
+    sim.prices["DOGE"] = 0.15
+    entry, stop = sim.place_entry_with_stop("DOGE", LONG, 100, 0.1488)
+    assert stop.price == pytest.approx(0.1488)
+    sim.modify_stop(stop, price=0.1491)
+    assert stop.price == pytest.approx(0.1491)

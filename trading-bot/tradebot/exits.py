@@ -34,6 +34,7 @@ class ExitRules:
     swing_left: int = 2               # swing low = lower than N bars before ...
     swing_right: int = 2              # ... and N bars after (confirmation)
     trail_after_breakeven_only: bool = True
+    trail_min_r: float = 0.0          # atr trail distance is at least this many R (0 = off)
     final_target_r: float = 3.0       # close the remainder here (0 = none)
     time_stop_minutes: int = 120      # 0 = none
     time_stop_min_r: float = 0.5
@@ -123,7 +124,7 @@ class ExitManager:
         if rules.trail_mode != "none" and (at_breakeven or not rules.trail_after_breakeven_only):
             level = self._trail_level(trade, atr, bars)
             if level is not None:
-                candidates.append((round(level, 2), "trail"))
+                candidates.append((level, "trail"))
         best = None
         for level, why in candidates:
             if self._better(trade, level) and (best is None or self._better_than(trade, level, best[0])):
@@ -144,8 +145,8 @@ class ExitManager:
         if rules.trail_mode == "atr":
             if atr <= 0:
                 return None
-            return (trade.highest - rules.trail_atr_mult * atr) if trade.is_long \
-                else (trade.lowest + rules.trail_atr_mult * atr)
+            dist = max(rules.trail_atr_mult * atr, rules.trail_min_r * trade.risk_per_share)
+            return (trade.highest - dist) if trade.is_long else (trade.lowest + dist)
         if rules.trail_mode == "swing_low":
             if not bars:
                 return None

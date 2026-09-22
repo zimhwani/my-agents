@@ -49,17 +49,20 @@ def _as_loaded(params_or_loaded, settings: Settings) -> LoadedStrategy:
 class Backtester:
     def __init__(self, settings: Settings, params, intraday: dict[str, list[Bar]],
                  daily: dict[str, list[Bar]] | None = None, equity: float = 100_000.0,
-                 slippage_bps: float = 2.0, fee_bps: float = 0.0):
+                 slippage_bps: float = 2.0, fee_bps: float = 0.0, stop_fill_lambda: float = 0.0,
+                 stop_slippage_bps: float = 0.0):
         self.s = settings
         self.loaded = _as_loaded(params, settings)
         self.strategy = self.loaded.strategy
         self.bar_minutes = getattr(self.strategy, "bar_minutes", 5)
-        self.atr_period = getattr(getattr(self.strategy, "p", None), "atr_period", 14)
+        self.atr_period = getattr(getattr(self.strategy, "r", None), "atr_bars",
+                                  getattr(getattr(self.strategy, "p", None), "atr_period", 14))
         self.intraday = intraday
         # explicit daily history when given (needed for 200-day filters); else aggregate
         self.daily = {sym: (daily or {}).get(sym) or aggregate_daily(b) for sym, b in intraday.items()}
         self.sim = SimBroker(equity=equity, slippage_bps=slippage_bps, fee_bps=fee_bps, intraday=intraday,
-                             daily=self.daily, bar_minutes=self.bar_minutes)
+                             daily=self.daily, bar_minutes=self.bar_minutes, stop_fill_lambda=stop_fill_lambda,
+                             stop_slippage_bps=stop_slippage_bps)
         self.journal = Journal(None)
         self.exec = Executor(self.sim, self.journal, Notifier(quiet=True))
         self.exits = ExitManager(self.loaded.exits, None if self.loaded.continuous else settings.force_close_time)

@@ -291,6 +291,8 @@ class SimBroker:
     equity: float = 100_000.0
     slippage_bps: float = 2.0
     fee_bps: float = 0.0  # per-side commission modelled as an adverse price adjustment (Alpaca crypto ~25)
+    stop_fill_lambda: float = 0.0   # 0 = fill at the stop; 1 = at the bar low (models a polled software stop)
+    stop_slippage_bps: float = 0.0  # extra adverse slip on stop fills (spread + latency)
     prices: dict[str, float] = field(default_factory=dict)
     daily: dict[str, list[Bar]] = field(default_factory=dict)
     intraday: dict[str, list[Bar]] = field(default_factory=dict)
@@ -355,7 +357,7 @@ class SimBroker:
     # -- fills ---------------------------------------------------------------
     def _slip(self, price: float, buying: bool) -> float:
         adj = price * (self.slippage_bps + self.fee_bps) / 10_000.0
-        return round(price + adj if buying else price - adj, 6)
+        return price + adj if buying else price - adj
 
     def _apply_fill(self, symbol: str, signed_qty: int, price: float) -> None:
         pos = self._positions.get(symbol, PositionInfo(symbol, 0, 0.0))
@@ -380,7 +382,7 @@ class SimBroker:
         entry = OrderRef(self._next_id, self._next_id, symbol, "ENTRY", qty, fill, "Filled", fill, qty)
         self._next_id += 1
         self._apply_fill(symbol, qty if buying else -qty, fill)
-        stop_ref = OrderRef(self._next_id, self._next_id, symbol, "STOP", qty, round(stop, 2), "Submitted")
+        stop_ref = OrderRef(self._next_id, self._next_id, symbol, "STOP", qty, stop, "Submitted")
         self._next_id += 1
         self._orders[entry.order_id] = entry
         self._orders[stop_ref.order_id] = stop_ref
@@ -388,7 +390,7 @@ class SimBroker:
         return entry, stop_ref
 
     def place_stop(self, symbol: str, side: str, qty: int, stop: float) -> OrderRef:
-        ref = OrderRef(self._next_id, self._next_id, symbol, "STOP", qty, round(stop, 2), "Submitted")
+        ref = OrderRef(self._next_id, self._next_id, symbol, "STOP", qty, stop, "Submitted")
         self._next_id += 1
         self._orders[ref.order_id] = ref
         return ref
@@ -402,7 +404,7 @@ class SimBroker:
     def modify_stop(self, ref: OrderRef, price: float | None = None, qty: int | None = None) -> OrderRef:
         o = self._orders[ref.order_id]
         if price is not None:
-            o.price = round(price, 2)
+            o.price = price
         if qty is not None:
             o.qty = qty
         return o
@@ -453,6 +455,10 @@ class SimBroker:
             if hit:
                 # gap through the stop fills at the open
                 px = min(o.price, bar.open) if is_long else max(o.price, bar.open)
+                if self.stop_fill_lambda > 0:  # a software stop sees the move late: fill part-way to the extreme
+                    px = px - self.stop_fill_lambda * (px - bar.low) if is_long else px + self.stop_fill_lambda * (bar.high - px)
+                if self.stop_slippage_bps > 0:
+                    px = px * (1 - self.stop_slippage_bps / 10_000.0) if is_long else px * (1 + self.stop_slippage_bps / 10_000.0)
                 px = self._slip(px, not is_long)
                 o.status, o.avg_fill, o.filled = "Filled", px, o.qty
                 self._apply_fill(symbol, -o.qty if is_long else o.qty, px)

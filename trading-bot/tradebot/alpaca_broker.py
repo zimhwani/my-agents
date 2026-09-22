@@ -174,6 +174,10 @@ class AlpacaBroker:
     _stops: dict[str, OrderRef] = field(default_factory=dict)
     _virtual_seq: int = 0
     _connected: bool = False
+    fee_bps: float = 25.0                      # taker fee folded into avg_fill so journal R is cash R
+    fill_timeout: float = 60.0                 # seconds to wait for a market order before tracking it as pending
+    _bids: dict[str, tuple[float, float]] = field(default_factory=dict)  # symbol -> (bid, time.time())
+    bid_fresh_seconds: float = 5.0
 
     def __post_init__(self) -> None:
         self._t = self.transport or _http
@@ -271,7 +275,7 @@ class AlpacaBroker:
         o = self._req("POST", "/v2/orders", body)
         ref = self._ref(o, "ENTRY" if side == "buy" else "CLOSE", symbol)
         ref.qty = qty
-        return self.wait_fill(ref, timeout=60)
+        return self.wait_fill(ref, timeout=self.fill_timeout)
 
     def _sell(self, symbol: str, qty: float) -> OrderRef:
         """Market-sell at most what the account holds. Alpaca deducts crypto fees from the
@@ -292,10 +296,23 @@ class AlpacaBroker:
         except AlpacaError as exc:
             if "insufficient" not in str(exc).lower():
                 raise
-            log.warning("%s: sell of %.6f refused (%s); treating as flat", norm(symbol), qty, exc)
+            held2 = math.floor(self._position_qty(symbol) * 1e6) / 1e6
+            if held2 > 0 and held2 * price >= 1.0 and held2 < qty:
+                log.warning("%s: sell of %.6f refused; retrying with %.6f held", norm(symbol), qty, held2)
+                return self._market(symbol, "sell", held2)
+            log.warning("%s: sell of %.6f refused (%s); position reads %.6f, treating as flat",
+                        norm(symbol), qty, exc, held2)
             return flat
 
+    def _fee_adjusted(self, price: float, side: str) -> float:
+        """Alpaca reports the raw fill price; the fee is taken from the coin (buys) or the cash
+        (sells). Fold it into the price so realized P&L and R are what the account actually saw."""
+        f = self.fee_bps / 10_000.0
+        return price * (1 + f) if side == "buy" else price * (1 - f)
+
     def wait_fill(self, ref: OrderRef, timeout: float = 45) -> OrderRef:
+        if ref.status != "Submitted":  # already resolved (e.g. entry filled and fee-adjusted): don't overwrite
+            return ref
         deadline = _time.time() + timeout
         oid = ref.raw["id"] if isinstance(ref.raw, dict) else None
         while True:
@@ -304,7 +321,8 @@ class AlpacaBroker:
                 st = o.get("status")
                 if st in DONE:
                     ref.status, ref.filled = "Filled", float(o.get("filled_qty") or ref.qty)
-                    ref.avg_fill = float(o.get("filled_avg_price") or 0) or (self.last_price(ref.symbol) or 0)
+                    raw_px = float(o.get("filled_avg_price") or 0) or (self.last_price(ref.symbol) or 0)
+                    ref.avg_fill = self._fee_adjusted(raw_px, str(o.get("side") or ("buy" if ref.kind == "ENTRY" else "sell")))
                     ref.raw = o
                     return ref
                 if st in DEAD:
@@ -314,11 +332,44 @@ class AlpacaBroker:
                 return ref
             _time.sleep(1.0)
 
+    def prefetch_bids(self, symbols: list[str]) -> None:
+        """One request for the latest bid of every held symbol; stops trigger on the bid, which is
+        the price a market sell actually gets."""
+        if not symbols:
+            return
+        try:
+            res = self.data._get("/v1beta3/crypto/us/latest/quotes", {"symbols": ",".join(norm(s) for s in symbols)})
+            now = _time.time()
+            for sym, q in (res.get("quotes") or {}).items():
+                bp = float(q.get("bp") or 0)
+                if bp > 0:
+                    self._bids[norm(sym)] = (bp, now)
+        except Exception as exc:  # fall back to last trade
+            log.debug("prefetch_bids: %s", exc)
+
+    def _trigger_price(self, symbol: str) -> float | None:
+        b = self._bids.get(norm(symbol))
+        if b and _time.time() - b[1] <= self.bid_fresh_seconds:
+            return b[0]
+        return self.last_price(symbol)
+
     def refresh(self, ref: OrderRef) -> OrderRef:
         if ref.order_id < 0:  # software stop
             if ref.status != "Submitted":
                 return ref
-            last = self.last_price(ref.symbol)
+            pending = ref.raw.get("pending") if isinstance(ref.raw, dict) else None
+            if pending:  # a stop sell is already working at Alpaca: poll it, never send another
+                o = self._req("GET", f"/v2/orders/{pending['id']}")
+                st = (o or {}).get("status")
+                if o is not None and st in DONE:
+                    ref.status, ref.filled = "Filled", float(o.get("filled_qty") or ref.qty)
+                    ref.avg_fill = self._fee_adjusted(float(o.get("filled_avg_price") or 0) or (self.last_price(ref.symbol) or 0), "sell")
+                    self._stops.pop(ref.symbol, None)
+                elif o is None or st in DEAD:
+                    log.warning("%s: pending stop sell %s ended %s; re-arming software stop", ref.symbol, pending["id"], st)
+                    ref.raw = None
+                return ref
+            last = self._trigger_price(ref.symbol)
             if last is None or last > ref.price:
                 return ref
             log.warning("%s software stop hit: %s <= %s; selling %s", ref.symbol, px(last), px(ref.price), ref.qty)
@@ -327,8 +378,16 @@ class AlpacaBroker:
             except AlpacaError as exc:
                 log.error("%s stop sell failed: %s", ref.symbol, exc)
                 return ref
-            ref.status, ref.filled, ref.avg_fill = "Filled", fill.filled or ref.qty, fill.avg_fill or last
-            self._stops.pop(ref.symbol, None)
+            if fill.status == "Filled" and fill.filled > 0:
+                ref.status, ref.filled, ref.avg_fill = "Filled", fill.filled, fill.avg_fill or self._fee_adjusted(last, "sell")
+                self._stops.pop(ref.symbol, None)
+            elif fill.order_id == -10**8:  # nothing left at the broker: the position is gone, book it at the trigger
+                log.warning("%s: position already flat at the broker; booking the stop at %s", ref.symbol, px(last))
+                ref.status, ref.filled, ref.avg_fill = "Filled", ref.qty, self._fee_adjusted(last, "sell")
+                self._stops.pop(ref.symbol, None)
+            elif isinstance(fill.raw, dict) and fill.raw.get("id"):  # sent but not yet filled: track it
+                log.warning("%s: stop sell %s still working; will poll", ref.symbol, fill.raw["id"])
+                ref.raw = {"pending": fill.raw}
             return ref
         oid = ref.raw["id"] if isinstance(ref.raw, dict) else None
         o = self._req("GET", f"/v2/orders/{oid}") if oid else None

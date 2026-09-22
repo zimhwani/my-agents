@@ -59,7 +59,8 @@ class TradingLoop:
         self.loaded = loaded
         self.strategy = loaded.strategy
         self.bar_minutes = getattr(self.strategy, "bar_minutes", 5)
-        self.atr_period = getattr(getattr(self.strategy, "p", None), "atr_period", 14)
+        self.atr_period = getattr(getattr(self.strategy, "r", None), "atr_bars",
+                                  getattr(getattr(self.strategy, "p", None), "atr_period", 14))
         self.notify = notifier
         self.journal = journal or Journal(settings.journal_file)
         self.exec = executor or Executor(broker, self.journal, notifier,
@@ -372,6 +373,24 @@ class TradingLoop:
         except Exception as exc:  # pragma: no cover
             log.warning("dashboard: %s", exc)
 
+    def _sleep_checking_stops(self, seconds: float) -> None:
+        """Sleep between ticks in short slices, checking software stops on each slice so a stop
+        is acted on within stop_check_seconds instead of a full poll interval."""
+        step = max(1, int(getattr(self.s, "stop_check_seconds", 0) or 0))
+        if step >= seconds or not self.exec.open_trades:
+            self.b.sleep(seconds)
+            return
+        waited = 0.0
+        while waited < seconds:
+            self.b.sleep(step)
+            waited += step
+            if not self.exec.open_trades:
+                continue
+            try:
+                self.exec.check_stop_fills(clock.now_et())
+            except Exception as exc:  # never let a stop check kill the loop
+                log.error("stop check failed: %s", exc)
+
     # -- real-time driver ----------------------------------------------------------
     def run(self) -> None:
         self.b.connect()
@@ -404,7 +423,7 @@ class TradingLoop:
                     except Exception as exc:
                         log.error("tick failed: %s\n%s", exc, traceback.format_exc())
                         self.notify.send(f"🚨 tick error: {esc(exc)}")
-                    self.b.sleep(self.s.poll_seconds)
+                    self._sleep_checking_stops(self.s.poll_seconds)
                     continue
                 if not clock.is_trading_day(now.date()) or now.time() >= clock.MARKET_CLOSE or self.day_done:
                     if self.day_done or now.time() >= clock.MARKET_CLOSE:

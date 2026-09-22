@@ -489,11 +489,15 @@ def cmd_backtest(args) -> None:
             print("Note: no *_1d.csv daily files found; the 200-day SMA filter needs them. "
                   "Re-run `fetch-data` to download daily history.")
     fee_bps = args.fee_bps if args.fee_bps is not None else (25.0 if loaded.continuous else 0.0)
-    bt = Backtester(s, loaded, bars, daily=daily, equity=args.equity, fee_bps=fee_bps)
+    lam = args.stop_fill_lambda if args.stop_fill_lambda is not None else (0.5 if loaded.continuous else 0.0)
+    sslip = args.stop_slippage_bps if args.stop_slippage_bps is not None else (20.0 if loaded.continuous else 0.0)
+    bt = Backtester(s, loaded, bars, daily=daily, equity=args.equity, fee_bps=fee_bps, stop_fill_lambda=lam,
+                    stop_slippage_bps=sslip)
     res = bt.run()
     st = res.stats
     params = loaded
-    print(f"\n{loaded.name} · {res.days} days · {len(bars)} symbols · fees {fee_bps:.0f} bps/side · {s.describe()}")
+    print(f"\n{loaded.name} · {res.days} days · {len(bars)} symbols · fees {fee_bps:.0f} bps/side · "
+          f"stop fill lambda {lam:.2f} +{sslip:.0f} bps · {s.describe()}")
     print(f"trades {st.trades}  win {st.win_rate*100:.0f}%  total {st.total_r:+.1f}R  "
           f"avg {st.avg_r:+.2f}R  expectancy {st.expectancy_r:+.2f}R  PF {st.profit_factor:.2f}  "
           f"maxDD {st.max_drawdown_r:.1f}R")
@@ -554,7 +558,10 @@ def cmd_sweep(args) -> None:
         n *= len(v)
     print(f"Sweeping {n} combinations over {len(bars)} symbols (base: {strategy_file}, fees {fee_bps:.0f} bps/side)...")
     _logging.getLogger("tradebot").setLevel(_logging.WARNING)  # the sim's per-fill INFO lines would drown the table
+    lam = args.stop_fill_lambda if args.stop_fill_lambda is not None else (0.5 if crypto else 0.0)
+    sslip = args.stop_slippage_bps if args.stop_slippage_bps is not None else (20.0 if crypto else 0.0)
     rows = sweep(s, params, bars, grid, equity=args.equity, daily=daily, fee_bps=fee_bps,
+                 stop_fill_lambda=lam, stop_slippage_bps=sslip,
                  progress=lambda i, n, combo: print(f"  [{i}/{n}] {combo}", flush=True))
     print(format_sweep(rows))
     print("\nCaveat: a small sample rewards luck. Prefer settings that win for a reason you can explain.")
@@ -671,6 +678,10 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--equity", type=float, default=100_000)
     p.add_argument("--fee-bps", type=float, default=None,
                    help="per-side commission in bps (default 25 for crypto, 0 for equities)")
+    p.add_argument("--stop-fill-lambda", type=float, default=None,
+                   help="0 = stops fill at the stop price, 1 = at the bar low (default 0.5 crypto, 0 equities)")
+    p.add_argument("--stop-slippage-bps", type=float, default=None,
+                   help="extra adverse slip on stop fills (default 20 crypto, 0 equities)")
     p.add_argument("--demo", action="store_true")
     p.add_argument("--strategy", help="strategy file (default: STRATEGY_FILE / rules.json)")
     p = sub.add_parser("analyze", help="break a backtest (or live) journal down by exit, time, filters, symbol")
@@ -682,6 +693,8 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--strategy", help="strategy file to sweep (default: STRATEGY_FILE / rules.json)")
     p.add_argument("--grid", help='JSON, e.g. \'{"min_rel_volume":[1.5,2],"opening_range_minutes":[15,30]}\'')
     p.add_argument("--fee-bps", type=float, default=None, help="per-side commission in bps (default 25 for crypto)")
+    p.add_argument("--stop-fill-lambda", type=float, default=None)
+    p.add_argument("--stop-slippage-bps", type=float, default=None)
     p = sub.add_parser("dashboard", help="build the R-multiple dashboard from the trade journal")
     p.add_argument("--journal")
     p.add_argument("--out")

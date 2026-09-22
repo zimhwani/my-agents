@@ -13,8 +13,7 @@
     "DOT/USD",
     "UNI/USD",
     "AAVE/USD",
-    "XRP/USD",
-    "SHIB/USD"
+    "XRP/USD"
   ],
   "bar_minutes": 5,
   "entry": {

@@ -148,7 +148,8 @@ def default_grid(params) -> dict[str, list]:
 
 
 def sweep(settings, params, bars, grid: dict[str, list] | None = None, equity: float = 100_000,
-          daily=None, fee_bps: float = 0.0, progress=None):
+          daily=None, fee_bps: float = 0.0, progress=None, stop_fill_lambda: float = 0.0,
+          stop_slippage_bps: float = 0.0):
     """Backtest every combination in ``grid``; returns rows sorted by expectancy.
     ``params`` is a StrategyParams (ORB), a TJLRules (Trend Join Long) or CryptoRules."""
     from .backtest import Backtester
@@ -172,7 +173,8 @@ def sweep(settings, params, bars, grid: dict[str, list] | None = None, equity: f
             p = loaded
         if progress:
             progress(i, len(combos), dict(zip(keys, combo)))
-        res = Backtester(settings, p, bars, daily=daily, equity=equity, fee_bps=fee_bps).run()
+        res = Backtester(settings, p, bars, daily=daily, equity=equity, fee_bps=fee_bps,
+                         stop_fill_lambda=stop_fill_lambda, stop_slippage_bps=stop_slippage_bps).run()
         st = res.stats
         rows.append({**dict(zip(keys, combo)), "trades": st.trades, "win_rate": st.win_rate,
                      "total_r": st.total_r, "expectancy": st.expectancy_r,

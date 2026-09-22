@@ -91,7 +91,7 @@ class CryptoRules:
             mode = "none"
         return ExitRules(partial_r=self.partial_r, partial_fraction=self.partial_fraction,
                          breakeven_r=self.breakeven_r, trail_mode=mode, trail_atr_mult=mult,
-                         trail_after_breakeven_only=True, final_target_r=0.0,
+                         trail_after_breakeven_only=True, trail_min_r=1.0, final_target_r=0.0,
                          time_stop_minutes=self.time_stop_minutes, time_stop_min_r=self.time_stop_min_r,
                          fractional=True)
 
@@ -163,7 +163,7 @@ class CryptoMomentum:
         if risk <= 0 or risk / entry * 100.0 > r.max_initial_risk_pct:
             return None, "stop_too_wide"
         reason = f"breakout > {hh:.4g} ({r.breakout_bars} bars), EMA{r.trend_ema_bars} {trend:.4g}, relvol {rel:.2f}, ATR {a:.4g}"
-        return Signal(symbol=symbol, side=LONG, entry=entry, stop=round(stop, 6), target=round(entry + 3 * risk, 6),
+        return Signal(symbol=symbol, side=LONG, entry=entry, stop=stop, target=entry + 3 * risk,
                       atr=a, time=now, reason=reason), "signal"
 
 
@@ -196,7 +196,7 @@ class CryptoMomentum:
         if risk <= 0 or risk / entry * 100.0 > r.max_initial_risk_pct:
             return None, "stop_too_wide"
         reason = f"pullback RSI{r.rsi_bars} {rsi_prev:.0f} < {r.rsi_buy:.0f}, EMA{r.trend_ema_bars} {trend:.4g}, ATR {a:.4g}"
-        return Signal(symbol=symbol, side=LONG, entry=entry, stop=round(stop, 6), target=round(entry + 3 * risk, 6),
+        return Signal(symbol=symbol, side=LONG, entry=entry, stop=stop, target=entry + 3 * risk,
                       atr=a, time=now, reason=reason), "signal"
 
 

@@ -105,8 +105,15 @@ class FakeAlpacaTrading:
         self.orders = {}
         self.positions = {}
         self.price = 100.0
+        self.bid = None      # latest/quotes bid (defaults to price)
         self.n = 0
         self.fee = 0.0  # fraction of a buy deducted from the coin, like Alpaca's crypto fee
+        self.slow = False    # sells stay "accepted" until release()
+
+    def release(self):
+        for o in self.orders.values():
+            if o["status"] == "accepted":
+                o["status"] = "filled"
 
     def __call__(self, method, url, headers, body):
         assert headers["APCA-API-KEY-ID"] == "K"
@@ -127,7 +134,8 @@ class FakeAlpacaTrading:
                 return 403, json.dumps({"code": 40310000, "message": "insufficient qty available for order"}).encode()
             credited = qty * (1 - self.fee) if data["side"] == "buy" else -qty
             self.positions[sym] = self.positions.get(sym, 0.0) + credited
-            self.orders[oid] = {"id": oid, "symbol": sym, "qty": str(qty), "side": data["side"], "status": "filled",
+            status = "accepted" if (self.slow and data["side"] == "sell") else "filled"
+            self.orders[oid] = {"id": oid, "symbol": sym, "qty": str(qty), "side": data["side"], "status": status,
                                 "filled_qty": str(qty), "filled_avg_price": str(self.price)}
             return 200, json.dumps({**self.orders[oid], "status": "accepted", "filled_qty": "0"}).encode()
         if u.path.startswith("/v2/orders/") and method == "GET":
@@ -135,6 +143,9 @@ class FakeAlpacaTrading:
             return (200, json.dumps(o).encode()) if o else (404, b"")
         if u.path == "/v2/orders" and method == "DELETE":
             return 207, b"[]"
+        if "/v1beta3/crypto/us/latest/quotes" in u.path:
+            bid = self.bid if self.bid is not None else self.price
+            return 200, json.dumps({"quotes": {"BTC/USD": {"bp": bid, "ap": bid * 1.0005}}}).encode()
         if "/v1beta3/crypto/us/latest/trades" in u.path:
             return 200, json.dumps({"trades": {"BTC/USD": {"p": self.price}}}).encode()
         if "/v1beta3/crypto/us/bars" in u.path:
@@ -153,18 +164,21 @@ def test_alpaca_broker_entry_partial_and_software_stop(settings, monkeypatch):
     b.connect()
     assert b.account_id == "acct1" and b.net_liquidation() == pytest.approx(10_000)
     entry, stop = b.place_entry_with_stop("BTC/USD", LONG, 0.05, 95.0)
-    assert entry.status == "Filled" and entry.filled == 0.05 and entry.avg_fill == 100.0
+    # avg_fill folds the 25 bps taker fee in, so journal R is cash R
+    assert entry.status == "Filled" and entry.filled == 0.05 and entry.avg_fill == pytest.approx(100.25)
+    assert b.wait_fill(entry).avg_fill == pytest.approx(100.25)  # a second wait does not overwrite
     assert stop.order_id < 0 and stop.qty == 0.05 and stop.price == 95.0
     assert b.positions()[0].symbol == "BTC/USD" and b.positions()[0].qty == pytest.approx(0.05)
     b.modify_stop(stop, price=100.0)
     fake.price = 103.0
     data._cache.clear()
     ref = b.market_close("BTC/USD", LONG, 0.02)  # partial
-    assert ref.status == "Filled" and ref.avg_fill == 103.0 and stop.qty == pytest.approx(0.03)
+    assert ref.status == "Filled" and ref.avg_fill == pytest.approx(103.0 * 0.9975) and stop.qty == pytest.approx(0.03)
     fake.price = 99.5
     data._cache.clear()
     ref = b.refresh(stop)  # software stop fires
     assert ref.status == "Filled" and ref.filled == pytest.approx(0.03) and b._stops == {}
+    assert ref.avg_fill == pytest.approx(99.5 * 0.9975)
     assert b.positions() == []
     bars = data.intraday_bars("BTC/USD", 15, 2)
     assert len(bars) == 2 and bars[1].close == 1.8 and bars[0].time.tzinfo is not None
@@ -274,3 +288,39 @@ def test_crypto_sweep_smoke(settings):
     settings.max_risk_per_trade_usd = 1e9
     rows = sweep(settings, rules, bars, {"breakout_bars": [12, 20], "trail": ["atr_3.0"]}, equity=10_000, fee_bps=25.0)
     assert len(rows) == 2 and {"trades", "total_r", "profit_factor"} <= set(rows[0])
+
+
+def test_software_stop_tracks_a_working_sell_instead_of_booking_a_phantom_fill(settings, monkeypatch):
+    monkeypatch.setattr("tradebot.alpaca_broker._time.sleep", lambda s: None)
+    settings.broker, settings.alpaca_api_key, settings.alpaca_api_secret = "alpaca", "K", "S"
+    fake = FakeAlpacaTrading()
+    fake.slow = True  # sells stay "accepted" until released
+    data = AlpacaCryptoData("K", "S", transport=fake, sleep=lambda s: None)
+    b = AlpacaBroker(settings, data, transport=fake)
+    b.fill_timeout = 0.0  # give up waiting immediately so the pending path is exercised
+    b.connect()
+    entry, stop = b.place_entry_with_stop("BTC/USD", LONG, 0.05, 95.0)
+    fake.price = 90.0
+    data._cache.clear()
+    ref = b.refresh(stop)
+    assert ref.status == "Submitted" and isinstance(ref.raw, dict) and "pending" in ref.raw
+    n_orders = fake.n
+    ref = b.refresh(stop)  # still working: polled, not re-sent
+    assert ref.status == "Submitted" and fake.n == n_orders
+    fake.release()
+    ref = b.refresh(stop)
+    assert ref.status == "Filled" and ref.filled == pytest.approx(0.05) and b._stops == {}
+
+
+def test_stops_trigger_on_prefetched_bid(settings, monkeypatch):
+    monkeypatch.setattr("tradebot.alpaca_broker._time.sleep", lambda s: None)
+    settings.broker, settings.alpaca_api_key, settings.alpaca_api_secret = "alpaca", "K", "S"
+    fake = FakeAlpacaTrading()
+    data = AlpacaCryptoData("K", "S", transport=fake, sleep=lambda s: None)
+    b = AlpacaBroker(settings, data, transport=fake)
+    b.connect()
+    entry, stop = b.place_entry_with_stop("BTC/USD", LONG, 0.05, 95.0)
+    fake.bid = 94.0  # bid through the stop while the last trade (100) is still above it
+    b.prefetch_bids(["BTC/USD"])
+    ref = b.refresh(stop)
+    assert ref.status == "Filled" and b.positions() == []

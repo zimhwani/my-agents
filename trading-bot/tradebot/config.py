@@ -121,6 +121,7 @@ class Settings:
     max_watchlist: int = 8
     # loop
     poll_seconds: int = 30
+    stop_check_seconds: int = 5  # 24/7 markets: software stops are checked this often between ticks
     force_close_time: time = time(15, 50)
     dry_run: bool = False
     # telegram
@@ -248,6 +249,7 @@ class Settings:
             min_atr_pct=_float("MIN_ATR_PCT", 1.0),
             max_watchlist=_int("MAX_WATCHLIST", 8),
             poll_seconds=_int("POLL_SECONDS", 30),
+            stop_check_seconds=_int("STOP_CHECK_SECONDS", 5),
             force_close_time=parse_hhmm(_env("FORCE_CLOSE_TIME", "15:50")),
             dry_run=_bool("DRY_RUN", False),
             telegram_bot_token=_env("TELEGRAM_BOT_TOKEN"),

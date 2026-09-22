@@ -158,6 +158,9 @@ class Executor:
 
     def check_stop_fills(self, now: datetime | None = None) -> None:
         now = now or now_et()
+        prefetch = getattr(self.b, "prefetch_bids", None)
+        if prefetch is not None and self.open_trades:
+            prefetch(sorted({t.symbol for t in self.open_trades}))
         for t in list(self.open_trades):
             ref = self._stops.get(t.id)
             if ref is None:
