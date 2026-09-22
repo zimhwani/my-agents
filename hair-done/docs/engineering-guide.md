@@ -6,8 +6,9 @@ How the SwiftUI app is put together, and the rules for adding to it.
 
 ```
 hair-done/
-├── HairDone.xcodeproj        Xcode 16 project (synchronised folder: every file under HairDone/ is in the target)
-├── project.yml               XcodeGen fallback (not needed if the .xcodeproj opens)
+├── project.yml               Source of truth for the project: `xcodegen generate` (the .xcodeproj is gitignored)
+├── HairDone.xcconfig.example Team ID and App Store Connect key ids; copy to HairDone.xcconfig (gitignored)
+├── tools/                    release.sh (TestFlight), testflight-ship.py, asc-status.py, set_team.sh
 ├── HairDone/
 │   ├── App/                  HairDoneApp (entry), AppState (the shared model), RootView (shells + tabs), Routes
 │   ├── DesignSystem/         Palette, HDFont, Space/Radius/Motion, Haptics, Formatting, Components/

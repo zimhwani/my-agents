@@ -4,20 +4,58 @@ An iOS app for women in Melbourne who want their hair, nails, makeup, lashes or 
 
 ```
 hair-done/
-├── HairDone.xcodeproj    Open this in Xcode 16 and press Run
+├── project.yml           xcodegen generate → HairDone.xcodeproj (gitignored)
 ├── HairDone/             SwiftUI source (iOS 17+, no packages)
 ├── supabase/             Postgres schema, row-level security, Stripe edge functions
 ├── docs/                 Brief, brand, copy deck, product spec, UX flows, engineering guide
-└── project.yml           XcodeGen fallback, only if the .xcodeproj won't open
+├── tools/                release.sh, testflight-ship.py, asc-status.py, set_team.sh
+└── store/                TestFlight test information
 ```
 
 ## Run it
 
-1. Open `HairDone.xcodeproj` in Xcode 16 or newer.
-2. Pick an iPhone simulator (iPhone 15 or 16) and press Run.
-3. On a real phone: select your team under Signing & Capabilities once, then Run.
+```bash
+brew install xcodegen        # once; the golf-caddy repo uses the same tool
+cd hair-done
+xcodegen generate            # after adding any source file
+open HairDone.xcodeproj
+```
 
-No accounts, keys or network needed. The app runs on seeded mock data so every screen works on first launch.
+Pick an iPhone simulator and press Run. No accounts, keys or network needed:
+the app runs on seeded mock data so every screen works on first launch. The
+`.xcodeproj` is generated from `project.yml` and gitignored, same as Caddy.
+
+On a real phone: `tools/set_team.sh` writes your Team ID into
+`HairDone.xcconfig`, then Run.
+
+## Ship to TestFlight
+
+Same pipeline as the Caddy app. One-time setup:
+
+1. **App record.** App Store Connect → My Apps → + → New App. Platform iOS,
+   name `Hair Done`, bundle ID `com.keithchinyanda.hairdone` (register it under
+   Certificates, Identifiers & Profiles first if it isn't offered), SKU
+   `hairdone`. Apple has no API for this step.
+2. **Signing config.** Copy the three values across from the Caddy repo; it's
+   the same account and the same API key:
+   ```bash
+   sed 's/^CADDY_/HAIRDONE_/' ../../golf-caddy/Caddy.xcconfig > HairDone.xcconfig
+   ```
+   The `AuthKey_<id>.p8` is already in `~/.appstoreconnect/private_keys` if
+   Caddy has ever shipped from this Mac.
+3. **Testers.** App Store Connect → TestFlight → Internal Testing → + →
+   name the group, tick the people. Internal testers need no review.
+
+Then, every time:
+
+```bash
+tools/release.sh                  # archive, validate, upload (build number = commit count)
+tools/testflight-ship.py 14 --internal   # wait for processing, add build 14 to the internal group
+tools/asc-status.py               # what's where
+```
+
+`tools/release.sh --validate` stops before the upload. Paste
+`store/testflight-beta-description.md` into Test Information the first time.
 
 ## What to try
 

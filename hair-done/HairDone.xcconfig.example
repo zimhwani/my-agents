@@ -1,0 +1,17 @@
+// Copy to HairDone.xcconfig and fill in. It's gitignored.
+//
+// Same three values as Caddy.xcconfig in the golf-caddy repo: the Team ID is
+// the same account, and one App Store Connect API key covers every app on it.
+// So: copy the three lines across and rename the prefix.
+//
+// Team ID: developer.apple.com → Account → Membership, or tools/set_team.sh
+// reads it off the signing certificate. Leave empty to build for the
+// simulator, which needs no account at all.
+HAIRDONE_TEAM_ID =
+
+// Only needed to upload to TestFlight (tools/release.sh). From App Store
+// Connect > Users and Access > Integrations > App Store Connect API. The
+// matching AuthKey_<KEY_ID>.p8 lives in ~/.appstoreconnect/private_keys and
+// is already there if Caddy has shipped from this Mac.
+HAIRDONE_ASC_KEY_ID =
+HAIRDONE_ASC_ISSUER_ID =
