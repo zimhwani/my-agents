@@ -14,6 +14,15 @@ UA = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit
 def get(url):
     return urllib.request.urlopen(urllib.request.Request(url, headers=UA), timeout=60).read()
 page = get(URL).decode("utf-8", "ignore")
+# Keep only the article body: from the entry content to the first related/comments/footer block.
+m = re.search(r'class="[^"]*(?:entry-content|post-content|td-post-content|article-content)[^"]*"', page)
+if m:
+    body = page[m.start():]
+    end = re.search(r'(?:class="[^"]*(?:related|comments|yarpp|jp-relatedposts|td-post-next-prev|post-navigation|sidebar|footer)[^"]*"|<footer|</article>)', body[200:])
+    page = body[: 200 + end.start()] if end else body
+    print("restricted to article body:", len(page), "chars")
+else:
+    print("WARNING: could not find the article body, scanning whole page (may include unrelated images)")
 cands = set()
 for m in re.finditer(r'(?:src|data-src|data-lazy-src|href)=["\']([^"\']+?\.(?:jpe?g|png|webp))(?:\?[^"\']*)?["\']', page, re.I):
     u = html.unescape(m.group(1))
