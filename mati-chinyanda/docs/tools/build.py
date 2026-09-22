@@ -129,8 +129,10 @@ def build(out_dir=None, relative=False):
         out = head(p) + header(p) + body + footer(p)
         name = "index.html" if p["path"] == "/" else p["path"].strip("/") + ".html"
         if p.get("file"): name = p["file"]
-        open(os.path.join(ROOT, name), "w", encoding="utf-8").write(out)
-        print("wrote", name)
+        if relative: out = relativise(out)
+        open(os.path.join(out_dir, name), "w", encoding="utf-8").write(out)
+        print("wrote", os.path.join(out_dir, name))
+    if relative: return
     # sitemap
     urls = [SITE + "/"] + [SITE + h for _, h, _ in NAV] + [SITE + "/book"]
     open(os.path.join(ROOT, "sitemap.xml"), "w").write('<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n' + "".join(f"  <url><loc>{u}</loc></url>\n" for u in urls) + "</urlset>\n")
