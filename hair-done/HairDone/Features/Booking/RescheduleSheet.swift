@@ -111,9 +111,11 @@ struct RescheduleSheet: View {
 
 #Preview("Reschedule") {
     let app = previewApp()
-    if let booking = app.upcomingBookings.first {
-        Color.clear
-            .sheet(isPresented: .constant(true)) { RescheduleSheet(booking: booking) }
-            .environment(app)
+    return Group {
+        if let booking = app.upcomingBookings.first {
+            Color.clear
+                .sheet(isPresented: .constant(true)) { RescheduleSheet(booking: booking) }
+        }
     }
+    .environment(app)
 }

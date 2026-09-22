@@ -342,9 +342,11 @@ struct BookingSummaryCard: View {
 
 #Preview("Booked") {
     let app = previewApp()
-    if let booking = app.upcomingBookings.first, let pro = app.pro(booking.proID) {
-        BookedStep(booking: booking, pro: pro, onMessage: {}, onDone: {})
-            .paperBackground()
-            .environment(app)
+    return Group {
+        if let booking = app.upcomingBookings.first, let pro = app.pro(booking.proID) {
+            BookedStep(booking: booking, pro: pro, onMessage: {}, onDone: {})
+                .paperBackground()
+        }
     }
+    .environment(app)
 }
