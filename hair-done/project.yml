@@ -9,6 +9,8 @@ options:
   xcodeVersion: "16.0"
   createIntermediateGroups: true
   groupSortPosition: top
+  # A fresh clone has no HairDone.xcconfig yet; the simulator doesn't need it.
+  disabledValidations: [missingConfigFiles]
 
 configFiles:
   Debug: HairDone.xcconfig
