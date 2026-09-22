@@ -1,0 +1,324 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Trading Terminal</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%23ff2fd2'/%3E%3Cpath d='M3 11l3-4 3 2 4-6' stroke='%23120a18' stroke-width='2' fill='none'/%3E%3C/svg%3E">
+<style>
+:root{
+  color-scheme:dark;
+  --bg:#050307; --panel:#0b070f; --panel-2:#120a18; --line:#2a1233; --line-2:#3d1a4d;
+  --text:#f1e9f6; --text-2:#b79bc7; --text-3:#6f5680;
+  --neon:#ff2fd2; --neon-2:#ff7ae6; --up:#22f5a3; --down:#ff3b7a; --amber:#ffc447;
+  --glow:0 0 12px rgba(255,47,210,.45), 0 0 2px rgba(255,47,210,.9);
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--text);font:12px/1.4 ui-monospace,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;letter-spacing:.02em}
+body::after{content:"";position:fixed;inset:0;pointer-events:none;background:repeating-linear-gradient(0deg,rgba(255,255,255,.018) 0 1px,transparent 1px 3px);mix-blend-mode:overlay}
+main{max-width:1440px;margin:0 auto;padding:12px 16px 32px;display:grid;grid-template-columns:repeat(12,1fr);gap:10px}
+.top{grid-column:1/-1;display:flex;flex-wrap:wrap;align-items:center;gap:18px;padding:8px 14px;border:1px solid var(--line);background:linear-gradient(90deg,#160b1d,#0b070f 60%);border-radius:4px}
+.top .name{font-weight:700;color:#fff;font-size:13px}
+.top .name b{color:var(--neon);text-shadow:var(--glow)}
+.top .kv{display:flex;flex-direction:column;line-height:1.15}
+.top .kv .k{font-size:9px;color:var(--text-3);text-transform:uppercase;letter-spacing:.14em}
+.top .kv .v{font-size:13px;color:#fff;font-variant-numeric:tabular-nums}
+.top .clock{font-size:16px;color:#fff;font-variant-numeric:tabular-nums}
+.badge{display:inline-block;padding:1px 6px;border-radius:2px;font-size:9px;letter-spacing:.14em;text-transform:uppercase;font-weight:700;vertical-align:1px}
+.badge.live{background:var(--neon);color:#120a18;box-shadow:var(--glow)}
+.badge.off{background:#2b1a33;color:var(--text-2)}
+.badge.sim{background:#1d1330;color:var(--neon-2);border:1px solid var(--line-2)}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:10px 12px;position:relative;min-width:0}
+.panel.hot{border-color:var(--neon);box-shadow:inset 0 0 0 1px rgba(255,47,210,.25), 0 0 18px rgba(255,47,210,.12)}
+.panel h2{margin:0 0 8px;font-size:9px;letter-spacing:.16em;text-transform:uppercase;color:var(--text-3);font-weight:600;display:flex;gap:8px;align-items:center}
+.panel h2 span{color:var(--text-2)}
+.c3{grid-column:span 3}.c4{grid-column:span 4}.c5{grid-column:span 5}.c6{grid-column:span 6}.c12{grid-column:1/-1}
+@media (max-width:900px){.c3,.c4,.c5,.c6{grid-column:1/-1}}
+.big{font-size:34px;font-weight:700;color:#fff;letter-spacing:-.02em;font-variant-numeric:tabular-nums;text-shadow:0 0 18px rgba(255,255,255,.15)}
+.big.neon{color:var(--neon-2);text-shadow:var(--glow)}
+.sub{color:var(--text-2);font-size:11px;margin-top:2px}
+.row{display:flex;gap:14px;flex-wrap:wrap;margin-top:10px}
+.row .kv .k{font-size:9px;color:var(--text-3);text-transform:uppercase;letter-spacing:.12em}
+.row .kv .v{font-size:14px;color:#fff;font-variant-numeric:tabular-nums}
+.up{color:var(--up)} .down{color:var(--down)} .neon{color:var(--neon-2)}
+svg{width:100%;height:auto;display:block;overflow:visible}
+.grid line{stroke:#1c0f24;stroke-width:1}
+.axis text{fill:var(--text-3);font-size:9px;font-family:inherit}
+.candle.up{stroke:var(--up);fill:var(--up)} .candle.down{stroke:var(--down);fill:var(--down)}
+.wick{stroke-width:1}
+.tag rect{fill:var(--neon)} .tag text{fill:#120a18;font-weight:700;font-size:10px;font-family:inherit}
+.eq{fill:none;stroke:var(--up);stroke-width:2;filter:drop-shadow(0 0 6px rgba(34,245,163,.6))}
+.eqfill{fill:url(#eqg)}
+.rbar.up{fill:var(--up)} .rbar.down{fill:var(--down)} .rbar{opacity:.9}
+.hit{fill:transparent}
+.cross{stroke:var(--text-3);stroke-dasharray:3 3}
+table{width:100%;border-collapse:collapse;font-size:11px;font-variant-numeric:tabular-nums}
+th,td{padding:4px 6px;text-align:right;white-space:nowrap;border-bottom:1px solid #170c1e}
+th{color:var(--text-3);font-weight:600;font-size:9px;letter-spacing:.12em;text-transform:uppercase}
+th.l,td.l{text-align:left}
+.tbl{overflow:auto;max-height:230px}
+.tape{height:118px;position:relative;overflow:hidden;background:radial-gradient(ellipse at 50% 120%,#1a0b24 0%,#0b070f 60%);padding:0}
+.tape svg{position:absolute;inset:0;width:100%;height:100%}
+.pill{position:absolute;transform:translate(-50%,-50%);padding:3px 9px;border-radius:14px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);color:#fff;font-weight:700;font-size:12px;backdrop-filter:blur(2px);white-space:nowrap;text-shadow:0 0 10px rgba(255,255,255,.35)}
+.pill.up::before{content:"▲ ";color:var(--up)} .pill.down::before{content:"▼ ";color:var(--down)}
+.pill.big{font-size:15px}
+.log{font-size:11px;line-height:1.5;max-height:200px;overflow:auto;color:var(--text-2)}
+.log div{white-space:pre-wrap}
+.log .t{color:var(--text-3)} .log .W{color:var(--amber)} .log .E{color:var(--down)}
+.log .hi{color:#fff}
+.filters{display:flex;gap:10px;align-items:center;margin-left:auto}
+select{background:#160b1d;color:var(--text);border:1px solid var(--line-2);border-radius:3px;padding:3px 6px;font:inherit;font-size:11px}
+.empty{color:var(--text-3);padding:16px;text-align:center}
+.tip{position:fixed;pointer-events:none;background:#160b1d;color:#fff;border:1px solid var(--line-2);border-radius:4px;padding:6px 8px;font-size:11px;display:none;z-index:10;max-width:280px;box-shadow:0 8px 24px rgba(0,0,0,.6)}
+.streak{display:flex;align-items:baseline;gap:8px}
+.streak .x{font-size:30px;font-weight:700;color:#fff}
+.streak .n{font-size:36px;font-weight:800;color:var(--neon);text-shadow:var(--glow)}
+.mini{margin-top:6px}
+.mini h3{margin:8px 0 2px;font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:var(--text-3);font-weight:600}
+.wl td.sym{color:#fff;font-weight:700}
+</style>
+</head>
+<body>
+<main>
+  <div class="top">
+    <div class="name">TRADEBOT · <b id="hStrat">Trend Join Long</b> <span id="hBadge" class="badge off">offline</span></div>
+    <div class="kv"><span class="k">Equity</span><span class="v" id="hEquity">—</span></div>
+    <div class="kv"><span class="k">Today</span><span class="v" id="hToday">—</span></div>
+    <div class="kv"><span class="k">Trades</span><span class="v" id="hTrades">—</span></div>
+    <div class="kv"><span class="k">Win</span><span class="v" id="hWin">—</span></div>
+    <div class="kv"><span class="k">Total</span><span class="v" id="hTotal">—</span></div>
+    <div class="filters">
+      <select id="fSym"><option value="">ALL SYMBOLS</option></select>
+      <select id="fN"><option value="0">ALL</option><option value="20">LAST 20</option><option value="50">LAST 50</option><option value="100">LAST 100</option></select>
+      <div class="clock" id="clock">--:--:--</div>
+    </div>
+  </div>
+
+  <section class="panel hot c3">
+    <h2>Account <span id="accMode"></span></h2>
+    <div class="big neon" id="accEquity">—</div>
+    <div class="sub" id="accSub">practice · waiting for the bot</div>
+    <div class="row">
+      <div class="kv"><div class="k">Trades</div><div class="v" id="accTrades">0</div></div>
+      <div class="kv"><div class="k">Win rate</div><div class="v" id="accWin">0%</div></div>
+      <div class="kv"><div class="k">Expectancy</div><div class="v" id="accExp">0.00R</div></div>
+      <div class="kv"><div class="k">PF</div><div class="v" id="accPF">0.00</div></div>
+    </div>
+    <div class="row">
+      <div class="kv"><div class="k">Open</div><div class="v" id="accOpen">0</div></div>
+      <div class="kv"><div class="k">Open R</div><div class="v" id="accOpenR">0.00R</div></div>
+      <div class="kv"><div class="k">Max DD</div><div class="v" id="accDD">0.0R</div></div>
+    </div>
+  </section>
+
+  <section class="panel c6">
+    <h2><span id="chSym">Chart</span> · 5M <span id="chLast"></span> <span id="chChg"></span></h2>
+    <div id="candles"><div class="empty">Candles appear while the bot is running (live.json).</div></div>
+  </section>
+
+  <section class="panel c3">
+    <h2>Watchlist · <span id="wlCount">0</span></h2>
+    <div class="tbl wl"><table id="wl"></table></div>
+    <div class="mini">
+      <h3>Streak</h3>
+      <div class="streak"><span class="x">×</span><span class="n" id="streakN">0</span><span class="sub" id="streakSub"></span></div>
+    </div>
+  </section>
+
+  <section class="panel c12 tape" id="tape"></section>
+
+  <section class="panel c4">
+    <h2>Cumulative R <span id="eqTotal"></span></h2>
+    <div id="curve"></div>
+  </section>
+
+  <section class="panel c5">
+    <h2>Positions &amp; recent trades</h2>
+    <div class="tbl"><table id="trades"></table></div>
+  </section>
+
+  <section class="panel c3">
+    <h2>Analytics</h2>
+    <div class="mini"><h3>R per trade</h3><div id="rbars"></div></div>
+    <div class="mini"><h3>R by entry hour (ET)</h3><div id="hourbars"></div></div>
+    <div class="mini"><h3>Result distribution</h3><div id="dist"></div></div>
+  </section>
+
+  <section class="panel c12">
+    <h2>Execution log · live <span id="logMeta"></span></h2>
+    <div class="log" id="log"></div>
+  </section>
+</main>
+<div class="tip" id="tip"></div>
+<script>
+let DATA = {"rows": [], "stats": {"trades": 0, "wins": 0, "losses": 0, "scratches": 0, "win_rate": 0.0, "total_r": 0.0, "avg_r": 0.0, "avg_win_r": 0.0, "avg_loss_r": 0.0, "expectancy_r": 0.0, "profit_factor": 0.0, "max_drawdown_r": 0.0, "best_r": 0.0, "worst_r": 0.0, "total_pnl": 0.0}} || {rows: [], stats: {}};
+const DATA_BASE = (window.DATA_BASE || '').replace(/\/$/, '');   // set by config.js on the hosted version
+const $ = s => document.querySelector(s);
+const tip = $('#tip');
+const fmtR = r => (r>0?'+':'') + (+r).toFixed(2) + 'R';
+const fmt$ = v => (v<0?'-$':'$') + Math.abs(v).toLocaleString(undefined,{maximumFractionDigits:0});
+const cls = v => v>0?'up':(v<0?'down':'');
+let LIVE = null;
+
+// ---------- filters ----------
+function fillSymbols(){
+  const sel=$('#fSym'); const keep=sel.value; sel.innerHTML='<option value="">ALL SYMBOLS</option>';
+  for (const s of [...new Set(DATA.rows.map(r=>r.symbol))].sort()){ const o=document.createElement('option'); o.textContent=s; o.value=s; sel.append(o); }
+  sel.value=keep;
+}
+fillSymbols();
+$('#fSym').addEventListener('change', render); $('#fN').addEventListener('change', render);
+function filtered(){
+  let rows = DATA.rows; const s=$('#fSym').value, n=+$('#fN').value;
+  if (s) rows = rows.filter(r=>r.symbol===s);
+  if (n) rows = rows.slice(-n);
+  return rows;
+}
+function stats(rows){
+  const rs = rows.map(r=>r.r), wins = rs.filter(r=>r>0.1), losses = rs.filter(r=>r<-0.1), dec=wins.length+losses.length;
+  const wr = dec? wins.length/dec : 0, avgW = wins.length? wins.reduce((a,b)=>a+b,0)/wins.length:0, avgL = losses.length? losses.reduce((a,b)=>a+b,0)/losses.length:0;
+  const gw = rs.filter(r=>r>0).reduce((a,b)=>a+b,0), gl = -rs.filter(r=>r<0).reduce((a,b)=>a+b,0);
+  let cum=0,peak=0,dd=0; for (const r of rs){cum+=r;peak=Math.max(peak,cum);dd=Math.min(dd,cum-peak);}
+  let streak=0; for (let i=rs.length-1;i>=0;i--){ if (rs[i]>0) streak++; else break; }
+  return {n:rs.length, wr, total:rs.reduce((a,b)=>a+b,0), exp: dec? wr*avgW+(1-wr)*avgL:0, pf: gl>0? gw/gl:(gw>0?Infinity:0), dd, pnl: rows.reduce((a,r)=>a+r.pnl,0), streak, avgW, avgL};
+}
+function showTip(e,html){ tip.innerHTML=html; tip.style.display='block'; moveTip(e); }
+function moveTip(e){ tip.style.left=Math.min(e.clientX+12, innerWidth-tip.offsetWidth-8)+'px'; tip.style.top=Math.min(e.clientY+12, innerHeight-tip.offsetHeight-8)+'px'; }
+function hideTip(){ tip.style.display='none'; }
+function niceTicks(lo,hi,n){ const span=hi-lo||1, raw=span/n, mag=Math.pow(10,Math.floor(Math.log10(raw))), norm=raw/mag; const step=(norm<1.5?1:norm<3?2:norm<7?5:10)*mag; const out=[]; for (let v=Math.ceil(lo/step)*step; v<=hi+1e-9; v+=step) out.push(+v.toFixed(6)); return out; }
+
+// ---------- header + account ----------
+function header(st, rows){
+  const L = LIVE;
+  $('#hEquity').textContent = L? fmt$(L.equity) : '—';
+  $('#hToday').innerHTML = L? `<span class="${cls(L.realized_r)}">${fmtR(L.realized_r)}</span>` : '—';
+  $('#hTrades').textContent = st.n; $('#hWin').textContent = (st.wr*100).toFixed(0)+'%';
+  $('#hTotal').innerHTML = `<span class="${cls(st.total)}">${fmtR(st.total)}</span>`;
+  const b=$('#hBadge'); if (L){ const stale=(Date.now()-new Date(L.updated))/60000>3; b.className='badge '+(stale?'off':'live'); b.textContent= stale?'stale':(L.day_done?'closed':'live'); } else { b.className='badge sim'; b.textContent='journal'; }
+  $('#accEquity').textContent = L? fmt$(L.equity) : fmt$(st.pnl);
+  $('#accMode').textContent = L? (L.mode.split(' ')[0]) : 'journal';
+  $('#accSub').innerHTML = L? `${(L.equity-L.day_start_equity)>=0?'<span class="up">▲</span>':'<span class="down">▼</span>'} ${fmt$(L.equity-L.day_start_equity)} today · ${L.closed_today} closed · ${L.open.length} open` : `${st.n} closed trades · realised P&amp;L`;
+  $('#accTrades').textContent = st.n; $('#accWin').textContent=(st.wr*100).toFixed(1)+'%';
+  $('#accExp').innerHTML = `<span class="${cls(st.exp)}">${fmtR(st.exp)}</span>`; $('#accPF').textContent = st.pf===Infinity?'∞':st.pf.toFixed(2);
+  $('#accOpen').textContent = L? L.open.length : 0;
+  const openR = L? L.open.reduce((a,o)=>a+o.r,0):0; $('#accOpenR').innerHTML = `<span class="${cls(openR)}">${fmtR(openR)}</span>`;
+  $('#accDD').innerHTML = `<span class="down">${st.dd.toFixed(1)}R</span>`;
+  $('#streakN').textContent = st.streak; $('#streakSub').textContent = st.streak? `wins in a row · best ${fmtR(Math.max(0,...rows.map(r=>r.r)))}` : 'no streak';
+}
+
+// ---------- candles ----------
+function candles(){
+  const el=$('#candles'); const C = LIVE && LIVE.chart;
+  if (!C || !C.bars || !C.bars.length){ $('#chSym').textContent='Chart'; return; }
+  $('#chSym').textContent = C.symbol; const last = C.last || C.bars[C.bars.length-1][4]; const first = C.bars[0][1];
+  $('#chLast').innerHTML = `<span class="neon">$${(+last).toFixed(2)}</span>`; const chg=(last-first)/first*100; $('#chChg').innerHTML = `<span class="${cls(chg)}">${chg>=0?'▲':'▼'}${Math.abs(chg).toFixed(2)}%</span>`;
+  const W=720,H=250,m={t:10,r:56,b:20,l:8}, iw=W-m.l-m.r, ih=H-m.t-m.b;
+  const bars=C.bars; const lo=Math.min(...bars.map(b=>b[3])), hi=Math.max(...bars.map(b=>b[2])); const pad=(hi-lo)*.08||1;
+  const y=v=>m.t+ih-(v-(lo-pad))/((hi+pad)-(lo-pad))*ih, x=i=>m.l+(i+0.5)*iw/bars.length, w=Math.max(2, iw/bars.length*0.6);
+  const ticks=niceTicks(lo-pad,hi+pad,5);
+  let s=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${C.symbol} 5-minute candles">`;
+  s+='<g class="grid">'+ticks.map(t=>`<line x1="${m.l}" x2="${W-m.r}" y1="${y(t)}" y2="${y(t)}"/>`).join('')+'</g>';
+  s+='<g class="axis">'+ticks.map(t=>`<text x="${W-m.r+6}" y="${y(t)+3}">${t.toFixed(2)}</text>`).join('')+'</g>';
+  bars.forEach((b,i)=>{ const up=b[4]>=b[1]; const top=y(Math.max(b[1],b[4])), h=Math.max(1,Math.abs(y(b[1])-y(b[4])));
+    s+=`<line class="candle wick ${up?'up':'down'}" x1="${x(i)}" x2="${x(i)}" y1="${y(b[2])}" y2="${y(b[3])}"/>`;
+    s+=`<rect class="candle ${up?'up':'down'}" x="${x(i)-w/2}" y="${top}" width="${w}" height="${h}" rx="1"/>`;
+    s+=`<rect class="hit" data-i="${i}" x="${x(i)-iw/bars.length/2}" y="${m.t}" width="${iw/bars.length}" height="${ih}"/>`; });
+  const ly=y(last); s+=`<line class="cross" x1="${m.l}" x2="${W-m.r}" y1="${ly}" y2="${ly}"/>`;
+  s+=`<g class="tag"><rect x="${W-m.r-2}" y="${ly-9}" width="${m.r}" height="18" rx="2"/><text x="${W-m.r+4}" y="${ly+4}">${(+last).toFixed(2)}</text></g>`;
+  const step=Math.max(1,Math.ceil(bars.length/8)); s+='<g class="axis">'+bars.map((b,i)=> i%step===0? `<text x="${x(i)}" y="${H-6}" text-anchor="middle">${b[0]}</text>`:'').join('')+'</g>';
+  s+='</svg>'; el.innerHTML=s;
+  el.querySelectorAll('.hit').forEach(h=>{ const b=bars[+h.dataset.i];
+    h.addEventListener('mouseenter',e=>showTip(e,`<b>${C.symbol} ${b[0]}</b><br>O ${b[1].toFixed(2)} H ${b[2].toFixed(2)} L ${b[3].toFixed(2)} C ${b[4].toFixed(2)}<br>vol ${Math.round(b[5]).toLocaleString()}`));
+    h.addEventListener('mousemove',moveTip); h.addEventListener('mouseleave',hideTip); });
+}
+
+// ---------- watchlist ----------
+function watchlist(){
+  const L=LIVE; const rows = L? L.watchlist : [];
+  $('#wlCount').textContent = rows.length;
+  $('#wl').innerHTML = '<tr><th class="l">Sym</th><th>Last</th><th>Gap</th><th class="l">State</th></tr>' +
+    (rows.map(w=>{ const o = L.open.find(p=>p.symbol===w.symbol); return `<tr><td class="l sym">${w.symbol}</td><td>${(+w.price).toFixed(2)}</td><td class="${cls(w.gap_pct)}">${w.gap_pct? (w.gap_pct>0?'+':'')+w.gap_pct.toFixed(1)+'%':'—'}</td><td class="l">${o? `<span class="neon">IN ${fmtR(o.r)}</span>`:'<span class="sub">watching</span>'}</td></tr>`; }).join('')
+     || `<tr><td colspan="4" class="empty">${L? (L.scanned?'nothing passed the scan':'scan pending') : 'offline'}</td></tr>`);
+}
+
+// ---------- tape ----------
+function tape(rows){
+  const el=$('#tape'); const recent=rows.slice(-14); el.innerHTML='';
+  if (!recent.length){ el.innerHTML='<div class="empty">Trade tape</div>'; return; }
+  const W=1400,H=118; let cum=0; const pts=rows.map(r=>({v:(cum+=r.r)})); const lo=Math.min(0,...pts.map(p=>p.v)), hi=Math.max(0,...pts.map(p=>p.v));
+  const y=v=>12+(H-24)-(v-lo)/((hi-lo)||1)*(H-24), x=i=>i/(Math.max(1,pts.length-1))*W;
+  let s=`<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none"><path d="${pts.map((p,i)=>(i?'L':'M')+x(i).toFixed(1)+','+y(p.v).toFixed(1)).join(' ')}" fill="none" stroke="var(--neon)" stroke-width="1.5" opacity=".55" stroke-dasharray="2 3"/>`;
+  s+=pts.map((p,i)=>`<circle cx="${x(i)}" cy="${y(p.v)}" r="1.5" fill="${p.v>=0?'var(--up)':'var(--down)'}" opacity=".7"/>`).join('')+'</svg>'; el.innerHTML=s;
+  recent.forEach((r,i)=>{ const d=document.createElement('div'); const big=Math.abs(r.r)>=1; d.className='pill '+(r.r>=0?'up':'down')+(big?' big':''); d.textContent=`${r.symbol} ${fmtR(r.r)}`;
+    d.style.left=(6+((i+0.5)/recent.length)*88)+'%'; d.style.top=(28+((i*37)%56))+'%'; d.title=`#${r.n} ${r.date} ${r.entry_time}→${r.exit_time} · ${fmt$(r.pnl)} · ${r.exits}`; el.append(d); });
+}
+
+// ---------- cumulative R ----------
+function curve(rows){
+  const el=$('#curve'); if (!rows.length){ el.innerHTML='<div class="empty">No closed trades yet.</div>'; return; }
+  const W=460,H=190,m={t:10,r:10,b:18,l:34},iw=W-m.l-m.r,ih=H-m.t-m.b; let c=0; const pts=[{i:0,v:0}]; rows.forEach((r,i)=>{c+=r.r;pts.push({i:i+1,v:c,r});});
+  const vs=pts.map(p=>p.v), lo=Math.min(0,...vs), hi=Math.max(0,...vs), pad=(hi-lo)*.08||1, y0=lo-pad, y1=hi+pad; const x=i=>m.l+i/rows.length*iw, y=v=>m.t+ih-(v-y0)/(y1-y0)*ih; const ticks=niceTicks(y0,y1,4);
+  $('#eqTotal').innerHTML=`<span class="${cls(c)}">${fmtR(c)}</span>`;
+  const line=pts.map((p,k)=>(k?'L':'M')+x(p.i).toFixed(1)+','+y(p.v).toFixed(1)).join(' ');
+  let s=`<svg viewBox="0 0 ${W} ${H}"><defs><linearGradient id="eqg" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#22f5a3" stop-opacity=".28"/><stop offset="1" stop-color="#22f5a3" stop-opacity="0"/></linearGradient></defs>`;
+  s+='<g class="grid">'+ticks.map(t=>`<line x1="${m.l}" x2="${W-m.r}" y1="${y(t)}" y2="${y(t)}"/>`).join('')+'</g>';
+  s+='<g class="axis">'+ticks.map(t=>`<text x="${m.l-4}" y="${y(t)+3}" text-anchor="end">${t>0?'+':''}${t}R</text>`).join('')+'</g>';
+  s+=`<path class="eqfill" d="${line} L${x(rows.length)},${y(y0)} L${x(0)},${y(y0)} Z"/><path class="eq" d="${line}"/>`;
+  s+=`<line class="cross" id="cx" y1="${m.t}" y2="${m.t+ih}" style="display:none"/><circle id="cd" r="3.5" fill="#fff" style="display:none"/><rect class="hit" id="ch" x="${m.l}" y="${m.t}" width="${iw}" height="${ih}"/></svg>`;
+  el.innerHTML=s; const svg=el.querySelector('svg'), ch=el.querySelector('#ch'), cx=el.querySelector('#cx'), cd=el.querySelector('#cd');
+  ch.addEventListener('mousemove',e=>{ const pt=svg.createSVGPoint(); pt.x=e.clientX; pt.y=e.clientY; const p=pt.matrixTransform(svg.getScreenCTM().inverse()); const i=Math.max(0,Math.min(rows.length,Math.round((p.x-m.l)/iw*rows.length))); const q=pts[i];
+    cx.setAttribute('x1',x(q.i)); cx.setAttribute('x2',x(q.i)); cx.style.display=''; cd.setAttribute('cx',x(q.i)); cd.setAttribute('cy',y(q.v)); cd.style.display='';
+    showTip(e, q.r? `after #${q.r.n} ${q.r.symbol}: <b>${fmtR(q.v)}</b><br>this trade ${fmtR(q.r.r)}`:'start: <b>0R</b>'); });
+  ch.addEventListener('mouseleave',()=>{cx.style.display='none';cd.style.display='none';hideTip();});
+}
+
+// ---------- positions + trades table ----------
+function tradesTable(rows){
+  const L=LIVE; let h='<tr><th class="l">#</th><th class="l">Sym</th><th class="l">Time</th><th>Qty</th><th>Entry</th><th>Stop</th><th>Exit</th><th>R</th><th>P&amp;L</th><th class="l">Status</th></tr>';
+  const open=(L?L.open:[]).map(o=>`<tr><td class="l neon">●</td><td class="l" style="color:#fff;font-weight:700">${o.symbol}</td><td class="l">${o.entry_time}</td><td>${o.qty}${o.partial?' ½':''}</td><td>${o.entry.toFixed(2)}</td><td>${o.stop.toFixed(2)}</td><td>${o.price.toFixed(2)}</td><td class="${cls(o.r)}"><b>${fmtR(o.r)}</b></td><td class="${cls(o.pnl)}">${fmt$(o.pnl)}</td><td class="l neon">OPEN</td></tr>`).join('');
+  const closed=[...rows].reverse().slice(0,40).map(r=>`<tr><td class="l">${r.n}</td><td class="l" style="color:#fff;font-weight:700">${r.symbol}</td><td class="l">${r.date.slice(5)} ${r.entry_time}</td><td>${r.qty}</td><td>${r.entry.toFixed(2)}</td><td>${r.stop.toFixed(2)}</td><td>${r.exit==null?'—':r.exit.toFixed(2)}</td><td class="${cls(r.r)}"><b>${fmtR(r.r)}</b></td><td class="${cls(r.pnl)}">${fmt$(r.pnl)}</td><td class="l" style="color:var(--text-3)">${r.exits.split(',').map(x=>x.trim().split(' ')[0]).join('/')}</td></tr>`).join('');
+  $('#trades').innerHTML = h + open + (closed || (open?'':'<tr><td colspan="10" class="empty">No trades yet.</td></tr>'));
+}
+
+// ---------- analytics ----------
+function miniBars(el, vals, labels, tipFn){
+  const W=300,H=70,m={t:4,r:2,b:12,l:2},iw=W-m.l-m.r,ih=H-m.t-m.b; if (!vals.length){ el.innerHTML='<div class="empty">—</div>'; return; }
+  const lo=Math.min(0,...vals), hi=Math.max(0,...vals); const y=v=>m.t+ih-(v-lo)/((hi-lo)||1)*ih; const bw=iw/vals.length, w=Math.max(1,bw-1.5);
+  let s=`<svg viewBox="0 0 ${W} ${H}" class="mini"><line x1="${m.l}" x2="${W-m.r}" y1="${y(0)}" y2="${y(0)}" stroke="#2a1233"/>`;
+  vals.forEach((v,i)=>{ const top=Math.min(y(v),y(0)), h=Math.max(1,Math.abs(y(v)-y(0))); s+=`<rect class="rbar ${v>=0?'up':'down'}" data-i="${i}" x="${m.l+i*bw}" y="${top}" width="${w}" height="${h}" rx="1"/>`; });
+  const step=Math.max(1,Math.ceil(vals.length/6)); s+='<g class="axis">'+labels.map((l,i)=> i%step===0? `<text x="${m.l+i*bw+w/2}" y="${H-2}" text-anchor="middle">${l}</text>`:'').join('')+'</g></svg>';
+  el.innerHTML=s; el.querySelectorAll('.rbar').forEach(b=>{ b.addEventListener('mouseenter',e=>showTip(e,tipFn(+b.dataset.i))); b.addEventListener('mousemove',moveTip); b.addEventListener('mouseleave',hideTip); });
+}
+function analytics(rows){
+  const last=rows.slice(-40); miniBars($('#rbars'), last.map(r=>r.r), last.map(r=>'#'+r.n), i=>`<b>#${last[i].n} ${last[i].symbol}</b> ${fmtR(last[i].r)}`);
+  const hours={}; rows.forEach(r=>{ const h=r.entry_time.slice(0,2); hours[h]=(hours[h]||0)+r.r; }); const hk=Object.keys(hours).sort();
+  miniBars($('#hourbars'), hk.map(k=>hours[k]), hk, i=>`<b>${hk[i]}:00</b> ${fmtR(hours[hk[i]])}`);
+  const bins=[-2,-1,-0.5,0,0.5,1,2,3], counts=new Array(bins.length+1).fill(0); rows.forEach(r=>{ let k=bins.findIndex(b=>r.r<b); counts[k<0?bins.length:k]++; });
+  const labels=['<-2','-2','-1','-.5','0','.5','1','2','3+']; miniBars($('#dist'), counts, labels, i=>`<b>${labels[i]}R</b>: ${counts[i]} trades`);
+  $('#dist').querySelectorAll('.rbar').forEach((b,i)=>{ b.classList.remove('up','down'); b.classList.add(i<4?'down':'up'); });
+}
+
+// ---------- log ----------
+function logPanel(rows){
+  const L=LIVE; let lines = L && L.log && L.log.length ? L.log : rows.slice(-12).map(r=>`${r.date} ${r.exit_time} I CLOSED ${r.symbol} ${fmtR(r.r)} (${fmt$(r.pnl)}) ${r.exits}`);
+  $('#logMeta').textContent = L? `updated ${new Date(L.updated).toLocaleTimeString()}` : 'from journal';
+  const esc=t=>t.replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+  $('#log').innerHTML = lines.map(l=>{ const m=l.match(/^(\S+)\s+([IWE])\s+(.*)$/); if(!m) return `<div>${esc(l)}</div>`; const hi=/ENTRY|CLOSED|BUY|SELL|stop hit|flatten|SIGNAL/i.test(m[3]); return `<div><span class="t">${esc(m[1])}</span> <span class="${m[2]}">${m[2]}</span> <span class="${hi?'hi':''}">${esc(m[3])}</span></div>`; }).join('');
+  const box=$('#log'); box.scrollTop=box.scrollHeight;
+}
+
+function clock(){ const now=new Date(); try { $('#clock').textContent = now.toLocaleTimeString('en-US',{timeZone:'America/New_York',hour12:false})+' ET'; } catch(e){ $('#clock').textContent=now.toLocaleTimeString(); } }
+setInterval(clock,1000); clock();
+
+function render(){ const rows=filtered(); const st=stats(rows); header(st,rows); candles(); watchlist(); tape(rows); curve(rows); tradesTable(rows); analytics(rows); logPanel(rows); }
+const src = name => DATA_BASE ? `${DATA_BASE}/${name}?t=${Date.now()}` : name;
+async function live(){
+  try { const r=await fetch(src('live.json'),{cache:'no-store'}); if(r.ok){ LIVE=await r.json(); } } catch(e){}
+  if (DATA_BASE){ try { const r=await fetch(src('trades.json'),{cache:'no-store'}); if(r.ok){ DATA=await r.json(); fillSymbols(); } } catch(e){} }
+  render();
+}
+live(); setInterval(live, 30000);
+</script>
+</body>
+</html>

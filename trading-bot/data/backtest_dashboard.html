@@ -1,0 +1,329 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Trading Terminal</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%23ff2fd2'/%3E%3Cpath d='M3 11l3-4 3 2 4-6' stroke='%23120a18' stroke-width='2' fill='none'/%3E%3C/svg%3E">
+<style>
+:root{
+  color-scheme:dark;
+  --bg:#050307; --panel:#0b070f; --panel-2:#120a18; --line:#2a1233; --line-2:#3d1a4d;
+  --text:#f1e9f6; --text-2:#b79bc7; --text-3:#6f5680;
+  --neon:#ff2fd2; --neon-2:#ff7ae6; --up:#22f5a3; --down:#ff3b7a; --amber:#ffc447;
+  --glow:0 0 12px rgba(255,47,210,.45), 0 0 2px rgba(255,47,210,.9);
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--text);font:12px/1.4 ui-monospace,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;letter-spacing:.02em}
+body::after{content:"";position:fixed;inset:0;pointer-events:none;background:repeating-linear-gradient(0deg,rgba(255,255,255,.018) 0 1px,transparent 1px 3px);mix-blend-mode:overlay}
+main{max-width:1440px;margin:0 auto;padding:12px 16px 32px;display:grid;grid-template-columns:repeat(12,1fr);gap:10px}
+.top{grid-column:1/-1;display:flex;flex-wrap:wrap;align-items:center;gap:18px;padding:8px 14px;border:1px solid var(--line);background:linear-gradient(90deg,#160b1d,#0b070f 60%);border-radius:4px}
+.top .name{font-weight:700;color:#fff;font-size:13px}
+.top .name b{color:var(--neon);text-shadow:var(--glow)}
+.top .kv{display:flex;flex-direction:column;line-height:1.15}
+.top .kv .k{font-size:9px;color:var(--text-3);text-transform:uppercase;letter-spacing:.14em}
+.top .kv .v{font-size:13px;color:#fff;font-variant-numeric:tabular-nums}
+.top .clock{font-size:16px;color:#fff;font-variant-numeric:tabular-nums}
+.badge{display:inline-block;padding:1px 6px;border-radius:2px;font-size:9px;letter-spacing:.14em;text-transform:uppercase;font-weight:700;vertical-align:1px}
+.badge.live{background:var(--neon);color:#120a18;box-shadow:var(--glow)}
+.badge.off{background:#2b1a33;color:var(--text-2)}
+.badge.sim{background:#1d1330;color:var(--neon-2);border:1px solid var(--line-2)}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:10px 12px;position:relative;min-width:0}
+.panel.hot{border-color:var(--neon);box-shadow:inset 0 0 0 1px rgba(255,47,210,.25), 0 0 18px rgba(255,47,210,.12)}
+.panel h2{margin:0 0 8px;font-size:9px;letter-spacing:.16em;text-transform:uppercase;color:var(--text-3);font-weight:600;display:flex;gap:8px;align-items:center}
+.panel h2 span{color:var(--text-2)}
+.c3{grid-column:span 3}.c4{grid-column:span 4}.c5{grid-column:span 5}.c6{grid-column:span 6}.c12{grid-column:1/-1}
+@media (max-width:900px){.c3,.c4,.c5,.c6{grid-column:1/-1}}
+.big{font-size:34px;font-weight:700;color:#fff;letter-spacing:-.02em;font-variant-numeric:tabular-nums;text-shadow:0 0 18px rgba(255,255,255,.15)}
+.big.neon{color:var(--neon-2);text-shadow:var(--glow)}
+.sub{color:var(--text-2);font-size:11px;margin-top:2px}
+.row{display:flex;gap:14px;flex-wrap:wrap;margin-top:10px}
+.row .kv .k{font-size:9px;color:var(--text-3);text-transform:uppercase;letter-spacing:.12em}
+.row .kv .v{font-size:14px;color:#fff;font-variant-numeric:tabular-nums}
+.up{color:var(--up)} .down{color:var(--down)} .neon{color:var(--neon-2)}
+svg{width:100%;height:auto;display:block;overflow:visible}
+.grid line{stroke:#1c0f24;stroke-width:1}
+.axis text{fill:var(--text-3);font-size:9px;font-family:inherit}
+.candle.up{stroke:var(--up);fill:var(--up)} .candle.down{stroke:var(--down);fill:var(--down)}
+.wick{stroke-width:1}
+.tag rect{fill:var(--neon)} .tag text{fill:#120a18;font-weight:700;font-size:10px;font-family:inherit}
+.eq{fill:none;stroke:var(--up);stroke-width:2;filter:drop-shadow(0 0 6px rgba(34,245,163,.6))}
+.eqfill{fill:url(#eqg)}
+.rbar.up{fill:var(--up)} .rbar.down{fill:var(--down)} .rbar{opacity:.9}
+.hit{fill:transparent}
+.cross{stroke:var(--text-3);stroke-dasharray:3 3}
+table{width:100%;border-collapse:collapse;font-size:11px;font-variant-numeric:tabular-nums}
+th,td{padding:4px 6px;text-align:right;white-space:nowrap;border-bottom:1px solid #170c1e}
+th{color:var(--text-3);font-weight:600;font-size:9px;letter-spacing:.12em;text-transform:uppercase}
+th.l,td.l{text-align:left}
+.tbl{overflow:auto;max-height:230px}
+.tape{height:118px;position:relative;overflow:hidden;background:radial-gradient(ellipse at 50% 120%,#1a0b24 0%,#0b070f 60%);padding:0}
+.tape svg{position:absolute;inset:0;width:100%;height:100%}
+.pill{position:absolute;transform:translate(-50%,-50%);padding:3px 9px;border-radius:14px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);color:#fff;font-weight:700;font-size:12px;backdrop-filter:blur(2px);white-space:nowrap;text-shadow:0 0 10px rgba(255,255,255,.35)}
+.pill.up::before{content:"▲ ";color:var(--up)} .pill.down::before{content:"▼ ";color:var(--down)}
+.pill.big{font-size:15px}
+.log{font-size:11px;line-height:1.5;max-height:200px;overflow:auto;color:var(--text-2)}
+.log div{white-space:pre-wrap}
+.log .t{color:var(--text-3)} .log .W{color:var(--amber)} .log .E{color:var(--down)}
+.log .hi{color:#fff}
+.filters{display:flex;gap:10px;align-items:center;margin-left:auto}
+select{background:#160b1d;color:var(--text);border:1px solid var(--line-2);border-radius:3px;padding:3px 6px;font:inherit;font-size:11px}
+.empty{color:var(--text-3);padding:16px;text-align:center}
+.tip{position:fixed;pointer-events:none;background:#160b1d;color:#fff;border:1px solid var(--line-2);border-radius:4px;padding:6px 8px;font-size:11px;display:none;z-index:10;max-width:280px;box-shadow:0 8px 24px rgba(0,0,0,.6)}
+.streak{display:flex;align-items:baseline;gap:8px}
+.streak .x{font-size:30px;font-weight:700;color:#fff}
+.streak .n{font-size:36px;font-weight:800;color:var(--neon);text-shadow:var(--glow)}
+.mini{margin-top:6px}
+.mini h3{margin:8px 0 2px;font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:var(--text-3);font-weight:600}
+.wl td.sym{color:#fff;font-weight:700}
+</style>
+</head>
+<body>
+<main>
+  <div class="top">
+    <div class="name">TRADEBOT · <b id="hStrat">Backtest · Trend Join Long</b> <span id="hBadge" class="badge off">offline</span></div>
+    <div class="kv"><span class="k">Equity</span><span class="v" id="hEquity">—</span></div>
+    <div class="kv"><span class="k">Today</span><span class="v" id="hToday">—</span></div>
+    <div class="kv"><span class="k">Trades</span><span class="v" id="hTrades">—</span></div>
+    <div class="kv"><span class="k">Win</span><span class="v" id="hWin">—</span></div>
+    <div class="kv"><span class="k">Total</span><span class="v" id="hTotal">—</span></div>
+    <div class="filters">
+      <select id="fSym"><option value="">ALL SYMBOLS</option></select>
+      <select id="fN"><option value="0">ALL</option><option value="20">LAST 20</option><option value="50">LAST 50</option><option value="100">LAST 100</option></select>
+      <div class="clock" id="clock">--:--:--</div>
+    </div>
+  </div>
+
+  <section class="panel hot c3">
+    <h2>Account <span id="accMode"></span></h2>
+    <div class="big neon" id="accEquity">—</div>
+    <div class="sub" id="accSub">practice · waiting for the bot</div>
+    <div class="row">
+      <div class="kv"><div class="k">Trades</div><div class="v" id="accTrades">0</div></div>
+      <div class="kv"><div class="k">Win rate</div><div class="v" id="accWin">0%</div></div>
+      <div class="kv"><div class="k">Expectancy</div><div class="v" id="accExp">0.00R</div></div>
+      <div class="kv"><div class="k">PF</div><div class="v" id="accPF">0.00</div></div>
+    </div>
+    <div class="row">
+      <div class="kv"><div class="k">Open</div><div class="v" id="accOpen">0</div></div>
+      <div class="kv"><div class="k">Open R</div><div class="v" id="accOpenR">0.00R</div></div>
+      <div class="kv"><div class="k">Max DD</div><div class="v" id="accDD">0.0R</div></div>
+    </div>
+  </section>
+
+  <section class="panel c6">
+    <h2><span id="chSym">Chart</span> · 5M <span id="chLast"></span> <span id="chChg"></span></h2>
+    <div id="candles"><div class="empty">Candles appear while the bot is running (live.json).</div></div>
+  </section>
+
+  <section class="panel c3">
+    <h2>Watchlist · <span id="wlCount">0</span></h2>
+    <div class="tbl wl"><table id="wl"></table></div>
+    <div class="mini">
+      <h3>Streak</h3>
+      <div class="streak"><span class="x">×</span><span class="n" id="streakN">0</span><span class="sub" id="streakSub"></span></div>
+    </div>
+  </section>
+
+  <section class="panel c12 tape" id="tape"></section>
+
+  <section class="panel c4">
+    <h2>Cumulative R <span id="eqTotal"></span></h2>
+    <div id="curve"></div>
+  </section>
+
+  <section class="panel c5">
+    <h2>Positions &amp; recent trades</h2>
+    <div class="tbl"><table id="trades"></table></div>
+  </section>
+
+  <section class="panel c3">
+    <h2>Analytics</h2>
+    <div class="mini"><h3>R per trade</h3><div id="rbars"></div></div>
+    <div class="mini"><h3>R by entry hour (ET)</h3><div id="hourbars"></div></div>
+    <div class="mini"><h3>Result distribution</h3><div id="dist"></div></div>
+  </section>
+
+  <section class="panel c12">
+    <h2>Execution log · live <span id="logMeta"></span></h2>
+    <div class="log" id="log"></div>
+  </section>
+</main>
+<div class="tip" id="tip"></div>
+<script>
+let DATA = {"rows": [{"n": 1, "id": "b54d942947", "symbol": "TMF", "side": "LONG", "qty": 170, "date": "2024-09-03", "entry_time": "10:05", "exit_time": "15:55", "entry": 58.52, "stop": 57.11, "exit": 58.12, "r": -0.28, "pnl": -67.71, "risk": 239.14, "exits": "eod 170@58.12", "reason": "TJL gap +3.8% new HOD > 58.43, prior high 58.05, relvol 5.92, LOD 57.69"}, {"n": 2, "id": "b4c90374aa", "symbol": "DFH", "side": "LONG", "qty": 291, "date": "2024-09-13", "entry_time": "10:25", "exit_time": "15:55", "entry": 34.3, "stop": 33.45, "exit": 34.58, "r": 0.32, "pnl": 79.88, "risk": 247.9, "exits": "partial 97@34.98, eod 194@34.37", "reason": "TJL gap +3.6% new HOD > 34.20, prior high 33.19, relvol 2.16, LOD 33.79"}, {"n": 3, "id": "5964edfab2", "symbol": "VITL", "side": "LONG", "qty": 277, "date": "2024-09-17", "entry_time": "11:25", "exit_time": "15:55", "entry": 32.73, "stop": 31.82, "exit": 32.64, "r": -0.09, "pnl": -22.99, "risk": 251.1, "exits": "eod 277@32.64", "reason": "TJL gap +3.2% new HOD > 32.70, prior high 31.57, relvol 2.86, LOD 32.14"}, {"n": 4, "id": "22bb5933da", "symbol": "JD", "side": "LONG", "qty": 301, "date": "2024-09-19", "entry_time": "13:20", "exit_time": "15:55", "entry": 28.73, "stop": 27.89, "exit": 28.71, "r": -0.01, "pnl": -3.43, "risk": 251.55, "exits": "eod 301@28.71", "reason": "TJL gap +5.6% new HOD > 28.68, prior high 27.13, relvol 3.95, LOD 28.17"}, {"n": 5, "id": "587bc83641", "symbol": "TCOM", "side": "LONG", "qty": 172, "date": "2024-09-24", "entry_time": "11:00", "exit_time": "15:55", "entry": 51.88, "stop": 50.42, "exit": 52.97, "r": 0.75, "pnl": 187.29, "risk": 251.19, "exits": "partial 57@53.01, eod 115@52.95", "reason": "TJL gap +4.8% new HOD > 51.84, prior high 49.70, relvol 2.69, LOD 50.93"}, {"n": 6, "id": "4adead6961", "symbol": "FXI", "side": "LONG", "qty": 337, "date": "2024-09-24", "entry_time": "11:10", "exit_time": "15:55", "entry": 29.67, "stop": 28.99, "exit": 30.23, "r": 0.84, "pnl": 191.46, "risk": 227.78, "exits": "partial 112@30.17, eod 225@30.26", "reason": "TJL gap +6.2% new HOD > 29.62, prior high 27.88, relvol 3.94, LOD 29.28"}, {"n": 7, "id": "ca7be561a0", "symbol": "MCHI", "side": "LONG", "qty": 215, "date": "2024-09-24", "entry_time": "11:10", "exit_time": "15:55", "entry": 46.32, "stop": 45.31, "exit": 47.11, "r": 0.77, "pnl": 168.4, "risk": 218.07, "exits": "partial 72@47.24, eod 143@47.04", "reason": "TJL gap +5.9% new HOD > 46.23, prior high 43.54, relvol 5.89, LOD 45.77"}, {"n": 8, "id": "9e335d2756", "symbol": "KWEB", "side": "LONG", "qty": 316, "date": "2024-09-24", "entry_time": "11:20", "exit_time": "15:55", "entry": 29.42, "stop": 28.62, "exit": 30.03, "r": 0.76, "pnl": 192.66, "risk": 253.08, "exits": "partial 105@30.08, eod 211@30.00", "reason": "TJL gap +6.9% new HOD > 29.39, prior high 27.50, relvol 11.05, LOD 28.91"}, {"n": 9, "id": "f2a7d5df5f", "symbol": "CVLT", "side": "LONG", "qty": 61, "date": "2024-10-08", "entry_time": "10:35", "exit_time": "15:55", "entry": 158.68, "stop": 154.57, "exit": 159.65, "r": 0.24, "pnl": 59.26, "risk": 250.51, "exits": "eod 61@159.65", "reason": "TJL gap +3.5% new HOD > 158.13, prior high 153.45, relvol 3.59, LOD 156.13"}, {"n": 10, "id": "45e2866789", "symbol": "AX", "side": "LONG", "qty": 158, "date": "2024-10-11", "entry_time": "10:05", "exit_time": "15:55", "entry": 63.63, "stop": 62.38, "exit": 64.01, "r": 0.3, "pnl": 59.17, "risk": 197.93, "exits": "eod 158@64.01", "reason": "TJL gap +4.4% new HOD > 63.38, prior high 60.55, relvol 4.30, LOD 63.01"}, {"n": 11, "id": "9e74fcf219", "symbol": "DOCS", "side": "LONG", "qty": 223, "date": "2024-10-15", "entry_time": "12:40", "exit_time": "15:55", "entry": 43.67, "stop": 42.54, "exit": 43.63, "r": -0.03, "pnl": -8.34, "risk": 251.7, "exits": "eod 223@43.63", "reason": "TJL gap +3.4% new HOD > 43.65, prior high 42.76, relvol 2.19, LOD 42.97"}, {"n": 12, "id": "16faee92cd", "symbol": "KVUE", "side": "LONG", "qty": 384, "date": "2024-10-21", "entry_time": "10:20", "exit_time": "15:55", "entry": 23.28, "stop": 22.62, "exit": 22.89, "r": -0.59, "pnl": -149.49, "risk": 253.32, "exits": "eod 384@22.89", "reason": "TJL gap +5.6% new HOD > 23.22, prior high 21.74, relvol 13.56, LOD 22.85"}, {"n": 13, "id": "050e614d3a", "symbol": "NSC", "side": "LONG", "qty": 32, "date": "2024-10-22", "entry_time": "12:30", "exit_time": "15:55", "entry": 260.22, "stop": 252.44, "exit": 259.88, "r": -0.04, "pnl": -11.01, "risk": 249.02, "exits": "eod 32@259.88", "reason": "TJL gap +4.2% new HOD > 259.95, prior high 251.81, relvol 3.03, LOD 254.99"}, {"n": 14, "id": "97169d44f3", "symbol": "PKG", "side": "LONG", "qty": 38, "date": "2024-10-23", "entry_time": "10:05", "exit_time": "15:55", "entry": 228.79, "stop": 222.18, "exit": 228.46, "r": -0.05, "pnl": -12.59, "risk": 251.21, "exits": "eod 38@228.46", "reason": "TJL gap +3.9% new HOD > 228.68, prior high 218.27, relvol 4.37, LOD 224.42"}, {"n": 15, "id": "4e4092a6fa", "symbol": "TPL", "side": "LONG", "qty": 6, "date": "2024-11-22", "entry_time": "10:15", "exit_time": "15:55", "entry": 1625.92, "stop": 1584.49, "exit": 1710.15, "r": 2.03, "pnl": 505.41, "risk": 248.58, "exits": "partial 2@1658.36, eod 4@1736.05", "reason": "TJL gap +7.1% new HOD > 1619.69, prior high 1525.57, relvol 4.16, LOD 1600.50"}, {"n": 16, "id": "d3dcbebd66", "symbol": "HUBS", "side": "LONG", "qty": 11, "date": "2024-12-04", "entry_time": "10:40", "exit_time": "15:55", "entry": 759.84, "stop": 737.17, "exit": 757.09, "r": -0.12, "pnl": -30.23, "risk": 249.34, "exits": "eod 11@757.09", "reason": "TJL gap +3.4% new HOD > 755.50, prior high 727.24, relvol 2.95, LOD 744.62"}, {"n": 17, "id": "070fea36f1", "symbol": "DOGZ", "side": "LONG", "qty": 200, "date": "2024-12-04", "entry_time": "13:10", "exit_time": "15:55", "entry": 50.5, "stop": 49.51, "exit": 52.12, "r": 1.63, "pnl": 323.52, "risk": 198.02, "exits": "partial 67@51.37, eod 133@52.49", "reason": "TJL gap +7.3% new HOD > 50.14, prior high 47.99, relvol 8.17, LOD 50.01"}, {"n": 18, "id": "1f47df6b5b", "symbol": "QGEN", "side": "LONG", "qty": 193, "date": "2024-12-10", "entry_time": "13:10", "exit_time": "15:55", "entry": 46.32, "stop": 45.02, "exit": 46.01, "r": -0.24, "pnl": -59.54, "risk": 250.76, "exits": "eod 193@46.01", "reason": "TJL gap +4.1% new HOD > 46.29, prior high 44.40, relvol 2.36, LOD 45.47"}, {"n": 19, "id": "18d747ad58", "symbol": "WAT", "side": "LONG", "qty": 24, "date": "2025-01-13", "entry_time": "11:25", "exit_time": "15:55", "entry": 398.18, "stop": 388.06, "exit": 398.76, "r": 0.06, "pnl": 13.93, "risk": 242.87, "exits": "eod 24@398.76", "reason": "TJL gap +4.2% new HOD > 396.78, prior high 382.16, relvol 2.70, LOD 391.98"}, {"n": 20, "id": "a989793cde", "symbol": "JLL", "side": "LONG", "qty": 39, "date": "2025-01-15", "entry_time": "12:25", "exit_time": "15:55", "entry": 258.25, "stop": 252.15, "exit": 256.49, "r": -0.29, "pnl": -68.75, "risk": 237.96, "exits": "eod 39@256.49", "reason": "TJL gap +6.6% new HOD > 257.79, prior high 240.54, relvol 2.32, LOD 254.70"}, {"n": 21, "id": "9ec50fa42a", "symbol": "BYRN", "side": "LONG", "qty": 301, "date": "2025-01-21", "entry_time": "10:30", "exit_time": "15:55", "entry": 30.89, "stop": 30.05, "exit": 30.17, "r": -0.85, "pnl": -214.37, "risk": 251.7, "exits": "eod 301@30.17", "reason": "TJL gap +3.8% new HOD > 30.78, prior high 30.29, relvol 2.24, LOD 30.36"}, {"n": 22, "id": "23c4529594", "symbol": "TKO", "side": "LONG", "qty": 60, "date": "2025-01-23", "entry_time": "10:15", "exit_time": "15:55", "entry": 149.78, "stop": 145.63, "exit": 152.17, "r": 0.58, "pnl": 143.48, "risk": 249.0, "exits": "partial 20@153.13, eod 40@151.69", "reason": "TJL gap +3.5% new HOD > 149.27, prior high 145.38, relvol 3.96, LOD 147.10"}, {"n": 23, "id": "375442c54a", "symbol": "SSB", "side": "LONG", "qty": 79, "date": "2025-01-24", "entry_time": "10:15", "exit_time": "15:55", "entry": 105.07, "stop": 101.9, "exit": 103.27, "r": -0.57, "pnl": -142.33, "risk": 250.51, "exits": "eod 79@103.27", "reason": "TJL gap +5.0% new HOD > 104.14, prior high 99.89, relvol 3.25, LOD 102.92"}, {"n": 24, "id": "e9ff5f5af1", "symbol": "BOH", "side": "LONG", "qty": 136, "date": "2025-01-27", "entry_time": "10:30", "exit_time": "11:55", "entry": 74.32, "stop": 72.77, "exit": 72.68, "r": -1.06, "pnl": -224.32, "risk": 211.47, "exits": "stop 136@72.68", "reason": "TJL gap +4.0% new HOD > 74.16, prior high 71.38, relvol 4.55, LOD 73.51"}, {"n": 25, "id": "c2040fca4c", "symbol": "BIO", "side": "LONG", "qty": 27, "date": "2025-01-28", "entry_time": "10:15", "exit_time": "15:51", "entry": 371.01, "stop": 366.3, "exit": 368.0, "r": -0.64, "pnl": -81.48, "risk": 127.28, "exits": "eod 27@368.00", "reason": "TJL gap +3.3% new HOD > 370.35, prior high 358.31, relvol 2.72, LOD 370.00"}, {"n": 26, "id": "2b9ace8dc6", "symbol": "SLGN", "side": "LONG", "qty": 163, "date": "2025-01-29", "entry_time": "10:05", "exit_time": "15:55", "entry": 57.17, "stop": 55.63, "exit": 55.71, "r": -0.95, "pnl": -237.57, "risk": 251.25, "exits": "eod 163@55.71", "reason": "TJL gap +6.0% new HOD > 57.02, prior high 53.86, relvol 4.59, LOD 56.19"}, {"n": 27, "id": "06357c1df1", "symbol": "UNG", "side": "LONG", "qty": 573, "date": "2025-02-03", "entry_time": "10:20", "exit_time": "12:50", "entry": 17.54, "stop": 17.22, "exit": 17.82, "r": 0.84, "pnl": 156.37, "risk": 185.37, "exits": "partial 191@17.82, stop 382@17.82", "reason": "TJL gap +7.6% new HOD > 17.50, prior high 16.24, relvol 3.51, LOD 17.39"}, {"n": 28, "id": "d8c1cf68cb", "symbol": "SKY", "side": "LONG", "qty": 94, "date": "2025-02-05", "entry_time": "10:05", "exit_time": "14:30", "entry": 101.5, "stop": 98.84, "exit": 103.23, "r": 0.65, "pnl": 162.32, "risk": 250.07, "exits": "partial 31@103.65, stop 63@103.02", "reason": "TJL gap +8.3% new HOD > 100.49, prior high 93.67, relvol 2.10, LOD 99.84"}, {"n": 29, "id": "523a970598", "symbol": "ECL", "side": "LONG", "qty": 33, "date": "2025-02-11", "entry_time": "11:00", "exit_time": "15:55", "entry": 266.46, "stop": 258.86, "exit": 261.15, "r": -0.7, "pnl": -175.25, "risk": 250.74, "exits": "eod 33@261.15", "reason": "TJL gap +7.6% new HOD > 266.24, prior high 246.79, relvol 3.80, LOD 261.48"}, {"n": 30, "id": "a365025dc3", "symbol": "TMV", "side": "LONG", "qty": 250, "date": "2025-02-12", "entry_time": "10:05", "exit_time": "15:55", "entry": 40.27, "stop": 39.41, "exit": 39.89, "r": -0.44, "pnl": -94.02, "risk": 214.53, "exits": "eod 250@39.89", "reason": "TJL gap +4.0% new HOD > 40.21, prior high 38.37, relvol 2.79, LOD 39.81"}, {"n": 31, "id": "1979932562", "symbol": "BOIL", "side": "LONG", "qty": 135, "date": "2025-02-13", "entry_time": "10:05", "exit_time": "11:20", "entry": 74.04, "stop": 72.46, "exit": 75.23, "r": 0.75, "pnl": 160.22, "risk": 213.95, "exits": "partial 45@75.86, stop 90@74.92", "reason": "TJL gap +6.4% new HOD > 73.85, prior high 69.56, relvol 2.37, LOD 73.19"}, {"n": 32, "id": "fb5215b412", "symbol": "UNG", "side": "LONG", "qty": 416, "date": "2025-02-19", "entry_time": "10:05", "exit_time": "15:55", "entry": 22.1, "stop": 21.5, "exit": 22.59, "r": 0.8, "pnl": 201.55, "risk": 251.43, "exits": "partial 139@22.64, eod 277@22.57", "reason": "TJL gap +3.8% new HOD > 22.05, prior high 21.08, relvol 2.68, LOD 21.72"}, {"n": 33, "id": "a0bc254a06", "symbol": "DRI", "side": "LONG", "qty": 44, "date": "2025-03-20", "entry_time": "10:20", "exit_time": "13:15", "entry": 202.22, "stop": 196.51, "exit": 196.47, "r": -1.01, "pnl": -252.77, "risk": 251.04, "exits": "stop 44@196.47", "reason": "TJL gap +5.9% new HOD > 202.00, prior high 189.70, relvol 4.58, LOD 198.50"}, {"n": 34, "id": "96424e139c", "symbol": "MUFG", "side": "LONG", "qty": 673, "date": "2025-03-21", "entry_time": "10:35", "exit_time": "15:55", "entry": 14.95, "stop": 14.64, "exit": 14.95, "r": -0.02, "pnl": -4.04, "risk": 210.65, "exits": "eod 673@14.95", "reason": "TJL gap +3.2% new HOD > 14.93, prior high 14.38, relvol 3.78, LOD 14.79"}, {"n": 35, "id": "5817d5e929", "symbol": "ONC", "side": "LONG", "qty": 37, "date": "2025-04-22", "entry_time": "12:20", "exit_time": "15:55", "entry": 250.56, "stop": 243.78, "exit": 253.1, "r": 0.38, "pnl": 94.14, "risk": 250.68, "exits": "eod 37@253.10", "reason": "TJL gap +8.6% new HOD > 249.91, prior high 232.28, relvol 2.12, LOD 246.24"}, {"n": 36, "id": "3c74912442", "symbol": "DB", "side": "LONG", "qty": 374, "date": "2025-04-29", "entry_time": "11:25", "exit_time": "15:55", "entry": 26.91, "stop": 26.34, "exit": 26.83, "r": -0.14, "pnl": -30.22, "risk": 213.33, "exits": "eod 374@26.83", "reason": "TJL gap +3.4% new HOD > 26.89, prior high 25.76, relvol 2.70, LOD 26.61"}, {"n": 37, "id": "1a4a515839", "symbol": "LOPE", "side": "LONG", "qty": 50, "date": "2025-05-07", "entry_time": "10:05", "exit_time": "15:55", "entry": 198.49, "stop": 193.55, "exit": 194.31, "r": -0.85, "pnl": -209.43, "risk": 247.23, "exits": "eod 50@194.31", "reason": "TJL gap +5.4% new HOD > 197.72, prior high 186.03, relvol 5.47, LOD 195.51"}, {"n": 38, "id": "fdc7338f51", "symbol": "ZLAB", "side": "LONG", "qty": 297, "date": "2025-05-16", "entry_time": "10:20", "exit_time": "15:55", "entry": 30.17, "stop": 29.32, "exit": 30.82, "r": 0.77, "pnl": 194.38, "risk": 251.26, "exits": "partial 99@30.87, eod 198@30.79", "reason": "TJL gap +3.7% new HOD > 30.04, prior high 28.81, relvol 5.94, LOD 29.61"}, {"n": 39, "id": "514b16f966", "symbol": "LI", "side": "LONG", "qty": 304, "date": "2025-05-21", "entry_time": "10:20", "exit_time": "12:15", "entry": 29.66, "stop": 28.83, "exit": 28.82, "r": -1.01, "pnl": -252.84, "risk": 251.07, "exits": "stop 304@28.82", "reason": "TJL gap +3.2% new HOD > 29.59, prior high 28.49, relvol 2.30, LOD 29.12"}, {"n": 40, "id": "ce9b5414b4", "symbol": "UBS", "side": "LONG", "qty": 303, "date": "2025-06-03", "entry_time": "10:15", "exit_time": "15:55", "entry": 33.15, "stop": 32.57, "exit": 33.44, "r": 0.51, "pnl": 89.9, "risk": 174.71, "exits": "eod 303@33.44", "reason": "TJL gap +3.5% new HOD > 33.13, prior high 32.04, relvol 2.23, LOD 32.90"}, {"n": 41, "id": "86f9bf9cd8", "symbol": "DRVN", "side": "LONG", "qty": 552, "date": "2025-06-06", "entry_time": "11:50", "exit_time": "15:55", "entry": 18.22, "stop": 17.81, "exit": 18.38, "r": 0.37, "pnl": 84.29, "risk": 228.31, "exits": "eod 552@18.38", "reason": "TJL gap +3.6% new HOD > 18.20, prior high 17.89, relvol 3.14, LOD 17.99"}, {"n": 42, "id": "1ada6566de", "symbol": "CCL", "side": "LONG", "qty": 390, "date": "2025-06-16", "entry_time": "10:15", "exit_time": "15:55", "entry": 23.33, "stop": 22.68, "exit": 23.78, "r": 0.69, "pnl": 175.7, "risk": 253.38, "exits": "eod 390@23.78", "reason": "TJL gap +3.3% new HOD > 23.32, prior high 22.83, relvol 2.20, LOD 22.91"}, {"n": 43, "id": "c0de0e1fc3", "symbol": "LI", "side": "LONG", "qty": 301, "date": "2025-06-23", "entry_time": "10:10", "exit_time": "15:55", "entry": 27.8, "stop": 26.96, "exit": 28.13, "r": 0.41, "pnl": 101.98, "risk": 251.52, "exits": "eod 301@28.13", "reason": "TJL gap +4.7% new HOD > 27.77, prior high 26.34, relvol 2.45, LOD 27.23"}, {"n": 44, "id": "9b2037561a", "symbol": "BITU", "side": "LONG", "qty": 190, "date": "2025-07-02", "entry_time": "11:00", "exit_time": "13:15", "entry": 52.04, "stop": 50.72, "exit": 53.3, "r": 0.95, "pnl": 239.14, "risk": 250.88, "exits": "partial 63@53.40, stop 127@53.25", "reason": "TJL gap +4.1% new HOD > 52.00, prior high 51.08, relvol 2.70, LOD 51.23"}, {"n": 45, "id": "6258b48e4c", "symbol": "LNG", "side": "LONG", "qty": 39, "date": "2025-07-18", "entry_time": "10:15", "exit_time": "15:55", "entry": 243.68, "stop": 237.36, "exit": 244.03, "r": 0.06, "pnl": 13.75, "risk": 246.43, "exits": "eod 39@244.03", "reason": "TJL gap +3.9% new HOD > 243.49, prior high 234.05, relvol 4.48, LOD 239.76"}, {"n": 46, "id": "aa5d22e2a0", "symbol": "ALG", "side": "LONG", "qty": 45, "date": "2025-08-04", "entry_time": "10:05", "exit_time": "15:51", "entry": 224.85, "stop": 220.74, "exit": 224.54, "r": -0.08, "pnl": -14.17, "risk": 185.17, "exits": "eod 45@224.54", "reason": "TJL gap +3.4% new HOD > 222.97, prior high 217.71, relvol 3.60, LOD 222.97"}, {"n": 47, "id": "93833dea2c", "symbol": "MLM", "side": "LONG", "qty": 15, "date": "2025-08-04", "entry_time": "10:15", "exit_time": "15:55", "entry": 606.12, "stop": 589.54, "exit": 602.1, "r": -0.24, "pnl": -60.25, "risk": 248.64, "exits": "eod 15@602.10", "reason": "TJL gap +3.7% new HOD > 603.36, prior high 577.67, relvol 6.21, LOD 595.50"}, {"n": 48, "id": "ff94e55331", "symbol": "VRNS", "side": "LONG", "qty": 160, "date": "2025-08-11", "entry_time": "10:05", "exit_time": "15:55", "entry": 55.46, "stop": 53.89, "exit": 54.39, "r": -0.68, "pnl": -171.52, "risk": 251.38, "exits": "eod 160@54.39", "reason": "TJL gap +3.1% new HOD > 55.38, prior high 54.27, relvol 3.29, LOD 54.43"}, {"n": 49, "id": "36b3c6c89c", "symbol": "BITU", "side": "LONG", "qty": 140, "date": "2025-08-11", "entry_time": "12:10", "exit_time": "15:55", "entry": 62.13, "stop": 60.34, "exit": 60.33, "r": -1.01, "pnl": -252.63, "risk": 250.94, "exits": "stop 140@60.33", "reason": "TJL gap +5.2% new HOD > 61.98, prior high 58.89, relvol 3.24, LOD 60.95"}, {"n": 50, "id": "879b605e09", "symbol": "KWEB", "side": "LONG", "qty": 266, "date": "2025-08-13", "entry_time": "10:40", "exit_time": "15:55", "entry": 37.76, "stop": 37.11, "exit": 37.66, "r": -0.16, "pnl": -27.96, "risk": 173.59, "exits": "eod 266@37.66", "reason": "TJL gap +3.5% new HOD > 37.75, prior high 36.40, relvol 2.86, LOD 37.48"}, {"n": 51, "id": "a3f61892ed", "symbol": "HWC", "side": "LONG", "qty": 158, "date": "2025-08-22", "entry_time": "10:35", "exit_time": "15:55", "entry": 62.81, "stop": 61.22, "exit": 63.76, "r": 0.59, "pnl": 149.25, "risk": 251.63, "exits": "eod 158@63.76", "reason": "TJL gap +3.8% new HOD > 62.66, prior high 60.54, relvol 9.15, LOD 61.84"}, {"n": 52, "id": "657d739cfe", "symbol": "PRKS", "side": "LONG", "qty": 181, "date": "2025-09-03", "entry_time": "10:05", "exit_time": "10:40", "entry": 55.5, "stop": 54.54, "exit": 54.39, "r": -1.16, "pnl": -201.27, "risk": 173.96, "exits": "stop 181@54.39", "reason": "TJL gap +5.2% new HOD > 55.47, prior high 52.71, relvol 20.93, LOD 55.09"}, {"n": 53, "id": "e4c2d83933", "symbol": "BABA", "side": "LONG", "qty": 51, "date": "2025-09-24", "entry_time": "10:20", "exit_time": "15:55", "entry": 178.22, "stop": 173.3, "exit": 176.59, "r": -0.33, "pnl": -82.67, "risk": 250.7, "exits": "eod 51@176.59", "reason": "TJL gap +7.9% new HOD > 178.08, prior high 167.78, relvol 2.61, LOD 175.05"}, {"n": 54, "id": "6284def862", "symbol": "ERIC", "side": "LONG", "qty": 892, "date": "2025-10-14", "entry_time": "10:15", "exit_time": "15:55", "entry": 9.6, "stop": 9.32, "exit": 9.82, "r": 0.78, "pnl": 195.72, "risk": 251.45, "exits": "partial 297@9.85, eod 595@9.81", "reason": "TJL gap +15.5% new HOD > 9.55, prior high 8.24, relvol 5.10, LOD 9.41"}, {"n": 55, "id": "e40d83a4b9", "symbol": "TLK", "side": "LONG", "qty": 514, "date": "2025-10-21", "entry_time": "10:10", "exit_time": "15:55", "entry": 19.57, "stop": 19.3, "exit": 19.62, "r": 0.15, "pnl": 21.69, "risk": 140.78, "exits": "eod 514@19.62", "reason": "TJL gap +7.9% new HOD > 19.57, prior high 18.18, relvol 3.60, LOD 19.50"}, {"n": 56, "id": "e232c68640", "symbol": "IESC", "side": "LONG", "qty": 24, "date": "2025-10-24", "entry_time": "10:05", "exit_time": "15:55", "entry": 416.57, "stop": 406.6, "exit": 433.71, "r": 1.72, "pnl": 411.36, "risk": 239.24, "exits": "partial 8@424.51, eod 16@438.31", "reason": "TJL gap +8.5% new HOD > 410.95, prior high 379.14, relvol 2.82, LOD 410.70"}, {"n": 57, "id": "d83c554dd4", "symbol": "JNUG", "side": "LONG", "qty": 68, "date": "2025-11-24", "entry_time": "10:05", "exit_time": "15:55", "entry": 148.13, "stop": 146.15, "exit": 154.99, "r": 3.47, "pnl": 466.59, "risk": 134.61, "exits": "partial 23@153.49, eod 45@155.76", "reason": "TJL gap +7.2% new HOD > 147.63, prior high 143.25, relvol 2.19, LOD 147.63"}, {"n": 58, "id": "6b3f1732f3", "symbol": "AGQ", "side": "LONG", "qty": 83, "date": "2025-11-28", "entry_time": "10:50", "exit_time": "15:51", "entry": 103.17, "stop": 100.15, "exit": 106.82, "r": 1.21, "pnl": 302.96, "risk": 250.71, "exits": "partial 28@106.06, eod 55@107.21", "reason": "TJL gap +6.8% new HOD > 102.86, prior high 95.23, relvol 2.38, LOD 101.17"}, {"n": 59, "id": "8cfb540d79", "symbol": "ALGT", "side": "LONG", "qty": 111, "date": "2025-12-12", "entry_time": "10:15", "exit_time": "10:50", "entry": 91.41, "stop": 90.15, "exit": 89.78, "r": -1.29, "pnl": -181.07, "risk": 140.23, "exits": "stop 111@89.78", "reason": "TJL gap +8.2% new HOD > 91.06, prior high 84.25, relvol 2.34, LOD 91.06"}, {"n": 60, "id": "e695062ea6", "symbol": "UBS", "side": "LONG", "qty": 228, "date": "2025-12-16", "entry_time": "11:25", "exit_time": "15:55", "entry": 44.62, "stop": 43.81, "exit": 44.82, "r": 0.24, "pnl": 44.94, "risk": 185.57, "exits": "eod 228@44.82", "reason": "TJL gap +3.9% new HOD > 44.55, prior high 43.20, relvol 2.09, LOD 44.25"}, {"n": 61, "id": "c112f3cbf9", "symbol": "PPLT", "side": "LONG", "qty": 46, "date": "2025-12-23", "entry_time": "10:20", "exit_time": "15:40", "entry": 202.25, "stop": 196.89, "exit": 207.21, "r": 0.93, "pnl": 228.27, "risk": 246.58, "exits": "partial 15@206.81, stop 31@207.41", "reason": "TJL gap +4.9% new HOD > 202.10, prior high 192.14, relvol 6.59, LOD 198.88"}, {"n": 62, "id": "4f6dd17162", "symbol": "PLTM", "side": "LONG", "qty": 446, "date": "2025-12-23", "entry_time": "10:20", "exit_time": "15:55", "entry": 21.39, "stop": 20.83, "exit": 21.94, "r": 0.96, "pnl": 241.4, "risk": 251.68, "exits": "partial 149@21.90, eod 297@21.96", "reason": "TJL gap +5.0% new HOD > 21.38, prior high 20.31, relvol 5.49, LOD 21.04"}, {"n": 63, "id": "6a4ddab774", "symbol": "PALL", "side": "LONG", "qty": 50, "date": "2025-12-23", "entry_time": "10:20", "exit_time": "16:00", "entry": 168.78, "stop": 163.84, "exit": 169.26, "r": 0.1, "pnl": 23.62, "risk": 247.19, "exits": "eod 50@169.26", "reason": "TJL gap +4.7% new HOD > 167.78, prior high 160.82, relvol 4.11, LOD 165.49"}, {"n": 64, "id": "ddf656c466", "symbol": "GLL", "side": "LONG", "qty": 328, "date": "2025-12-29", "entry_time": "10:05", "exit_time": "16:00", "entry": 25.8, "stop": 25.03, "exit": 25.83, "r": 0.05, "pnl": 11.35, "risk": 250.99, "exits": "eod 328@25.83", "reason": "TJL gap +6.8% new HOD > 25.61, prior high 23.84, relvol 11.36, LOD 25.28"}, {"n": 65, "id": "60b4cbf49d", "symbol": "BABX", "side": "LONG", "qty": 213, "date": "2026-01-02", "entry_time": "10:05", "exit_time": "13:55", "entry": 39.59, "stop": 38.42, "exit": 40.37, "r": 0.66, "pnl": 165.93, "risk": 249.83, "exits": "partial 71@40.53, stop 142@40.29", "reason": "TJL gap +8.4% new HOD > 39.46, prior high 36.04, relvol 12.86, LOD 38.81"}, {"n": 66, "id": "2a80e7d10f", "symbol": "RHLD", "side": "LONG", "qty": 46, "date": "2026-01-09", "entry_time": "10:30", "exit_time": "16:00", "entry": 205.66, "stop": 200.22, "exit": 210.89, "r": 0.96, "pnl": 240.59, "risk": 250.29, "exits": "partial 15@212.42, eod 31@210.15", "reason": "TJL gap +7.6% new HOD > 203.48, prior high 205.01, relvol 2.39, LOD 202.24"}, {"n": 67, "id": "76797009e6", "symbol": "PEN", "side": "LONG", "qty": 29, "date": "2026-01-15", "entry_time": "11:00", "exit_time": "15:55", "entry": 351.9, "stop": 344.72, "exit": 350.71, "r": -0.17, "pnl": -34.53, "risk": 208.23, "exits": "eod 29@350.71", "reason": "TJL gap +11.5% new HOD > 351.81, prior high 316.60, relvol 40.50, LOD 348.20"}, {"n": 68, "id": "cd3c44ee4b", "symbol": "NVOX", "side": "LONG", "qty": 284, "date": "2026-01-16", "entry_time": "10:25", "exit_time": "12:35", "entry": 29.77, "stop": 28.89, "exit": 31.06, "r": 1.46, "pnl": 365.04, "risk": 250.2, "exits": "partial 95@30.62, stop 189@31.27", "reason": "TJL gap +9.2% new HOD > 29.74, prior high 27.67, relvol 2.47, LOD 29.18"}, {"n": 69, "id": "e89be4ed5c", "symbol": "UMC", "side": "LONG", "qty": 806, "date": "2026-01-20", "entry_time": "10:45", "exit_time": "15:55", "entry": 10.79, "stop": 10.48, "exit": 10.79, "r": 0.0, "pnl": 0.48, "risk": 251.63, "exits": "eod 806@10.79", "reason": "TJL gap +14.6% new HOD > 10.78, prior high 9.37, relvol 2.24, LOD 10.59"}, {"n": 70, "id": "55097a7f34", "symbol": "ORA", "side": "LONG", "qty": 77, "date": "2026-02-17", "entry_time": "11:40", "exit_time": "15:55", "entry": 125.25, "stop": 122.01, "exit": 124.22, "r": -0.32, "pnl": -80.06, "risk": 249.86, "exits": "eod 77@124.22", "reason": "TJL gap +5.9% new HOD > 125.14, prior high 118.98, relvol 2.51, LOD 123.25"}, {"n": 71, "id": "4b2bf9d5ba", "symbol": "UNF", "side": "LONG", "qty": 36, "date": "2026-03-11", "entry_time": "10:05", "exit_time": "15:55", "entry": 278.96, "stop": 272.72, "exit": 276.04, "r": -0.47, "pnl": -104.8, "risk": 224.49, "exits": "eod 36@276.04", "reason": "TJL gap +7.2% new HOD > 277.18, prior high 263.54, relvol 44.49, LOD 275.48"}, {"n": 72, "id": "21acfebc7a", "symbol": "WDS", "side": "LONG", "qty": 352, "date": "2026-03-19", "entry_time": "10:05", "exit_time": "15:55", "entry": 25.02, "stop": 24.3, "exit": 24.49, "r": -0.73, "pnl": -184.76, "risk": 251.68, "exits": "eod 352@24.49", "reason": "TJL gap +7.4% new HOD > 24.96, prior high 22.89, relvol 3.28, LOD 24.55"}, {"n": 73, "id": "56c6c8ef8d", "symbol": "UMC", "side": "LONG", "qty": 961, "date": "2026-04-07", "entry_time": "12:05", "exit_time": "15:55", "entry": 9.15, "stop": 8.89, "exit": 9.23, "r": 0.31, "pnl": 78.23, "risk": 251.59, "exits": "eod 961@9.23", "reason": "TJL gap +5.1% new HOD > 9.14, prior high 8.74, relvol 3.28, LOD 8.97"}, {"n": 74, "id": "1ff6dc4c9a", "symbol": "MVLL", "side": "LONG", "qty": 268, "date": "2026-04-09", "entry_time": "10:10", "exit_time": "10:20", "entry": 37.32, "stop": 36.38, "exit": 36.37, "r": -1.01, "pnl": -253.21, "risk": 251.25, "exits": "stop 268@36.37", "reason": "TJL gap +9.3% new HOD > 37.23, prior high 34.74, relvol 5.90, LOD 36.74"}, {"n": 75, "id": "7c549c1385", "symbol": "PLXS", "side": "LONG", "qty": 36, "date": "2026-05-01", "entry_time": "10:05", "exit_time": "11:25", "entry": 271.71, "stop": 264.9, "exit": 264.67, "r": -1.03, "pnl": -253.7, "risk": 245.31, "exits": "stop 36@264.67", "reason": "TJL gap +7.8% new HOD > 271.00, prior high 251.01, relvol 3.30, LOD 267.58"}, {"n": 76, "id": "642c113244", "symbol": "RAMP", "side": "LONG", "qty": 270, "date": "2026-05-18", "entry_time": "10:50", "exit_time": "15:55", "entry": 37.85, "stop": 37.34, "exit": 37.74, "r": -0.22, "pnl": -29.73, "risk": 137.05, "exits": "eod 270@37.74", "reason": "TJL gap +27.5% new HOD > 37.83, prior high 30.07, relvol 70.97, LOD 37.72"}, {"n": 77, "id": "449e08d7f6", "symbol": "BZH", "side": "LONG", "qty": 322, "date": "2026-07-08", "entry_time": "11:55", "exit_time": "15:30", "entry": 31.67, "stop": 30.95, "exit": 30.87, "r": -1.11, "pnl": -255.19, "risk": 230.65, "exits": "stop 322@30.87", "reason": "TJL gap +14.7% new HOD > 31.55, prior high 27.60, relvol 5.62, LOD 31.27"}, {"n": 78, "id": "9389ecc712", "symbol": "VOD", "side": "LONG", "qty": 662, "date": "2026-07-13", "entry_time": "11:10", "exit_time": "15:55", "entry": 15.39, "stop": 15.1, "exit": 15.49, "r": 0.34, "pnl": 65.41, "risk": 194.03, "exits": "eod 662@15.49", "reason": "TJL gap +4.5% new HOD > 15.38, prior high 14.84, relvol 2.21, LOD 15.25"}, {"n": 79, "id": "4696a4a094", "symbol": "SKYW", "side": "LONG", "qty": 88, "date": "2026-07-24", "entry_time": "11:15", "exit_time": "15:55", "entry": 104.14, "stop": 101.28, "exit": 104.51, "r": 0.13, "pnl": 32.85, "risk": 251.31, "exits": "eod 88@104.51", "reason": "TJL gap +7.2% new HOD > 104.01, prior high 96.49, relvol 10.67, LOD 102.31"}, {"n": 80, "id": "37aed8284b", "symbol": "CBZ", "side": "LONG", "qty": 187, "date": "2026-07-29", "entry_time": "10:10", "exit_time": "15:55", "entry": 54.52, "stop": 53.82, "exit": 54.97, "r": 0.64, "pnl": 83.43, "risk": 131.07, "exits": "partial 62@55.07, eod 125@54.91", "reason": "TJL gap +16.7% new HOD > 54.50, prior high 46.81, relvol 56.23, LOD 54.36"}, {"n": 81, "id": "8ab78c1873", "symbol": "ATKR", "side": "LONG", "qty": 109, "date": "2026-08-03", "entry_time": "10:40", "exit_time": "15:55", "entry": 93.53, "stop": 92.4, "exit": 93.39, "r": -0.13, "pnl": -15.52, "risk": 123.03, "exits": "eod 109@93.39", "reason": "TJL gap +28.1% new HOD > 93.49, prior high 73.19, relvol 42.35, LOD 93.33"}, {"n": 82, "id": "449faf9ca1", "symbol": "EVER", "side": "LONG", "qty": 378, "date": "2026-08-24", "entry_time": "10:15", "exit_time": "13:30", "entry": 26.98, "stop": 26.44, "exit": 26.37, "r": -1.12, "pnl": -228.95, "risk": 204.27, "exits": "stop 378@26.37", "reason": "TJL gap +5.8% new HOD > 26.89, prior high 25.48, relvol 2.25, LOD 26.71"}, {"n": 83, "id": "56e81346c2", "symbol": "SOLT", "side": "LONG", "qty": 195, "date": "2026-08-24", "entry_time": "10:20", "exit_time": "12:55", "entry": 52.28, "stop": 51.02, "exit": 52.92, "r": 0.51, "pnl": 125.23, "risk": 245.8, "exits": "partial 65@53.27, stop 130@52.75", "reason": "TJL gap +8.6% new HOD > 52.24, prior high 48.56, relvol 2.04, LOD 51.54"}, {"n": 84, "id": "19c6d5f1ef", "symbol": "BWIN", "side": "LONG", "qty": 319, "date": "2026-09-14", "entry_time": "10:55", "exit_time": "15:55", "entry": 31.94, "stop": 31.42, "exit": 32.03, "r": 0.18, "pnl": 29.41, "risk": 166.33, "exits": "eod 319@32.03", "reason": "TJL gap +7.2% new HOD > 31.93, prior high 29.75, relvol 38.08, LOD 31.73"}], "stats": {"trades": 84, "wins": 39, "losses": 33, "scratches": 12, "win_rate": 0.542, "total_r": 9.612, "avg_r": 0.114, "avg_win_r": 0.784, "avg_loss_r": -0.633, "expectancy_r": 0.135, "profit_factor": 1.453, "max_drawdown_r": -4.718, "best_r": 3.466, "worst_r": -1.291, "total_pnl": 2097.194}} || {rows: [], stats: {}};
+const DATA_BASE = (window.DATA_BASE || '').replace(/\/$/, '');   // set by config.js on the hosted version
+const $ = s => document.querySelector(s);
+const tip = $('#tip');
+const fmtR = r => (r>0?'+':'') + (+r).toFixed(2) + 'R';
+const fmt$ = v => (v<0?'-$':'$') + Math.abs(v).toLocaleString(undefined,{maximumFractionDigits:0});
+const cls = v => v>0?'up':(v<0?'down':'');
+let LIVE = null;
+
+// ---------- filters ----------
+function fillSymbols(){
+  const sel=$('#fSym'); const keep=sel.value; sel.innerHTML='<option value="">ALL SYMBOLS</option>';
+  for (const s of [...new Set(DATA.rows.map(r=>r.symbol))].sort()){ const o=document.createElement('option'); o.textContent=s; o.value=s; sel.append(o); }
+  sel.value=keep;
+}
+fillSymbols();
+$('#fSym').addEventListener('change', render); $('#fN').addEventListener('change', render);
+function filtered(){
+  let rows = DATA.rows; const s=$('#fSym').value, n=+$('#fN').value;
+  if (s) rows = rows.filter(r=>r.symbol===s);
+  if (n) rows = rows.slice(-n);
+  return rows;
+}
+function stats(rows){
+  const rs = rows.map(r=>r.r), wins = rs.filter(r=>r>0.1), losses = rs.filter(r=>r<-0.1), dec=wins.length+losses.length;
+  const wr = dec? wins.length/dec : 0, avgW = wins.length? wins.reduce((a,b)=>a+b,0)/wins.length:0, avgL = losses.length? losses.reduce((a,b)=>a+b,0)/losses.length:0;
+  const gw = rs.filter(r=>r>0).reduce((a,b)=>a+b,0), gl = -rs.filter(r=>r<0).reduce((a,b)=>a+b,0);
+  let cum=0,peak=0,dd=0; for (const r of rs){cum+=r;peak=Math.max(peak,cum);dd=Math.min(dd,cum-peak);}
+  let streak=0; for (let i=rs.length-1;i>=0;i--){ if (rs[i]>0) streak++; else break; }
+  return {n:rs.length, wr, total:rs.reduce((a,b)=>a+b,0), exp: dec? wr*avgW+(1-wr)*avgL:0, pf: gl>0? gw/gl:(gw>0?Infinity:0), dd, pnl: rows.reduce((a,r)=>a+r.pnl,0), streak, avgW, avgL};
+}
+function showTip(e,html){ tip.innerHTML=html; tip.style.display='block'; moveTip(e); }
+function moveTip(e){ tip.style.left=Math.min(e.clientX+12, innerWidth-tip.offsetWidth-8)+'px'; tip.style.top=Math.min(e.clientY+12, innerHeight-tip.offsetHeight-8)+'px'; }
+function hideTip(){ tip.style.display='none'; }
+function niceTicks(lo,hi,n){ const span=hi-lo||1, raw=span/n, mag=Math.pow(10,Math.floor(Math.log10(raw))), norm=raw/mag; const step=(norm<1.5?1:norm<3?2:norm<7?5:10)*mag; const out=[]; for (let v=Math.ceil(lo/step)*step; v<=hi+1e-9; v+=step) out.push(+v.toFixed(6)); return out; }
+
+// ---------- header + account ----------
+function header(st, rows){
+  const L = LIVE;
+  $('#hEquity').textContent = L? fmt$(L.equity) : '—';
+  $('#hToday').innerHTML = L && !L.offline ? `<span class="${cls(L.realized_r)}">${fmtR(L.realized_r)}</span>` : '—';
+  $('#hTrades').textContent = st.n; $('#hWin').textContent = (st.wr*100).toFixed(0)+'%';
+  $('#hTotal').innerHTML = `<span class="${cls(st.total)}">${fmtR(st.total)}</span>`;
+  const b=$('#hBadge');
+  if (L && L.offline){ b.className='badge off'; b.textContent='offline'; }
+  else if (L){ const stale=(Date.now()-new Date(L.updated))/60000>3; b.className='badge '+(stale?'off':'live'); b.textContent= stale?'stale':(L.day_done?'closed':'live'); }
+  else { b.className='badge sim'; b.textContent='no snapshot'; }
+  $('#accEquity').textContent = L? fmt$(L.equity) : '—';
+  $('#accMode').textContent = L? (L.mode.split(' ')[0]) : '';
+  $('#accSub').innerHTML = !L ? 'no snapshot yet · the bot writes one each tick (weekdays from 09:00 ET)'
+    : L.offline ? `${L.currency||''} account · bot offline · next session weekdays 09:00 ET`
+    : `${(L.equity-L.day_start_equity)>=0?'<span class="up">▲</span>':'<span class="down">▼</span>'} ${fmt$(L.equity-L.day_start_equity)} today · ${L.closed_today} closed · ${L.open.length} open`;
+  $('#accTrades').textContent = st.n; $('#accWin').textContent=(st.wr*100).toFixed(1)+'%';
+  $('#accExp').innerHTML = `<span class="${cls(st.exp)}">${fmtR(st.exp)}</span>`; $('#accPF').textContent = st.pf===Infinity?'∞':st.pf.toFixed(2);
+  $('#accOpen').textContent = L? L.open.length : 0;
+  const openR = L? L.open.reduce((a,o)=>a+o.r,0):0; $('#accOpenR').innerHTML = `<span class="${cls(openR)}">${fmtR(openR)}</span>`;
+  $('#accDD').innerHTML = `<span class="down">${st.dd.toFixed(1)}R</span>`;
+  $('#streakN').textContent = st.streak; $('#streakSub').textContent = st.streak? `wins in a row · best ${fmtR(Math.max(0,...rows.map(r=>r.r)))}` : 'no streak';
+}
+
+// ---------- candles ----------
+function candles(){
+  const el=$('#candles'); const C = LIVE && LIVE.chart;
+  if (!C || !C.bars || !C.bars.length){ $('#chSym').textContent='Chart'; return; }
+  $('#chSym').textContent = C.symbol; const last = C.last || C.bars[C.bars.length-1][4]; const first = C.bars[0][1];
+  $('#chLast').innerHTML = `<span class="neon">$${(+last).toFixed(2)}</span>`; const chg=(last-first)/first*100; $('#chChg').innerHTML = `<span class="${cls(chg)}">${chg>=0?'▲':'▼'}${Math.abs(chg).toFixed(2)}%</span>`;
+  const W=720,H=250,m={t:10,r:56,b:20,l:8}, iw=W-m.l-m.r, ih=H-m.t-m.b;
+  const bars=C.bars; const lo=Math.min(...bars.map(b=>b[3])), hi=Math.max(...bars.map(b=>b[2])); const pad=(hi-lo)*.08||1;
+  const y=v=>m.t+ih-(v-(lo-pad))/((hi+pad)-(lo-pad))*ih, x=i=>m.l+(i+0.5)*iw/bars.length, w=Math.max(2, iw/bars.length*0.6);
+  const ticks=niceTicks(lo-pad,hi+pad,5);
+  let s=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${C.symbol} 5-minute candles">`;
+  s+='<g class="grid">'+ticks.map(t=>`<line x1="${m.l}" x2="${W-m.r}" y1="${y(t)}" y2="${y(t)}"/>`).join('')+'</g>';
+  s+='<g class="axis">'+ticks.map(t=>`<text x="${W-m.r+6}" y="${y(t)+3}">${t.toFixed(2)}</text>`).join('')+'</g>';
+  bars.forEach((b,i)=>{ const up=b[4]>=b[1]; const top=y(Math.max(b[1],b[4])), h=Math.max(1,Math.abs(y(b[1])-y(b[4])));
+    s+=`<line class="candle wick ${up?'up':'down'}" x1="${x(i)}" x2="${x(i)}" y1="${y(b[2])}" y2="${y(b[3])}"/>`;
+    s+=`<rect class="candle ${up?'up':'down'}" x="${x(i)-w/2}" y="${top}" width="${w}" height="${h}" rx="1"/>`;
+    s+=`<rect class="hit" data-i="${i}" x="${x(i)-iw/bars.length/2}" y="${m.t}" width="${iw/bars.length}" height="${ih}"/>`; });
+  const ly=y(last); s+=`<line class="cross" x1="${m.l}" x2="${W-m.r}" y1="${ly}" y2="${ly}"/>`;
+  s+=`<g class="tag"><rect x="${W-m.r-2}" y="${ly-9}" width="${m.r}" height="18" rx="2"/><text x="${W-m.r+4}" y="${ly+4}">${(+last).toFixed(2)}</text></g>`;
+  const step=Math.max(1,Math.ceil(bars.length/8)); s+='<g class="axis">'+bars.map((b,i)=> i%step===0? `<text x="${x(i)}" y="${H-6}" text-anchor="middle">${b[0]}</text>`:'').join('')+'</g>';
+  s+='</svg>'; el.innerHTML=s;
+  el.querySelectorAll('.hit').forEach(h=>{ const b=bars[+h.dataset.i];
+    h.addEventListener('mouseenter',e=>showTip(e,`<b>${C.symbol} ${b[0]}</b><br>O ${b[1].toFixed(2)} H ${b[2].toFixed(2)} L ${b[3].toFixed(2)} C ${b[4].toFixed(2)}<br>vol ${Math.round(b[5]).toLocaleString()}`));
+    h.addEventListener('mousemove',moveTip); h.addEventListener('mouseleave',hideTip); });
+}
+
+// ---------- watchlist ----------
+function watchlist(){
+  const L=LIVE; const rows = L? L.watchlist : [];
+  $('#wlCount').textContent = rows.length;
+  $('#wl').innerHTML = '<tr><th class="l">Sym</th><th>Last</th><th>Gap</th><th class="l">State</th></tr>' +
+    (rows.map(w=>{ const o = L.open.find(p=>p.symbol===w.symbol); return `<tr><td class="l sym">${w.symbol}</td><td>${(+w.price).toFixed(2)}</td><td class="${cls(w.gap_pct)}">${w.gap_pct? (w.gap_pct>0?'+':'')+w.gap_pct.toFixed(1)+'%':'—'}</td><td class="l">${o? `<span class="neon">IN ${fmtR(o.r)}</span>`:'<span class="sub">watching</span>'}</td></tr>`; }).join('')
+     || `<tr><td colspan="4" class="empty">${L? (L.scanned?'nothing passed the scan':'scan pending') : 'offline'}</td></tr>`);
+}
+
+// ---------- tape ----------
+function tape(rows){
+  const el=$('#tape'); const recent=rows.slice(-14); el.innerHTML='';
+  if (!recent.length){ el.innerHTML='<div class="empty">Trade tape</div>'; return; }
+  const W=1400,H=118; let cum=0; const pts=rows.map(r=>({v:(cum+=r.r)})); const lo=Math.min(0,...pts.map(p=>p.v)), hi=Math.max(0,...pts.map(p=>p.v));
+  const y=v=>12+(H-24)-(v-lo)/((hi-lo)||1)*(H-24), x=i=>i/(Math.max(1,pts.length-1))*W;
+  let s=`<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none"><path d="${pts.map((p,i)=>(i?'L':'M')+x(i).toFixed(1)+','+y(p.v).toFixed(1)).join(' ')}" fill="none" stroke="var(--neon)" stroke-width="1.5" opacity=".55" stroke-dasharray="2 3"/>`;
+  s+=pts.map((p,i)=>`<circle cx="${x(i)}" cy="${y(p.v)}" r="1.5" fill="${p.v>=0?'var(--up)':'var(--down)'}" opacity=".7"/>`).join('')+'</svg>'; el.innerHTML=s;
+  recent.forEach((r,i)=>{ const d=document.createElement('div'); const big=Math.abs(r.r)>=1; d.className='pill '+(r.r>=0?'up':'down')+(big?' big':''); d.textContent=`${r.symbol} ${fmtR(r.r)}`;
+    d.style.left=(6+((i+0.5)/recent.length)*88)+'%'; d.style.top=(28+((i*37)%56))+'%'; d.title=`#${r.n} ${r.date} ${r.entry_time}→${r.exit_time} · ${fmt$(r.pnl)} · ${r.exits}`; el.append(d); });
+}
+
+// ---------- cumulative R ----------
+function curve(rows){
+  const el=$('#curve'); if (!rows.length){ el.innerHTML='<div class="empty">No closed trades yet.</div>'; return; }
+  const W=460,H=190,m={t:10,r:10,b:18,l:34},iw=W-m.l-m.r,ih=H-m.t-m.b; let c=0; const pts=[{i:0,v:0}]; rows.forEach((r,i)=>{c+=r.r;pts.push({i:i+1,v:c,r});});
+  const vs=pts.map(p=>p.v), lo=Math.min(0,...vs), hi=Math.max(0,...vs), pad=(hi-lo)*.08||1, y0=lo-pad, y1=hi+pad; const x=i=>m.l+i/rows.length*iw, y=v=>m.t+ih-(v-y0)/(y1-y0)*ih; const ticks=niceTicks(y0,y1,4);
+  $('#eqTotal').innerHTML=`<span class="${cls(c)}">${fmtR(c)}</span>`;
+  const line=pts.map((p,k)=>(k?'L':'M')+x(p.i).toFixed(1)+','+y(p.v).toFixed(1)).join(' ');
+  let s=`<svg viewBox="0 0 ${W} ${H}"><defs><linearGradient id="eqg" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#22f5a3" stop-opacity=".28"/><stop offset="1" stop-color="#22f5a3" stop-opacity="0"/></linearGradient></defs>`;
+  s+='<g class="grid">'+ticks.map(t=>`<line x1="${m.l}" x2="${W-m.r}" y1="${y(t)}" y2="${y(t)}"/>`).join('')+'</g>';
+  s+='<g class="axis">'+ticks.map(t=>`<text x="${m.l-4}" y="${y(t)+3}" text-anchor="end">${t>0?'+':''}${t}R</text>`).join('')+'</g>';
+  s+=`<path class="eqfill" d="${line} L${x(rows.length)},${y(y0)} L${x(0)},${y(y0)} Z"/><path class="eq" d="${line}"/>`;
+  s+=`<line class="cross" id="cx" y1="${m.t}" y2="${m.t+ih}" style="display:none"/><circle id="cd" r="3.5" fill="#fff" style="display:none"/><rect class="hit" id="ch" x="${m.l}" y="${m.t}" width="${iw}" height="${ih}"/></svg>`;
+  el.innerHTML=s; const svg=el.querySelector('svg'), ch=el.querySelector('#ch'), cx=el.querySelector('#cx'), cd=el.querySelector('#cd');
+  ch.addEventListener('mousemove',e=>{ const pt=svg.createSVGPoint(); pt.x=e.clientX; pt.y=e.clientY; const p=pt.matrixTransform(svg.getScreenCTM().inverse()); const i=Math.max(0,Math.min(rows.length,Math.round((p.x-m.l)/iw*rows.length))); const q=pts[i];
+    cx.setAttribute('x1',x(q.i)); cx.setAttribute('x2',x(q.i)); cx.style.display=''; cd.setAttribute('cx',x(q.i)); cd.setAttribute('cy',y(q.v)); cd.style.display='';
+    showTip(e, q.r? `after #${q.r.n} ${q.r.symbol}: <b>${fmtR(q.v)}</b><br>this trade ${fmtR(q.r.r)}`:'start: <b>0R</b>'); });
+  ch.addEventListener('mouseleave',()=>{cx.style.display='none';cd.style.display='none';hideTip();});
+}
+
+// ---------- positions + trades table ----------
+function tradesTable(rows){
+  const L=LIVE; let h='<tr><th class="l">#</th><th class="l">Sym</th><th class="l">Time</th><th>Qty</th><th>Entry</th><th>Stop</th><th>Exit</th><th>R</th><th>P&amp;L</th><th class="l">Status</th></tr>';
+  const open=(L?L.open:[]).map(o=>`<tr><td class="l neon">●</td><td class="l" style="color:#fff;font-weight:700">${o.symbol}</td><td class="l">${o.entry_time}</td><td>${o.qty}${o.partial?' ½':''}</td><td>${o.entry.toFixed(2)}</td><td>${o.stop.toFixed(2)}</td><td>${o.price.toFixed(2)}</td><td class="${cls(o.r)}"><b>${fmtR(o.r)}</b></td><td class="${cls(o.pnl)}">${fmt$(o.pnl)}</td><td class="l neon">OPEN</td></tr>`).join('');
+  const closed=[...rows].reverse().slice(0,40).map(r=>`<tr><td class="l">${r.n}</td><td class="l" style="color:#fff;font-weight:700">${r.symbol}</td><td class="l">${r.date.slice(5)} ${r.entry_time}</td><td>${r.qty}</td><td>${r.entry.toFixed(2)}</td><td>${r.stop.toFixed(2)}</td><td>${r.exit==null?'—':r.exit.toFixed(2)}</td><td class="${cls(r.r)}"><b>${fmtR(r.r)}</b></td><td class="${cls(r.pnl)}">${fmt$(r.pnl)}</td><td class="l" style="color:var(--text-3)">${r.exits.split(',').map(x=>x.trim().split(' ')[0]).join('/')}</td></tr>`).join('');
+  $('#trades').innerHTML = h + open + (closed || (open?'':'<tr><td colspan="10" class="empty">No trades yet.</td></tr>'));
+}
+
+// ---------- analytics ----------
+function miniBars(el, vals, labels, tipFn){
+  const W=300,H=70,m={t:4,r:2,b:12,l:2},iw=W-m.l-m.r,ih=H-m.t-m.b; if (!vals.length){ el.innerHTML='<div class="empty">—</div>'; return; }
+  const lo=Math.min(0,...vals), hi=Math.max(0,...vals); const y=v=>m.t+ih-(v-lo)/((hi-lo)||1)*ih; const bw=iw/vals.length, w=Math.max(1,bw-1.5);
+  let s=`<svg viewBox="0 0 ${W} ${H}" class="mini"><line x1="${m.l}" x2="${W-m.r}" y1="${y(0)}" y2="${y(0)}" stroke="#2a1233"/>`;
+  vals.forEach((v,i)=>{ const top=Math.min(y(v),y(0)), h=Math.max(1,Math.abs(y(v)-y(0))); s+=`<rect class="rbar ${v>=0?'up':'down'}" data-i="${i}" x="${m.l+i*bw}" y="${top}" width="${w}" height="${h}" rx="1"/>`; });
+  const step=Math.max(1,Math.ceil(vals.length/6)); s+='<g class="axis">'+labels.map((l,i)=> i%step===0? `<text x="${m.l+i*bw+w/2}" y="${H-2}" text-anchor="middle">${l}</text>`:'').join('')+'</g></svg>';
+  el.innerHTML=s; el.querySelectorAll('.rbar').forEach(b=>{ b.addEventListener('mouseenter',e=>showTip(e,tipFn(+b.dataset.i))); b.addEventListener('mousemove',moveTip); b.addEventListener('mouseleave',hideTip); });
+}
+function analytics(rows){
+  const last=rows.slice(-40); miniBars($('#rbars'), last.map(r=>r.r), last.map(r=>'#'+r.n), i=>`<b>#${last[i].n} ${last[i].symbol}</b> ${fmtR(last[i].r)}`);
+  const hours={}; rows.forEach(r=>{ const h=r.entry_time.slice(0,2); hours[h]=(hours[h]||0)+r.r; }); const hk=Object.keys(hours).sort();
+  miniBars($('#hourbars'), hk.map(k=>hours[k]), hk, i=>`<b>${hk[i]}:00</b> ${fmtR(hours[hk[i]])}`);
+  const bins=[-2,-1,-0.5,0,0.5,1,2,3], counts=new Array(bins.length+1).fill(0); rows.forEach(r=>{ let k=bins.findIndex(b=>r.r<b); counts[k<0?bins.length:k]++; });
+  const labels=['<-2','-2','-1','-.5','0','.5','1','2','3+']; miniBars($('#dist'), counts, labels, i=>`<b>${labels[i]}R</b>: ${counts[i]} trades`);
+  $('#dist').querySelectorAll('.rbar').forEach((b,i)=>{ b.classList.remove('up','down'); b.classList.add(i<4?'down':'up'); });
+}
+
+// ---------- log ----------
+function logPanel(rows){
+  const L=LIVE; let lines = L && L.log && L.log.length ? L.log : rows.slice(-12).map(r=>`${r.date} ${r.exit_time} I CLOSED ${r.symbol} ${fmtR(r.r)} (${fmt$(r.pnl)}) ${r.exits}`);
+  $('#logMeta').textContent = L? `updated ${new Date(L.updated).toLocaleTimeString()}` : 'from journal';
+  const esc=t=>t.replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+  $('#log').innerHTML = lines.map(l=>{ const m=l.match(/^(\S+)\s+([IWE])\s+(.*)$/); if(!m) return `<div>${esc(l)}</div>`; const hi=/ENTRY|CLOSED|BUY|SELL|stop hit|flatten|SIGNAL/i.test(m[3]); return `<div><span class="t">${esc(m[1])}</span> <span class="${m[2]}">${m[2]}</span> <span class="${hi?'hi':''}">${esc(m[3])}</span></div>`; }).join('');
+  const box=$('#log'); box.scrollTop=box.scrollHeight;
+}
+
+function clock(){ const now=new Date(); try { $('#clock').textContent = now.toLocaleTimeString('en-US',{timeZone:'America/New_York',hour12:false})+' ET'; } catch(e){ $('#clock').textContent=now.toLocaleTimeString(); } }
+setInterval(clock,1000); clock();
+
+function render(){ const rows=filtered(); const st=stats(rows); header(st,rows); candles(); watchlist(); tape(rows); curve(rows); tradesTable(rows); analytics(rows); logPanel(rows); }
+const src = name => DATA_BASE ? `${DATA_BASE}/${name}?t=${Date.now()}` : name;
+async function live(){
+  try { const r=await fetch(src('live.json'),{cache:'no-store'}); if(r.ok){ LIVE=await r.json(); } } catch(e){}
+  if (DATA_BASE){ try { const r=await fetch(src('trades.json'),{cache:'no-store'}); if(r.ok){ DATA=await r.json(); fillSymbols(); } } catch(e){} }
+  render();
+}
+live(); setInterval(live, 30000);
+</script>
+</body>
+</html>
