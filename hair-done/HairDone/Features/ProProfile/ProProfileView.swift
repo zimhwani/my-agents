@@ -594,7 +594,6 @@ private struct ProfileWorkViewer: View {
             .screenGutter()
             .padding(.top, Space.s)
         }
-        .preferredColorScheme(.dark)
     }
 }
 
