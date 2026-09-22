@@ -120,24 +120,59 @@ TJL_GRID: dict[str, list] = {
 }
 
 
+CRYPTO_BREAKOUT_GRID: dict[str, list] = {
+    "breakout_bars": [12, 24, 48],
+    "min_rel_volume": [1.0, 1.5],
+    "stop_atr_mult": [1.5, 2.5],
+    "trail": ["atr_2.5", "atr_4.0"],
+    "partial_r": [1.0, 2.0],
+}
+
+
+CRYPTO_PULLBACK_GRID: dict[str, list] = {
+    "rsi_buy": [25.0, 30.0, 35.0],
+    "trend_ema_bars": [100, 200],
+    "stop_atr_mult": [1.5, 2.5],
+    "trail": ["atr_2.5", "atr_4.0"],
+    "partial_r": [1.0, 2.0],
+}
+
+
+def default_grid(params) -> dict[str, list]:
+    name = params.__class__.__name__
+    if name == "TJLRules":
+        return TJL_GRID
+    if name == "CryptoRules":
+        return CRYPTO_PULLBACK_GRID if getattr(params, "mode", "") == "pullback" else CRYPTO_BREAKOUT_GRID
+    return DEFAULT_GRID
+
+
 def sweep(settings, params, bars, grid: dict[str, list] | None = None, equity: float = 100_000,
-          daily=None):
+          daily=None, fee_bps: float = 0.0, progress=None):
     """Backtest every combination in ``grid``; returns rows sorted by expectancy.
-    ``params`` is a StrategyParams (ORB) or a TJLRules (Trend Join Long)."""
+    ``params`` is a StrategyParams (ORB), a TJLRules (Trend Join Long) or CryptoRules."""
     from .backtest import Backtester
 
-    is_tjl = params.__class__.__name__ == "TJLRules"
-    grid = grid or (TJL_GRID if is_tjl else DEFAULT_GRID)
+    kind = params.__class__.__name__
+    grid = grid or default_grid(params)
     keys = list(grid)
     rows = []
-    for combo in itertools.product(*(grid[k] for k in keys)):
+    combos = list(itertools.product(*(grid[k] for k in keys)))
+    for i, combo in enumerate(combos, 1):
         p = replace(params, **dict(zip(keys, combo)))
-        if is_tjl:
+        if kind == "TJLRules":
             from .tjl import loaded_from_rules
             loaded = loaded_from_rules(p)
             loaded.apply(settings)
             p = loaded
-        res = Backtester(settings, p, bars, daily=daily, equity=equity).run()
+        elif kind == "CryptoRules":
+            from .crypto import loaded_from_rules as crypto_loaded
+            loaded = crypto_loaded(p)
+            loaded.apply(settings)
+            p = loaded
+        if progress:
+            progress(i, len(combos), dict(zip(keys, combo)))
+        res = Backtester(settings, p, bars, daily=daily, equity=equity, fee_bps=fee_bps).run()
         st = res.stats
         rows.append({**dict(zip(keys, combo)), "trades": st.trades, "win_rate": st.win_rate,
                      "total_r": st.total_r, "expectancy": st.expectancy_r,

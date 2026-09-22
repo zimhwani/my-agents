@@ -496,31 +496,43 @@ def cmd_analyze(args) -> None:
 
 def cmd_sweep(args) -> None:
     s = _settings(args)
-    from .analyze import DEFAULT_GRID, TJL_GRID, format_sweep, sweep
+    from .analyze import default_grid, format_sweep, sweep
     from .data import load_daily_dir, load_dir
     import json as _json
+    import logging as _logging
     strategy_file = Path(args.strategy) if args.strategy else s.strategy_file
     raw = _json.loads(strategy_file.read_text()) if strategy_file.exists() else {}
-    if "strategy_name" in raw or "daily_filters" in raw:
+    crypto = raw.get("market") == "crypto"
+    if crypto:
+        from .crypto import CryptoRules
+        params = CryptoRules.load(strategy_file)
+        suffix = f"_{params.bar_minutes}min.csv"
+    elif "strategy_name" in raw or "daily_filters" in raw:
         from .tjl import TJLRules
         params = TJLRules.load(strategy_file)
-        default_grid = TJL_GRID
+        suffix = "_5min.csv"
     else:
         params = StrategyParams.load(strategy_file)
-        default_grid = DEFAULT_GRID
-    bars = load_dir(args.data)
+        suffix = "_5min.csv"
+    bars = load_dir(args.data, suffix=suffix)
     daily = load_daily_dir(args.data) or None
+    if crypto:
+        bars = {k.replace("-", "/"): v for k, v in bars.items()}
+        daily = {k.replace("-", "/"): v for k, v in daily.items()} if daily else None
     if args.symbols:
         bars = {k: v for k, v in bars.items() if k in args.symbols}
     if not bars:
-        print(f"No *_5min.csv files in {args.data}. Run `fetch-data` first.")
+        print(f"No *{suffix} files in {args.data}. Run `fetch-data`/`fetch-crypto` first.")
         sys.exit(1)
-    grid = _json.loads(args.grid) if args.grid else default_grid
+    grid = _json.loads(args.grid) if args.grid else default_grid(params)
+    fee_bps = args.fee_bps if args.fee_bps is not None else (25.0 if crypto else 0.0)
     n = 1
     for v in grid.values():
         n *= len(v)
-    print(f"Sweeping {n} combinations over {len(bars)} symbols (base: {strategy_file})...")
-    rows = sweep(s, params, bars, grid, equity=args.equity, daily=daily)
+    print(f"Sweeping {n} combinations over {len(bars)} symbols (base: {strategy_file}, fees {fee_bps:.0f} bps/side)...")
+    _logging.getLogger("tradebot").setLevel(_logging.WARNING)  # the sim's per-fill INFO lines would drown the table
+    rows = sweep(s, params, bars, grid, equity=args.equity, daily=daily, fee_bps=fee_bps,
+                 progress=lambda i, n, combo: print(f"  [{i}/{n}] {combo}", flush=True))
     print(format_sweep(rows))
     print("\nCaveat: a small sample rewards luck. Prefer settings that win for a reason you can explain.")
 
@@ -640,6 +652,7 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--equity", type=float, default=100_000)
     p.add_argument("--strategy", help="strategy file to sweep (default: STRATEGY_FILE / rules.json)")
     p.add_argument("--grid", help='JSON, e.g. \'{"min_rel_volume":[1.5,2],"opening_range_minutes":[15,30]}\'')
+    p.add_argument("--fee-bps", type=float, default=None, help="per-side commission in bps (default 25 for crypto)")
     p = sub.add_parser("dashboard", help="build the R-multiple dashboard from the trade journal")
     p.add_argument("--journal")
     p.add_argument("--out")

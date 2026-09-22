@@ -228,3 +228,49 @@ def test_min_initial_risk_widens_tiny_stops():
     a, b = tight.evaluate("BTC/USD", bars, [], now), wide.evaluate("BTC/USD", bars, [], now)
     assert a is not None and b is not None and a.entry == b.entry
     assert (a.entry - a.stop) / a.entry < 0.008 and abs((b.entry - b.stop) / b.entry - 0.008) < 1e-6
+
+
+def test_rsi_and_pullback_signal():
+    from tradebot.indicators import rsi
+    assert rsi([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16], 14) == 100.0
+    down = [100 - i for i in range(20)]
+    assert rsi(down, 14) == pytest.approx(0.0)
+    assert rsi([1.0, 2.0], 14) is None
+    # uptrend (above EMA), a sharp dip that drives RSI under 30, then the first green bar
+    s = CryptoMomentum(CryptoRules(mode="pullback", trend_ema_bars=100, rsi_bars=14, rsi_buy=30))
+    now = clock.at(DAY, clock.parse_hhmm("00:00"))
+    bars = []
+    t = clock.at(DAY, clock.parse_hhmm("00:00")) - timedelta(minutes=15 * 211)
+    for i in range(200):  # steady uptrend, +0.05/bar: EMA100 sits ~2.5 below price
+        p = 100 + i * 0.05
+        bars.append(Bar(t, p, p + 0.08, p - 0.02, p + 0.05, 100.0))
+        t += timedelta(minutes=15)
+    px = bars[-1].close
+    dip = []
+    for i in range(10):  # ten red bars of -0.15: RSI ~23, price still above the EMA
+        o, c = px, px - 0.15
+        dip.append(Bar(t, o, o + 0.01, c - 0.02, c, 100.0))
+        px = c
+        t += timedelta(minutes=15)
+    t -= timedelta(minutes=15)
+    t += timedelta(minutes=15)
+    turn = Bar(t, px, px + 0.2, px - 0.01, px + 0.15, 150.0)
+    series = bars + dip + [turn]
+    sig, why = s.evaluate_explained("BTC/USD", series, [], turn.time + timedelta(minutes=15))
+    assert why == "signal" and sig is not None and sig.stop < sig.entry and "pullback" in sig.reason
+    # still falling -> no_turn; no dip -> no_dip
+    assert s.explain("BTC/USD", bars + dip, dip[-1].time + timedelta(minutes=15)) == "no_turn"
+    assert s.explain("BTC/USD", bars, bars[-1].time + timedelta(minutes=15)) == "no_dip"
+
+
+def test_crypto_sweep_smoke(settings):
+    from tradebot.analyze import CRYPTO_BREAKOUT_GRID, CRYPTO_PULLBACK_GRID, default_grid, sweep
+    rules = CryptoRules.load("crypto_15m.json")
+    assert default_grid(rules) is CRYPTO_BREAKOUT_GRID
+    assert default_grid(CryptoRules.load("crypto_pullback.json")) is CRYPTO_PULLBACK_GRID
+    bars = {s: synthetic_continuous(s, 12, 15, seed=i + 1, start_price=100 * (i + 1),
+                                    end=clock.at(DAY, clock.parse_hhmm("00:00")))
+            for i, s in enumerate(["BTC/USD", "ETH/USD"])}
+    settings.max_risk_per_trade_usd = 1e9
+    rows = sweep(settings, rules, bars, {"breakout_bars": [12, 20], "trail": ["atr_3.0"]}, equity=10_000, fee_bps=25.0)
+    assert len(rows) == 2 and {"trades", "total_r", "profit_factor"} <= set(rows[0])

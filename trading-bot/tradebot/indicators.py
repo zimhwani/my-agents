@@ -55,3 +55,22 @@ def vwap(bars: list[Bar]) -> float | None:
     if vol <= 0:
         return None
     return sum(b.typical * b.volume for b in bars) / vol
+
+
+def rsi(values: list[float], period: int = 14) -> float | None:
+    """Wilder's RSI of the last value; None until there is enough history."""
+    if period <= 0 or len(values) < period + 1:
+        return None
+    gains, losses = 0.0, 0.0
+    for a, b in zip(values[:period], values[1:period + 1]):
+        d = b - a
+        gains += max(d, 0.0)
+        losses += max(-d, 0.0)
+    avg_gain, avg_loss = gains / period, losses / period
+    for a, b in zip(values[period:-1], values[period + 1:]):
+        d = b - a
+        avg_gain = (avg_gain * (period - 1) + max(d, 0.0)) / period
+        avg_loss = (avg_loss * (period - 1) + max(-d, 0.0)) / period
+    if avg_loss == 0:
+        return 100.0
+    return 100.0 - 100.0 / (1.0 + avg_gain / avg_loss)
