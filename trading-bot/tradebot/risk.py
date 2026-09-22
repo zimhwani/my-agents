@@ -39,11 +39,12 @@ class DayStats:
 
 
 class RiskGate:
-    def __init__(self, settings: Settings):
+    def __init__(self, settings: Settings, honour_kill_switch: bool = True):
         self.s = settings
+        self.honour_kill_switch = honour_kill_switch  # backtests turn this off: the KILL file is for the live bot
 
     def kill_switch_on(self) -> bool:
-        return Path(self.s.kill_switch_file).exists()
+        return self.honour_kill_switch and Path(self.s.kill_switch_file).exists()
 
     def blockers(self, open_trades: list[TradeRecord], day: DayStats,
                  equity: float, now: datetime) -> list[str]:

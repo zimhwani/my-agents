@@ -83,6 +83,8 @@ def test_continuous_backtest_on_synthetic(settings):
     bars = {s: synthetic_continuous(s, 30, 15, seed=i + 1, start_price=100 * (i + 1),
                                     end=clock.at(DAY, clock.parse_hhmm("00:00")))
             for i, s in enumerate(["BTC/USD", "ETH/USD"])}
+    (settings.data_dir).mkdir(parents=True, exist_ok=True)
+    settings.kill_switch_file.touch()  # a live kill switch must not affect the simulation
     res = Backtester(settings, ls, bars).run()
     assert res.trades, "expected breakout trades on synthetic momentum data"
     for t in res.trades:

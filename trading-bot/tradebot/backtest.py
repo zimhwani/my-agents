@@ -66,7 +66,7 @@ class Backtester:
         self.journal = Journal(None)
         self.exec = Executor(self.sim, self.journal, Notifier(quiet=True))
         self.exits = ExitManager(self.loaded.exits, None if self.loaded.continuous else settings.force_close_time)
-        self.gate = RiskGate(settings)
+        self.gate = RiskGate(settings, honour_kill_switch=False)  # a live KILL file must not blank a backtest
 
     def _atr(self, symbol: str, now: datetime) -> float:
         bars = self.sim.intraday_bars(symbol, self.bar_minutes, 5)
