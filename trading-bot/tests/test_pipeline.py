@@ -1,6 +1,7 @@
 """End-to-end: backtester, executor on the simulator, dashboard, and the live
 loop driven tick-by-tick against SimBroker."""
 
+import pytest
 from datetime import timedelta
 
 from conftest import DAY, daily_history, session
@@ -168,3 +169,9 @@ def test_bars_for_refetches_until_newest_bar_arrives(settings, params, tmp_path)
     assert len(calls) == 6 and loop._bars_at["GOOD"] == t2
     loop.bars_for("GOOD", t2 + loop._fresh_grace() + timedelta(seconds=30))
     assert len(calls) == 6
+
+
+def test_sim_broker_fee_is_adverse_on_both_sides():
+    sim = SimBroker(equity=10_000, slippage_bps=0.0, fee_bps=25.0)
+    assert sim._slip(100.0, buying=True) == pytest.approx(100.25)
+    assert sim._slip(100.0, buying=False) == pytest.approx(99.75)

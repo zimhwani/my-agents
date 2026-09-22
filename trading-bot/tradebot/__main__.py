@@ -363,7 +363,7 @@ def cmd_fetch_crypto(args) -> None:
     from datetime import timedelta
     from .alpaca_broker import AlpacaCryptoData, fname
     from .data import save_csv
-    loaded = load_strategy(s.strategy_file, s.allow_shorts)
+    loaded = load_strategy(args.strategy or s.strategy_file, s.allow_shorts)
     symbols = args.symbols or loaded.universe or s.universe
     minutes = getattr(loaded.strategy, "bar_minutes", 15)
     d = AlpacaCryptoData(s.alpaca_api_key, s.alpaca_api_secret)
@@ -465,11 +465,12 @@ def cmd_backtest(args) -> None:
         if loaded.scan_kind == "gap" and not daily:
             print("Note: no *_1d.csv daily files found; the 200-day SMA filter needs them. "
                   "Re-run `fetch-data` to download daily history.")
-    bt = Backtester(s, loaded, bars, daily=daily, equity=args.equity)
+    fee_bps = args.fee_bps if args.fee_bps is not None else (25.0 if loaded.continuous else 0.0)
+    bt = Backtester(s, loaded, bars, daily=daily, equity=args.equity, fee_bps=fee_bps)
     res = bt.run()
     st = res.stats
     params = loaded
-    print(f"\n{loaded.name} · {res.days} days · {len(bars)} symbols · {s.describe()}")
+    print(f"\n{loaded.name} · {res.days} days · {len(bars)} symbols · fees {fee_bps:.0f} bps/side · {s.describe()}")
     print(f"trades {st.trades}  win {st.win_rate*100:.0f}%  total {st.total_r:+.1f}R  "
           f"avg {st.avg_r:+.2f}R  expectancy {st.expectancy_r:+.2f}R  PF {st.profit_factor:.2f}  "
           f"maxDD {st.max_drawdown_r:.1f}R")
@@ -617,6 +618,7 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--days", type=int, default=365)
     p.add_argument("--symbols", nargs="*")
     p.add_argument("--out", default="data/crypto")
+    p.add_argument("--strategy", help="rules file whose bar size/universe to fetch (default STRATEGY_FILE)")
     p = sub.add_parser("crypto-explain", help="why isn't the crypto bot trading? count the gate that rejected each bar")
     p.add_argument("--days", type=int, default=3)
     p.add_argument("--symbols", nargs="*")
@@ -626,6 +628,8 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--symbols", nargs="*")
     p.add_argument("--days", type=int, default=60, help="(demo) days of synthetic data")
     p.add_argument("--equity", type=float, default=100_000)
+    p.add_argument("--fee-bps", type=float, default=None,
+                   help="per-side commission in bps (default 25 for crypto, 0 for equities)")
     p.add_argument("--demo", action="store_true")
     p.add_argument("--strategy", help="strategy file (default: STRATEGY_FILE / rules.json)")
     p = sub.add_parser("analyze", help="break a backtest (or live) journal down by exit, time, filters, symbol")

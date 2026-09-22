@@ -135,7 +135,7 @@ class CryptoMomentum:
         prev_window = bars[-(r.breakout_bars + 2):-2]
         if prev.close > max(b.high for b in prev_window):
             return None, "not_first_bar"  # already broke out on the previous bar; take the first bar only
-        closes = [b.close for b in bars]
+        closes = [b.close for b in bars[-(r.trend_ema_bars * 4):]]  # 4x warm-up is plenty; keeps replays fast
         trend = ema(closes, r.trend_ema_bars)
         if trend is None or last.close <= trend:
             return None, "below_ema"

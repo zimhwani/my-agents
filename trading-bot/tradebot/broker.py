@@ -290,6 +290,7 @@ class IBBroker:
 class SimBroker:
     equity: float = 100_000.0
     slippage_bps: float = 2.0
+    fee_bps: float = 0.0  # per-side commission modelled as an adverse price adjustment (Alpaca crypto ~25)
     prices: dict[str, float] = field(default_factory=dict)
     daily: dict[str, list[Bar]] = field(default_factory=dict)
     intraday: dict[str, list[Bar]] = field(default_factory=dict)
@@ -353,8 +354,8 @@ class SimBroker:
 
     # -- fills ---------------------------------------------------------------
     def _slip(self, price: float, buying: bool) -> float:
-        adj = price * self.slippage_bps / 10_000.0
-        return round(price + adj if buying else price - adj, 4)
+        adj = price * (self.slippage_bps + self.fee_bps) / 10_000.0
+        return round(price + adj if buying else price - adj, 6)
 
     def _apply_fill(self, symbol: str, signed_qty: int, price: float) -> None:
         pos = self._positions.get(symbol, PositionInfo(symbol, 0, 0.0))
