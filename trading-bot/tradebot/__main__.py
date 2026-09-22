@@ -423,6 +423,29 @@ def cmd_crypto_explain(args) -> None:
           " ones the live bot would have bought (before cooldown/max positions).")
 
 
+def cmd_arb_monitor(args) -> None:
+    """Measure cross-venue crypto spreads (Coinbase, Kraken, Alpaca) net of fees; trades nothing."""
+    s = _settings(args)
+    _logging(s)
+    import asyncio
+    from .arbscan import DEFAULT_FEES_BPS, SpreadBook, run_monitor
+    try:
+        import websockets  # noqa: F401
+    except ImportError:
+        raise SystemExit("pip install websockets   (needed for the Coinbase/Kraken feeds)")
+    loaded = load_strategy(s.strategy_file, s.allow_shorts)
+    symbols = args.symbols or loaded.universe or s.universe
+    fees = dict(DEFAULT_FEES_BPS)
+    for item in args.fees or []:
+        venue, bps = item.split("=", 1)
+        fees[venue.strip().lower()] = float(bps)
+    book = SpreadBook(fees_bps=fees, dislocation_pct=args.dislocation_pct)
+    print(f"Monitoring {len(symbols)} pairs on coinbase + kraken (websocket) + alpaca (1s poll); "
+          f"fees bps {fees}; report every {args.report_every}s; ctrl-c to stop")
+    asyncio.run(run_monitor(book, symbols, s.alpaca_api_key, s.alpaca_api_secret, s.data_dir / "arb_events.csv",
+                            report_every=args.report_every, duration=args.minutes * 60 if args.minutes else None))
+
+
 def cmd_backtest(args) -> None:
     s = _settings(args)
     _logging(s)
@@ -635,6 +658,12 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--days", type=int, default=3)
     p.add_argument("--symbols", nargs="*")
     p.add_argument("--strategy", help="rules file to replay instead of STRATEGY_FILE (e.g. crypto_15m.json)")
+    p = sub.add_parser("arb-monitor", help="measure cross-venue crypto spreads net of fees (Coinbase/Kraken/Alpaca)")
+    p.add_argument("--symbols", nargs="*")
+    p.add_argument("--minutes", type=float, default=0, help="stop after N minutes (default: run until ctrl-c)")
+    p.add_argument("--report-every", type=int, default=60)
+    p.add_argument("--dislocation-pct", type=float, default=0.5)
+    p.add_argument("--fees", nargs="*", help="override taker fees, e.g. alpaca=25 coinbase=60 kraken=40")
     p = sub.add_parser("backtest", help="run the strategy over CSV history (or --demo synthetic data)")
     p.add_argument("--data", default="data/bars")
     p.add_argument("--symbols", nargs="*")
@@ -668,7 +697,7 @@ def main(argv: list[str] | None = None) -> None:
      "telegram-test": cmd_telegram_test, "fetch-data": cmd_fetch_data, "backtest": cmd_backtest,
      "analyze": cmd_analyze, "sweep": cmd_sweep, "dashboard": cmd_dashboard,
      "fetch-gappers": cmd_fetch_gappers, "fetch-crypto": cmd_fetch_crypto,
-     "crypto-explain": cmd_crypto_explain}[args.cmd](args)
+     "crypto-explain": cmd_crypto_explain, "arb-monitor": cmd_arb_monitor}[args.cmd](args)
 
 
 if __name__ == "__main__":
