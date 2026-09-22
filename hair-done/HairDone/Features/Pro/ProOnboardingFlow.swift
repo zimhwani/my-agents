@@ -208,7 +208,7 @@ struct ProOnboardingFlow: View {
                 .card(padding: Space.l)
             }
             SecondaryButton(title: "Add a service", symbol: "plus") { addingService = true }
-            Text("We've started you with common ones for \(specialties.map(\.specialtyTitle.lowercased).joined(separator: " and ")). Change anything.")
+            Text("We've started you with common ones for \(specialties.map { $0.specialtyTitle.lowercased() }.joined(separator: " and ")). Change anything.")
                 .font(HDFont.caption).foregroundStyle(Palette.inkSoft)
         }
     }

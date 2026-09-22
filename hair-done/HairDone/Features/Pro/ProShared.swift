@@ -83,6 +83,12 @@ enum ProFlow {
         return "Auto-declines in \(minutes.minutesLabel)"
     }
 
+    /// "today", "tomorrow" or "Tue 24 Sep", for the middle of a sentence.
+    static func inSentence(_ date: Date) -> String {
+        let friendly = date.friendlyDay
+        return friendly == date.shortDay ? friendly : friendly.lowercased()
+    }
+
     /// A stable seed for a client's avatar tint. `hashValue` changes every launch; this doesn't.
     static func seed(for id: String) -> Int {
         id.unicodeScalars.reduce(7) { ($0 &* 31 &+ Int($1.value)) & 0xFFFF }

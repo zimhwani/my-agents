@@ -244,8 +244,8 @@ struct Wordmark: View {
     var size: CGFloat = 34
     var body: some View {
         VStack(alignment: .leading, spacing: -2) {
-            Text("hair done,")
-            Text("nails done,")
+            Text("hair done.")
+            Text("nails done.")
             Text("everything ") + Text("done.").italic()
         }
         .font(.system(size: size, weight: .medium, design: .serif))

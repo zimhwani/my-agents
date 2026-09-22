@@ -133,7 +133,7 @@ final class AppState {
 
     func toggleFavourite(_ pro: Pro) {
         guard var c = client else { return }
-        if c.favouriteProIDs.contains(pro.id) { c.favouriteProIDs.remove(pro.id) } else { c.favouriteProIDs.insert(pro.id); Haptics.light() }
+        if c.favouriteProIDs.contains(pro.id) { c.favouriteProIDs.remove(pro.id) } else { c.favouriteProIDs.insert(pro.id) }
         client = c
         Task { try? await self.data.updateClient(c) }
     }

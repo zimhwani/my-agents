@@ -90,7 +90,7 @@ struct ReviewStep: View {
                     } else {
                         FreeRow(label: "Travel fee", note: "\(pro.firstName) doesn't charge one.")
                     }
-                    PriceRow(label: "Booking fee", cents: price.bookingFeeCents, note: "Covers payments and support. Her prices are all-in apart from this.")
+                    PriceRow(label: "Hair Done fee", cents: price.bookingFeeCents, note: "Covers payments and support. Her prices are all-in apart from this.")
                     Hairline().padding(.vertical, Space.xs)
                     PriceRow(label: "Total", cents: price.clientTotalCents, emphasis: true, note: "Held now, charged when she's done.")
                 }

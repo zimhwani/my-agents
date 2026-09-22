@@ -109,7 +109,7 @@ struct ProEarningsView: View {
             Text("Pending").labelStyle()
             if let pending {
                 Text(Money.format(pending.amountCents)).font(HDFont.priceLarge).foregroundStyle(Palette.ink)
-                Text("Arrives \(pending.date.friendlyDay.lowercased() == "today" ? "today" : pending.date.friendlyDay). Daily payouts by Stripe.")
+                Text("Arrives \(ProFlow.inSentence(pending.date)). Daily payouts by Stripe.")
                     .font(HDFont.sub).foregroundStyle(Palette.inkSoft)
             } else {
                 Text("Nothing waiting").font(HDFont.heading).foregroundStyle(Palette.ink)
@@ -168,7 +168,7 @@ struct ProEarningsView: View {
                     HStack(alignment: .firstTextBaseline) {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(payout.date.longDate).font(HDFont.bodyStrong).foregroundStyle(Palette.ink)
-                            Text(payout.status == .paid ? "Paid out \(payout.date.friendlyDay.lowercased())" : "Paying out \(payout.date.friendlyDay.lowercased())")
+                            Text(payout.status == .paid ? "Paid out \(ProFlow.inSentence(payout.date))" : "Paying out \(ProFlow.inSentence(payout.date))")
                                 .font(HDFont.caption).foregroundStyle(Palette.inkSoft)
                         }
                         Spacer()
