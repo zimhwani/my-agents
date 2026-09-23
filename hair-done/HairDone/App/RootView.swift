@@ -46,6 +46,7 @@ struct ClientShell: View {
                 .tag(ClientTab.you)
         }
         .task { if app.pros.isEmpty { await app.refreshAll() } }
+        .environment(\.symbolVariants, .none)
     }
 }
 
@@ -73,6 +74,7 @@ struct ProShell: View {
                 .tabItem { Label("Earnings", systemImage: "dollarsign.circle") }
                 .tag(ProTab.earnings)
         }
+        .environment(\.symbolVariants, .none)
     }
 }
 

@@ -123,7 +123,8 @@ enum BookingStatus: String, Codable, CaseIterable, Hashable {
     var color: Color {
         switch self {
         case .requested: return Palette.warn
-        case .confirmed, .onHerWay, .arrived, .inProgress: return Palette.lacquer
+        case .confirmed: return Palette.success
+        case .onHerWay, .arrived, .inProgress: return Palette.lacquer
         case .done, .paid: return Palette.success
         case .cancelledByClient, .cancelledByPro, .declined, .noShow: return Palette.inkSoft
         }
@@ -131,7 +132,8 @@ enum BookingStatus: String, Codable, CaseIterable, Hashable {
     var softColor: Color {
         switch self {
         case .requested: return Palette.warnSoft
-        case .confirmed, .onHerWay, .arrived, .inProgress: return Palette.lacquerSoft
+        case .confirmed: return Palette.successSoft
+        case .onHerWay, .arrived, .inProgress: return Palette.lacquerSoft
         case .done, .paid: return Palette.successSoft
         default: return Palette.line
         }

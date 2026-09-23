@@ -21,6 +21,7 @@ struct HomeView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: Space.section) {
                     header
+                        .reveal()
 
                     if isSearching {
                         searchResults
@@ -30,20 +31,21 @@ struct HomeView: View {
                                 app.selectedTab = .bookings
                             }
                             .screenGutter()
+                            .reveal(delay: 0.06)
                         }
 
                         if app.isLoadingPros && app.pros.isEmpty {
                             HomeSkeleton().screenGutter()
                         } else {
-                            whosFree
-                            categories
-                            nearYou
+                            whosFree.reveal(delay: 0.12)
+                            categories.reveal(delay: 0.18)
+                            nearYou.reveal(delay: 0.24)
                             bookAgain
                             favourites
                         }
                     }
                 }
-                .padding(.top, Space.s)
+                .padding(.top, Space.l)
                 .padding(.bottom, Space.section)
             }
             .scrollDismissesKeyboard(.interactively)
@@ -62,20 +64,23 @@ struct HomeView: View {
     // MARK: Header
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: Space.l) {
-            VStack(alignment: .leading, spacing: Space.xs) {
-                Text(greeting)
-                    .font(HDFont.hero)
+        VStack(alignment: .leading, spacing: Space.xl) {
+            VStack(alignment: .leading, spacing: Space.m) {
+                HStack(spacing: 6) {
+                    Image(systemName: locationOff ? "location.slash" : "location")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(Palette.inkSoft)
+                    Text(suburbLine)
+                        .labelStyle()
+                        .lineLimit(2)
+                }
+                .accessibilityElement(children: .combine)
+
+                greetingText
+                    .font(HDFont.display)
                     .foregroundStyle(Palette.ink)
                     .fixedSize(horizontal: false, vertical: true)
-                HStack(spacing: 5) {
-                    Image(systemName: locationOff ? "location.slash" : "location.fill")
-                        .font(.system(size: 11, weight: .semibold))
-                    Text(suburbLine)
-                        .font(HDFont.sub)
-                }
-                .foregroundStyle(Palette.inkSoft)
-                .accessibilityElement(children: .combine)
+                    .accessibilityAddTraits(.isHeader)
             }
 
             HomeSearchField(text: $query, focused: $searchFocused)
@@ -86,13 +91,26 @@ struct HomeView: View {
     private var hour: Int { Date().hourOfDay }
     private var isLate: Bool { hour >= 22 || hour < 5 }
 
+    private var firstName: String { app.firstName.trimmingCharacters(in: .whitespaces) }
+
     private var greeting: String {
-        let name = app.firstName.trimmingCharacters(in: .whitespaces)
+        let name = firstName
         switch hour {
         case 5..<12: return name.isEmpty ? "Morning." : "Morning, \(name)."
         case 12..<17: return name.isEmpty ? "Afternoon." : "Afternoon, \(name)."
         case 17..<22: return "Who's free tonight."
         default: return "Late one. Here's tomorrow."
+        }
+    }
+
+    /// The greeting with her name leaning in italic: the one italic word on this screen.
+    private var greetingText: Text {
+        let name = firstName
+        guard !name.isEmpty else { return Text(greeting) }
+        switch hour {
+        case 5..<12: return Text("Morning, ") + Text(name).italic() + Text(".")
+        case 12..<17: return Text("Afternoon, ") + Text(name).italic() + Text(".")
+        default: return Text(greeting)
         }
     }
 
@@ -177,7 +195,7 @@ struct HomeView: View {
     // MARK: Search
 
     private var searchResults: some View {
-        VStack(alignment: .leading, spacing: Space.l) {
+        VStack(alignment: .leading, spacing: Space.xxl) {
             if matches.isEmpty {
                 EmptyState(
                     symbol: "magnifyingglass",
@@ -186,13 +204,13 @@ struct HomeView: View {
                     actionTitle: "Clear",
                     action: { query = "" }
                 )
+                .screenGutter()
             } else {
                 ForEach(matches) { pro in
                     ProCard(pro: pro, distanceKm: distance(pro), nextFree: nextFreeLabel(pro, on: listDay)) { open(pro) }
                 }
             }
         }
-        .screenGutter()
     }
 
     // MARK: Who's free
@@ -209,7 +227,7 @@ struct HomeView: View {
                         .foregroundStyle(Palette.inkSoft)
                         .fixedSize(horizontal: false, vertical: true)
                     if dayOffset == 0 {
-                        TertiaryButton(title: "See tomorrow", tint: Palette.lacquer) { dayOffset = 1 }
+                        TertiaryButton(title: "See tomorrow", tint: Palette.ink) { dayOffset = 1 }
                             .padding(.horizontal, -8)
                     }
                 }
@@ -229,45 +247,46 @@ struct HomeView: View {
 
     // MARK: Categories
 
+    /// The six categories as serif words in a row, the chosen one underlined. A magazine's section index.
     private var categories: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: Space.s) {
-                ForEach(Category.allCases) { c in
-                    HomeCategoryTile(category: c, isSelected: category == c) {
-                        category = (category == c) ? nil : c
+        VStack(alignment: .leading, spacing: Space.s) {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: Space.xl) {
+                    ForEach(Category.allCases) { c in
+                        HomeCategoryWord(category: c, isSelected: category == c) {
+                            category = (category == c) ? nil : c
+                        }
                     }
                 }
+                .screenGutter()
             }
-            .screenGutter()
+            if category == .theLot {
+                Text("Hair, makeup, nails. For events.")
+                    .font(HDFont.italicSub)
+                    .foregroundStyle(Palette.inkSoft)
+                    .screenGutter()
+                    .transition(.opacity)
+            }
         }
     }
 
     // MARK: Near you
 
     private var nearYou: some View {
-        VStack(alignment: .leading, spacing: Space.l) {
+        VStack(alignment: .leading, spacing: Space.xl) {
             HStack(alignment: .firstTextBaseline) {
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: 3) {
                     Text(category.map { "\($0.label) near you" } ?? "Near you")
                         .font(HDFont.heading)
                         .foregroundStyle(Palette.ink)
                     Text("Closest first")
-                        .font(HDFont.sub)
+                        .font(HDFont.italicSub)
                         .foregroundStyle(Palette.inkSoft)
                 }
                 Spacer()
                 HomeListMapToggle(showMap: $showMap)
             }
             .screenGutter()
-
-            if let category {
-                HStack(spacing: Space.s) {
-                    Chip(title: "Everything") { self.category = nil }
-                    Chip(title: category.label, symbol: category.symbol, isSelected: true) { self.category = nil }
-                }
-                .screenGutter()
-                .transition(.opacity.combined(with: .move(edge: .top)))
-            }
 
             if filteredPros.isEmpty {
                 EmptyState(
@@ -285,12 +304,11 @@ struct HomeView: View {
                     .screenGutter()
                     .transition(.opacity)
             } else {
-                VStack(spacing: Space.l) {
+                VStack(spacing: Space.xxl) {
                     ForEach(filteredPros) { pro in
                         ProCard(pro: pro, distanceKm: distance(pro), nextFree: nextFreeLabel(pro, on: listDay)) { open(pro) }
                     }
                 }
-                .screenGutter()
                 .transition(.opacity)
             }
         }
@@ -346,46 +364,51 @@ private struct HomeBookAgainItem: Identifiable {
 
 // MARK: - Search field
 
+/// A line to type on, not a box: magnifier, placeholder, hairline underneath.
 private struct HomeSearchField: View {
     @Binding var text: String
     var focused: FocusState<Bool>.Binding
 
     var body: some View {
-        HStack(spacing: 10) {
-            Image(systemName: "magnifyingglass")
-                .font(.system(size: 15, weight: .medium))
-                .foregroundStyle(Palette.inkSoft)
-            TextField("French tip, blow-dry, a suburb", text: $text)
-                .font(HDFont.body)
-                .focused(focused)
-                .submitLabel(.search)
-                .autocorrectionDisabled()
-                .accessibilityLabel("Search pros, services and suburbs")
-            if !text.isEmpty {
-                Button {
-                    Haptics.light()
-                    text = ""
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 16))
-                        .foregroundStyle(Palette.inkFaint)
-                        .frame(width: 28, height: 28)
+        VStack(spacing: 0) {
+            HStack(spacing: 10) {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 15, weight: .regular))
+                    .foregroundStyle(Palette.inkSoft)
+                TextField("French tip, blow-dry, a suburb", text: $text)
+                    .font(HDFont.body)
+                    .focused(focused)
+                    .submitLabel(.search)
+                    .autocorrectionDisabled()
+                    .accessibilityLabel("Search pros, services and suburbs")
+                if !text.isEmpty {
+                    Button {
+                        Haptics.light()
+                        text = ""
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundStyle(Palette.inkSoft)
+                            .frame(width: 32, height: 32)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Clear")
+                    .transition(.opacity)
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Clear")
-                .transition(.opacity.combined(with: .scale))
             }
+            .frame(height: 48)
+            Rectangle()
+                .fill(focused.wrappedValue ? Palette.ink : Palette.line)
+                .frame(height: 1)
         }
-        .padding(.horizontal, 14)
-        .frame(height: 50)
-        .background(Palette.card, in: RoundedRectangle(cornerRadius: Radius.input, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: Radius.input, style: .continuous).strokeBorder(Palette.line, lineWidth: 1))
         .animation(Motion.gentle, value: text.isEmpty)
+        .animation(Motion.gentle, value: focused.wrappedValue)
     }
 }
 
 // MARK: - Next up
 
+/// The next booking as a row between two hairlines: eyebrow, what, when, status.
 private struct HomeNextUpCard: View {
     var booking: Booking
     var pro: Pro?
@@ -404,35 +427,40 @@ private struct HomeNextUpCard: View {
             Haptics.light()
             action()
         } label: {
-            HStack(spacing: Space.m) {
-                Avatar(name: pro?.firstName ?? "", seed: pro?.seed ?? 0, size: 44)
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("Next up").labelStyle()
-                    Text(title)
-                        .font(HDFont.bodyStrong)
-                        .foregroundStyle(Palette.ink)
-                        .lineLimit(1)
-                    Text(booking.start.friendlyDayTime)
-                        .font(HDFont.sub)
-                        .foregroundStyle(Palette.inkSoft)
+            VStack(spacing: 0) {
+                Hairline()
+                HStack(alignment: .center, spacing: Space.m) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Next up").labelStyle()
+                        Text(title)
+                            .font(HDFont.name)
+                            .foregroundStyle(Palette.ink)
+                            .lineLimit(1)
+                        Text(booking.start.friendlyDayTime)
+                            .font(HDFont.sub)
+                            .foregroundStyle(Palette.inkSoft)
+                    }
+                    Spacer(minLength: Space.s)
+                    StatusBadge(status: booking.status)
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(Palette.inkFaint)
                 }
-                Spacer(minLength: Space.s)
-                StatusBadge(status: booking.status)
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(Palette.inkFaint)
+                .padding(.vertical, Space.l)
+                Hairline()
             }
-            .card(padding: Space.m)
+            .contentShape(Rectangle())
         }
-        .buttonStyle(PressLift(scale: 0.985))
+        .buttonStyle(PressLift(scale: 0.99))
         .accessibilityElement(children: .combine)
         .accessibilityHint("Opens your bookings")
     }
 }
 
-// MARK: - Category tile
+// MARK: - Category word
 
-private struct HomeCategoryTile: View {
+/// One category in the index: a serif word, underlined in ink when it's the filter.
+private struct HomeCategoryWord: View {
     var category: Category
     var isSelected: Bool
     var action: () -> Void
@@ -442,32 +470,19 @@ private struct HomeCategoryTile: View {
             Haptics.selection()
             action()
         } label: {
-            VStack(alignment: .leading, spacing: 0) {
-                Image(systemName: category.symbol)
-                    .font(.system(size: 20, weight: .medium))
-                    .foregroundStyle(category.tintInk)
-                Spacer(minLength: Space.s)
+            VStack(spacing: 6) {
                 Text(category.label)
-                    .font(HDFont.subStrong)
-                    .foregroundStyle(category.tintInk)
-                if category == .theLot {
-                    Text("Hair, makeup, nails. For events.")
-                        .font(HDFont.caption)
-                        .foregroundStyle(category.tintInk.opacity(0.8))
-                        .lineLimit(2)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .padding(.top, 2)
-                }
+                    .font(HDFont.name)
+                    .foregroundStyle(isSelected ? Palette.ink : Palette.inkSoft)
+                Rectangle()
+                    .fill(isSelected ? Palette.ink : Color.clear)
+                    .frame(height: 1.5)
             }
-            .padding(Space.m)
-            .frame(width: 132, height: 112, alignment: .topLeading)
-            .background(category.tint, in: RoundedRectangle(cornerRadius: Radius.tile, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: Radius.tile, style: .continuous)
-                    .strokeBorder(isSelected ? category.tintInk : Color.clear, lineWidth: 1.5)
-            )
+            .padding(.vertical, Space.s)
+            .frame(minHeight: 44)
+            .contentShape(Rectangle())
         }
-        .buttonStyle(PressLift(scale: 0.96))
+        .buttonStyle(.plain)
         .accessibilityLabel(category.label)
         .accessibilityHint(isSelected ? "Clears the filter" : "Shows \(category.label.lowercased()) pros")
         .accessibilityAddTraits(isSelected ? .isSelected : [])
@@ -476,35 +491,35 @@ private struct HomeCategoryTile: View {
 
 // MARK: - List / map toggle
 
+/// "List  Map" as two words; the current one in ink with a rule under it.
 private struct HomeListMapToggle: View {
     @Binding var showMap: Bool
 
     var body: some View {
-        HStack(spacing: 2) {
-            segment("List", symbol: "list.bullet", isMap: false)
-            segment("Map", symbol: "map", isMap: true)
+        HStack(spacing: Space.l) {
+            segment("List", isMap: false)
+            segment("Map", isMap: true)
         }
-        .padding(3)
-        .background(Palette.card, in: Capsule())
-        .overlay(Capsule().strokeBorder(Palette.line, lineWidth: 1))
         .accessibilityElement(children: .contain)
     }
 
-    private func segment(_ title: String, symbol: String, isMap: Bool) -> some View {
+    private func segment(_ title: String, isMap: Bool) -> some View {
         let selected = showMap == isMap
         return Button {
             guard !selected else { return }
             Haptics.selection()
             showMap = isMap
         } label: {
-            HStack(spacing: 5) {
-                Image(systemName: symbol).font(.system(size: 11, weight: .semibold))
-                Text(title).font(HDFont.label)
+            VStack(spacing: 4) {
+                Text(title)
+                    .font(HDFont.sub.weight(.medium))
+                    .foregroundStyle(selected ? Palette.ink : Palette.inkSoft)
+                Rectangle()
+                    .fill(selected ? Palette.ink : Color.clear)
+                    .frame(height: 1)
             }
-            .foregroundStyle(selected ? Palette.paper : Palette.inkSoft)
-            .padding(.horizontal, 12)
-            .frame(height: 30)
-            .background(selected ? Palette.ink : Color.clear, in: Capsule())
+            .frame(minWidth: 36, minHeight: 44)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .accessibilityLabel(title)
@@ -556,7 +571,7 @@ private struct HomeMap: View {
         .clipShape(RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: Radius.card, style: .continuous).strokeBorder(Palette.line, lineWidth: 1))
         .overlay(alignment: .bottomTrailing) {
-            Chip(title: "Recentre", symbol: "location") {
+            Chip(title: "Recentre", symbol: "location", tint: Palette.card) {
                 withAnimation(Motion.spring) { position = HomeMap.home(centre) }
             }
             .padding(Space.m)
@@ -566,22 +581,22 @@ private struct HomeMap: View {
     private func pin(_ pro: Pro) -> some View {
         VStack(spacing: 3) {
             Avatar(name: pro.firstName, seed: pro.seed, size: 40)
-                .overlay(Circle().strokeBorder(Palette.lacquer, lineWidth: 2))
+                .overlay(Circle().strokeBorder(Palette.ink, lineWidth: 1.5))
             Text("from \(Money.format(pro.cheapestServiceCents))")
                 .font(HDFont.label)
                 .monospacedDigit()
                 .foregroundStyle(Palette.ink)
                 .padding(.horizontal, 8)
                 .padding(.vertical, 4)
-                .background(Palette.card, in: Capsule())
-                .overlay(Capsule().strokeBorder(Palette.line, lineWidth: 1))
+                .background(Palette.card, in: RoundedRectangle(cornerRadius: 4, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 4, style: .continuous).strokeBorder(Palette.line, lineWidth: 1))
         }
     }
 }
 
 // MARK: - Skeleton
 
-/// Soft rounded blocks in the line colour, breathing while pros load for the first time.
+/// Soft blocks in the line colour, breathing while pros load for the first time.
 private struct HomeSkeleton: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var pulse = false
@@ -589,18 +604,18 @@ private struct HomeSkeleton: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Space.section) {
             VStack(alignment: .leading, spacing: Space.l) {
-                block(width: 160, height: 22)
+                block(width: 180, height: 26)
                 HStack(spacing: Space.m) {
-                    ForEach(0..<3, id: \.self) { _ in block(width: 150, height: 150, radius: Radius.tile) }
+                    ForEach(0..<3, id: \.self) { _ in block(width: 150, height: 188, radius: Radius.tile) }
                 }
             }
-            HStack(spacing: Space.s) {
-                ForEach(0..<3, id: \.self) { _ in block(width: 132, height: 112, radius: Radius.tile) }
+            HStack(spacing: Space.xl) {
+                ForEach(0..<4, id: \.self) { _ in block(width: 56, height: 22, radius: 2) }
             }
             VStack(alignment: .leading, spacing: Space.l) {
-                block(width: 120, height: 22)
-                block(height: 230)
-                block(height: 230)
+                block(width: 120, height: 26)
+                block(height: 210, radius: 0)
+                block(height: 210, radius: 0)
             }
         }
         .opacity(pulse ? 0.5 : 1)
@@ -612,7 +627,7 @@ private struct HomeSkeleton: View {
         .accessibilityLabel("Loading")
     }
 
-    private func block(width: CGFloat? = nil, height: CGFloat, radius: CGFloat = Radius.card) -> some View {
+    private func block(width: CGFloat? = nil, height: CGFloat, radius: CGFloat = Radius.tile) -> some View {
         RoundedRectangle(cornerRadius: radius, style: .continuous)
             .fill(Palette.line)
             .frame(width: width, height: height)

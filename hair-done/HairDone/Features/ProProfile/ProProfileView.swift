@@ -32,8 +32,9 @@ struct ProProfileView: View {
             ScrollViewReader { proxy in
                 ScrollView {
                     VStack(alignment: .leading, spacing: 0) {
-                        ProfileCover(items: Array(live.work.prefix(4)), seed: live.seed) { viewing = $0 }
+                        ProfileCover(items: Array(live.work.prefix(3)), seed: live.seed, stretches: !reduceMotion) { viewing = $0 }
                         identity(proxy: proxy)
+                            .reveal(delay: 0.1)
 
                         VStack(alignment: .leading, spacing: Space.section) {
                             about
@@ -96,7 +97,7 @@ struct ProProfileView: View {
             Spacer()
             ShareLink(item: shareURL, message: Text(shareText)) {
                 Image(systemName: "square.and.arrow.up")
-                    .font(.system(size: 17, weight: .medium))
+                    .font(.system(size: 16, weight: .regular))
                     .foregroundStyle(Palette.ink)
                     .frame(width: 40, height: 40)
                     .background(Palette.card, in: Circle())
@@ -121,40 +122,37 @@ struct ProProfileView: View {
 
     // MARK: Identity
 
+    /// Eyebrow, the name as the headline, the rating line, her one italic line, the facts.
     private func identity(proxy: ScrollViewProxy) -> some View {
         VStack(alignment: .leading, spacing: Space.m) {
-            Avatar(name: live.firstName, seed: live.seed, size: 76)
-                .overlay(Circle().strokeBorder(Palette.paper, lineWidth: 4))
-                .offset(y: -38)
-                .padding(.bottom, -38)
-
-            VStack(alignment: .leading, spacing: Space.xs) {
-                HStack(alignment: .firstTextBaseline, spacing: Space.s) {
+            VStack(alignment: .leading, spacing: Space.s) {
+                Text(live.specialtyLine).labelStyle()
+                HStack(alignment: .firstTextBaseline, spacing: Space.m) {
                     Text(live.displayName)
-                        .font(HDFont.title)
+                        .font(HDFont.hero)
                         .foregroundStyle(Palette.ink)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityAddTraits(.isHeader)
                     if live.isVerified {
                         Button { Haptics.light(); showVerified = true } label: { VerifiedBadge() }
                             .buttonStyle(.plain)
                             .accessibilityHint("Explains the badge")
                     }
                 }
-                Text(live.specialtyLine)
-                    .font(HDFont.sub)
-                    .foregroundStyle(Palette.inkSoft)
             }
 
             Button {
                 Haptics.light()
                 withAnimation(reduceMotion ? nil : Motion.springSlow) { proxy.scrollTo("reviews", anchor: .top) }
             } label: {
-                HStack(spacing: 8) {
+                HStack(spacing: 6) {
                     RatingLine(rating: live.rating, count: live.reviewCount)
-                    Text("·").foregroundStyle(Palette.inkFaint)
+                    Text("·").font(HDFont.sub).foregroundStyle(Palette.inkFaint)
                     Text("\(distanceKm.distanceLabel) from you")
                         .font(HDFont.sub)
                         .foregroundStyle(Palette.inkSoft)
                 }
+                .frame(minHeight: 44)
             }
             .buttonStyle(.plain)
             .accessibilityHint("Jumps to reviews")
@@ -163,42 +161,20 @@ struct ProProfileView: View {
                 .font(HDFont.serifItalic)
                 .foregroundStyle(Palette.ink)
                 .fixedSize(horizontal: false, vertical: true)
-                .padding(.top, Space.xs)
 
-            HStack(alignment: .top, spacing: Space.m) {
-                Image(systemName: "car")
-                    .font(.system(size: 15, weight: .medium))
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Comes to \(live.suburb) and \(Int(live.travelRadiusKm.rounded())) km around")
+                    .font(HDFont.body)
+                    .foregroundStyle(Palette.ink)
+                Text(live.travelFeeCents > 0 ? "Travel fee \(Money.format(live.travelFeeCents)), flat" : "No travel fee")
+                    .font(HDFont.sub)
                     .foregroundStyle(Palette.inkSoft)
-                    .frame(width: 20)
-                    .padding(.top, 2)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Comes to \(live.suburb) and \(Int(live.travelRadiusKm.rounded())) km around")
-                        .font(HDFont.body)
-                        .foregroundStyle(Palette.ink)
-                    Text(live.travelFeeCents > 0 ? "Travel fee \(Money.format(live.travelFeeCents)), flat" : "No travel fee")
-                        .font(HDFont.sub)
-                        .foregroundStyle(Palette.inkSoft)
-                }
             }
             .padding(.top, Space.xs)
             .accessibilityElement(children: .combine)
 
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: Space.s) {
-                    if live.instantBook {
-                        Button { Haptics.light(); showInstant = true } label: {
-                            Tag(text: "Instant book", color: Palette.lacquer, background: Palette.lacquerSoft)
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityHint("Explains instant book")
-                    }
-                    Tag(text: replyLabel)
-                    if live.completedBookings > 0 {
-                        Tag(text: "\(live.completedBookings) done")
-                    }
-                }
-            }
-            .padding(.top, Space.xs)
+            facts
+                .padding(.top, Space.xs)
 
             if !live.instantBook {
                 Text("\(live.firstName) confirms each booking herself. She usually replies within \(replyWithin).")
@@ -208,6 +184,32 @@ struct ProProfileView: View {
             }
         }
         .screenGutter()
+        .padding(.top, Space.xl)
+    }
+
+    /// "Instant book · Replies in about an hour · 212 done", as one quiet line. Instant book explains itself on tap.
+    private var facts: some View {
+        HStack(spacing: 6) {
+            if live.instantBook {
+                Button { Haptics.light(); showInstant = true } label: {
+                    Text("Instant book")
+                        .font(HDFont.sub.weight(.medium))
+                        .foregroundStyle(Palette.ink)
+                        .underline(true, color: Palette.inkFaint)
+                        .frame(minHeight: 44)
+                }
+                .buttonStyle(.plain)
+                .accessibilityHint("Explains instant book")
+                Text("·").font(HDFont.sub).foregroundStyle(Palette.inkFaint)
+            }
+            Text(replyLabel).font(HDFont.sub).foregroundStyle(Palette.inkSoft)
+            if live.completedBookings > 0 {
+                Text("·").font(HDFont.sub).foregroundStyle(Palette.inkFaint)
+                Text("\(live.completedBookings) done").font(HDFont.sub).monospacedDigit().foregroundStyle(Palette.inkSoft)
+            }
+        }
+        .lineLimit(1)
+        .minimumScaleFactor(0.85)
     }
 
     private var replyLabel: String {
@@ -235,7 +237,7 @@ struct ProProfileView: View {
                 .lineLimit(bioExpanded ? nil : 3)
                 .fixedSize(horizontal: false, vertical: true)
             if !bioExpanded && live.bio.count > 140 {
-                TertiaryButton(title: "More", tint: Palette.lacquer) {
+                TertiaryButton(title: "More", tint: Palette.ink) {
                     withAnimation(reduceMotion ? nil : Motion.spring) { bioExpanded = true }
                 }
                 .padding(.horizontal, -8)
@@ -246,9 +248,9 @@ struct ProProfileView: View {
     // MARK: Services
 
     private var services: some View {
-        VStack(alignment: .leading, spacing: Space.s) {
+        VStack(alignment: .leading, spacing: 0) {
             SectionHeader(title: "Services", subtitle: "Pick as many as you like. She'll do them in one visit.")
-                .padding(.bottom, Space.xs)
+                .padding(.bottom, Space.m)
             ForEach(Array(live.services.enumerated()), id: \.element.id) { i, service in
                 ProfileServiceRow(service: service, isSelected: selectedIDs.contains(service.id)) {
                     withAnimation(reduceMotion ? nil : Motion.spring) {
@@ -265,16 +267,16 @@ struct ProProfileView: View {
     private var work: some View {
         VStack(alignment: .leading, spacing: Space.l) {
             SectionHeader(title: "Her work", subtitle: live.work.count == 1 ? "1 photo" : "\(live.work.count) photos")
-            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 3), count: 3), spacing: 3) {
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 2), count: 3), spacing: 2) {
                 ForEach(live.work) { item in
                     Button {
                         Haptics.light()
                         viewing = item
                     } label: {
-                        WorkTile(item: item, cornerRadius: 10)
-                            .aspectRatio(1, contentMode: .fit)
+                        WorkTile(item: item, cornerRadius: 2)
+                            .aspectRatio(0.8, contentMode: .fit)
                     }
-                    .buttonStyle(PressLift(scale: 0.96))
+                    .buttonStyle(PressLift(scale: 0.98))
                     .accessibilityLabel(item.caption)
                     .accessibilityHint("Opens the photo")
                 }
@@ -285,7 +287,7 @@ struct ProProfileView: View {
     // MARK: Reviews
 
     private var reviews: some View {
-        VStack(alignment: .leading, spacing: Space.l) {
+        VStack(alignment: .leading, spacing: Space.xl) {
             SectionHeader(title: "Reviews")
                 .id("reviews")
 
@@ -296,10 +298,10 @@ struct ProProfileView: View {
             } else {
                 HStack(alignment: .firstTextBaseline, spacing: Space.m) {
                     Text(live.rating.ratingLabel)
-                        .font(HDFont.hero.monospacedDigit())
+                        .font(HDFont.display.monospacedDigit())
                         .foregroundStyle(Palette.ink)
-                    VStack(alignment: .leading, spacing: 4) {
-                        StarsRow(rating: Int(live.rating.rounded()), size: 14)
+                    VStack(alignment: .leading, spacing: 5) {
+                        StarsRow(rating: Int(live.rating.rounded()), size: 11)
                         Text(live.reviewCount == 1 ? "1 review" : "\(live.reviewCount) reviews")
                             .font(HDFont.sub)
                             .foregroundStyle(Palette.inkSoft)
@@ -307,13 +309,19 @@ struct ProProfileView: View {
                 }
                 .accessibilityElement(children: .combine)
 
-                ForEach(live.reviews.prefix(3)) { review in
-                    ProfileReviewCard(review: review, proName: live.firstName)
+                VStack(alignment: .leading, spacing: 0) {
+                    ForEach(Array(live.reviews.prefix(3).enumerated()), id: \.element.id) { i, review in
+                        ProfileReviewCard(review: review, proName: live.firstName)
+                            .padding(.vertical, Space.xl)
+                        if i < min(live.reviews.count, 3) - 1 { Hairline() }
+                    }
                 }
+                .padding(.top, -Space.m)
 
                 if live.reviews.count > 3 {
-                    TertiaryButton(title: "All \(live.reviews.count) reviews", tint: Palette.lacquer) { showAllReviews = true }
+                    TertiaryButton(title: "All \(live.reviews.count) reviews", tint: Palette.ink) { showAllReviews = true }
                         .padding(.horizontal, -8)
+                        .padding(.top, -Space.m)
                 }
             }
         }
@@ -360,49 +368,58 @@ struct ProProfileView: View {
 
 // MARK: - Cover
 
-/// Her first four photos, staggered. Fewer than four and it fills with what's there.
+/// One dominant photo with two beside it, edge to edge, and it stretches when she pulls down.
+/// Fewer than three and it fills with what's there.
 private struct ProfileCover: View {
     var items: [WorkItem]
     var seed: Int
+    var stretches: Bool = true
     var onTap: (WorkItem) -> Void
 
-    private let height: CGFloat = 360
-    private let gap: CGFloat = 3
+    private let height: CGFloat = 440
+    private let gap: CGFloat = 2
 
     var body: some View {
-        Group {
-            if items.count >= 4 {
-                HStack(spacing: gap) {
-                    VStack(spacing: gap) {
-                        tile(items[0]).frame(height: height * 0.58)
-                        tile(items[2])
-                    }
-                    VStack(spacing: gap) {
-                        tile(items[1])
-                        tile(items[3]).frame(height: height * 0.58)
-                    }
-                }
-            } else if items.count >= 2 {
-                HStack(spacing: gap) {
-                    tile(items[0])
-                    tile(items[1])
-                }
-            } else if let first = items.first {
-                tile(first)
-            } else {
-                Rectangle().fill(Placeholder.gradient(seed: seed))
-            }
+        GeometryReader { geo in
+            let minY = geo.frame(in: .global).minY
+            let stretch = stretches ? max(0, minY) : 0
+            mosaic
+                .frame(width: geo.size.width, height: height + stretch)
+                .clipped()
+                .offset(y: -stretch)
         }
         .frame(height: height)
-        .frame(maxWidth: .infinity)
-        .clipped()
         .overlay(alignment: .top) {
-            LinearGradient(colors: [Color.black.opacity(0.22), Color.clear], startPoint: .top, endPoint: .bottom)
+            LinearGradient(colors: [Color.black.opacity(0.18), Color.clear], startPoint: .top, endPoint: .bottom)
                 .frame(height: 120)
                 .allowsHitTesting(false)
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Her work")
+    }
+
+    @ViewBuilder
+    private var mosaic: some View {
+        if items.count >= 3 {
+            HStack(spacing: gap) {
+                tile(items[0])
+                    .frame(maxWidth: .infinity)
+                VStack(spacing: gap) {
+                    tile(items[1])
+                    tile(items[2])
+                }
+                .frame(width: 128)
+            }
+        } else if items.count == 2 {
+            HStack(spacing: gap) {
+                tile(items[0])
+                tile(items[1])
+            }
+        } else if let first = items.first {
+            tile(first)
+        } else {
+            Rectangle().fill(Placeholder.gradient(seed: seed))
+        }
     }
 
     private func tile(_ item: WorkItem) -> some View {
@@ -434,26 +451,26 @@ private struct ProfileServiceRow: View {
             HStack(alignment: .top, spacing: Space.m) {
                 ZStack {
                     Circle()
-                        .strokeBorder(isSelected ? Palette.lacquer : Palette.line, lineWidth: 1.5)
+                        .strokeBorder(isSelected ? Palette.lacquer : Palette.inkFaint, lineWidth: 1)
                     Circle()
                         .fill(Palette.lacquer)
                         .scaleEffect(isSelected ? 1 : 0.01)
                         .opacity(isSelected ? 1 : 0)
                     Image(systemName: "checkmark")
-                        .font(.system(size: 11, weight: .bold))
+                        .font(.system(size: 10, weight: .bold))
                         .foregroundStyle(Palette.onLacquer)
                         .opacity(isSelected ? 1 : 0)
                 }
-                .frame(width: 24, height: 24)
-                .padding(.top, 1)
+                .frame(width: 22, height: 22)
+                .padding(.top, 2)
 
                 VStack(alignment: .leading, spacing: 4) {
-                    HStack(spacing: Space.s) {
+                    HStack(alignment: .firstTextBaseline, spacing: Space.s) {
                         Text(service.name)
-                            .font(HDFont.bodyStrong)
+                            .font(HDFont.body)
                             .foregroundStyle(Palette.ink)
                         if service.isPopular {
-                            Tag(text: "Popular", color: Palette.tintInk(.theLot), background: Palette.tint(.theLot))
+                            Tag(text: "Popular")
                         }
                     }
                     if !service.detail.isEmpty {
@@ -464,7 +481,7 @@ private struct ProfileServiceRow: View {
                             .fixedSize(horizontal: false, vertical: true)
                     }
                     Text(service.durationLabel)
-                        .font(HDFont.sub)
+                        .font(HDFont.caption)
                         .foregroundStyle(Palette.inkSoft)
                 }
 
@@ -474,7 +491,7 @@ private struct ProfileServiceRow: View {
                     .font(HDFont.price)
                     .foregroundStyle(Palette.ink)
             }
-            .padding(.vertical, Space.m)
+            .padding(.vertical, Space.l)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -484,48 +501,41 @@ private struct ProfileServiceRow: View {
     }
 }
 
-// MARK: - Review card
+// MARK: - Review quote
 
+/// A review as a pull quote: the words first in the serif, then who, what and when in one quiet line.
 private struct ProfileReviewCard: View {
     var review: Review
     var proName: String
 
-    private var seed: Int {
-        review.photoSeed ?? review.clientFirstName.unicodeScalars.reduce(0) { $0 + Int($1.value) }
+    private var attribution: String {
+        var parts = [review.clientFirstName]
+        if !review.serviceName.isEmpty { parts.append(review.serviceName) }
+        parts.append(review.date.longDate)
+        return parts.joined(separator: " · ")
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: Space.m) {
-            HStack(spacing: Space.m) {
-                Avatar(name: review.clientFirstName, seed: seed, size: 36)
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(review.clientFirstName)
-                        .font(HDFont.subStrong)
-                        .foregroundStyle(Palette.ink)
-                    HStack(spacing: 6) {
-                        StarsRow(rating: review.rating)
-                        Text(review.date.longDate)
-                            .font(HDFont.caption)
-                            .foregroundStyle(Palette.inkSoft)
-                    }
-                }
-            }
-
             Text(review.text)
-                .font(HDFont.body)
+                .font(HDFont.serifBody)
                 .foregroundStyle(Palette.ink)
                 .fixedSize(horizontal: false, vertical: true)
 
-            if !review.serviceName.isEmpty {
-                Tag(text: review.serviceName)
+            HStack(spacing: Space.s) {
+                StarsRow(rating: review.rating)
+                Text(attribution)
+                    .font(HDFont.caption)
+                    .foregroundStyle(Palette.inkSoft)
+                    .lineLimit(1)
             }
 
             if let reply = review.proReply {
                 HStack(alignment: .top, spacing: Space.m) {
-                    RoundedRectangle(cornerRadius: 1)
-                        .fill(Palette.lacquerSoft)
-                        .frame(width: 2)
-                    VStack(alignment: .leading, spacing: 3) {
+                    Rectangle()
+                        .fill(Palette.line)
+                        .frame(width: 1)
+                    VStack(alignment: .leading, spacing: 4) {
                         Text("\(proName) replied").labelStyle()
                         Text(reply)
                             .font(HDFont.sub)
@@ -533,10 +543,9 @@ private struct ProfileReviewCard: View {
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
-                .padding(.leading, Space.s)
+                .padding(.top, Space.xs)
             }
         }
-        .card()
         .accessibilityElement(children: .combine)
     }
 }
@@ -565,7 +574,7 @@ private struct ProfileWorkViewer: View {
                 ForEach(Array(items.enumerated()), id: \.element.id) { i, item in
                     VStack(spacing: Space.l) {
                         Spacer()
-                        WorkTile(item: item, cornerRadius: Radius.card)
+                        WorkTile(item: item, cornerRadius: Radius.tile)
                             .aspectRatio(0.8, contentMode: .fit)
                             .padding(.horizontal, Space.gutter)
                         Text(item.caption)
@@ -599,7 +608,7 @@ private struct ProfileWorkViewer: View {
 
 // MARK: - Availability strip
 
-/// The next seven days. Days she works get a card and a lacquer dot.
+/// The next seven days. Days she works get a hairline cell and a lacquer dot.
 private struct ProfileAvailabilityStrip: View {
     var availability: WeeklyAvailability
 
@@ -615,12 +624,11 @@ private struct ProfileAvailabilityStrip: View {
                             .font(HDFont.label)
                             .foregroundStyle(works ? Palette.inkSoft : Palette.inkFaint)
                         Text(day.dayNumber)
-                            .font(HDFont.subStrong.monospacedDigit())
+                            .font(HDFont.sub.weight(.medium).monospacedDigit())
                             .foregroundStyle(works ? Palette.ink : Palette.inkFaint)
                     }
                     .frame(maxWidth: .infinity)
                     .frame(height: 58)
-                    .background(works ? Palette.card : Color.clear, in: RoundedRectangle(cornerRadius: Radius.input, style: .continuous))
                     .overlay(
                         RoundedRectangle(cornerRadius: Radius.input, style: .continuous)
                             .strokeBorder(works ? Palette.line : Color.clear, lineWidth: 1)
@@ -696,13 +704,15 @@ private struct ProfileAllReviewsSheet: View {
                 onClose: { dismiss() }
             )
             ScrollView {
-                VStack(spacing: Space.m) {
-                    ForEach(pro.reviews) { review in
+                VStack(alignment: .leading, spacing: 0) {
+                    ForEach(Array(pro.reviews.enumerated()), id: \.element.id) { i, review in
                         ProfileReviewCard(review: review, proName: pro.firstName)
+                            .padding(.vertical, Space.xl)
+                        if i < pro.reviews.count - 1 { Hairline() }
                     }
                 }
                 .screenGutter()
-                .padding(.vertical, Space.m)
+                .padding(.bottom, Space.section)
             }
         }
         .paperBackground()

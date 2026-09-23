@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Every colour in the app comes from here. See docs/build-brief.md §4.
+/// Every colour in the app comes from here. See docs/build-brief.md §4 and docs/design/luxe-pass.md.
 /// Light and dark values are paired so a screen never has to think about scheme.
 enum Palette {
     static let paper       = dyn(light: 0xF8F3EC, dark: 0x171210)
@@ -8,39 +8,41 @@ enum Palette {
     static let cardRaised  = dyn(light: 0xFFFFFF, dark: 0x2A2220)
     static let ink         = dyn(light: 0x241A16, dark: 0xF4ECE4)
     static let inkSoft     = dyn(light: 0x6F625B, dark: 0xB5A79D)
-    static let inkFaint    = dyn(light: 0xA69B93, dark: 0x7D726B)
-    static let line        = dyn(light: 0xE8DFD5, dark: 0x3A302B)
+    static let inkFaint    = dyn(light: 0xA1968E, dark: 0x7D726B)
+    /// Hairlines carry the structure now that cards don't, so this is a shade darker than the brief's.
+    static let line        = dyn(light: 0xE2D8CC, dark: 0x3A302B)
     static let lacquer     = dyn(light: 0xC8323A, dark: 0xE2504F)
     static let lacquerDeep = dyn(light: 0xA3252C, dark: 0xC9403F)
-    static let lacquerSoft = dyn(light: 0xF6DEDC, dark: 0x4A2626)
+    static let lacquerSoft = dyn(light: 0xF1DBD7, dark: 0x4A2626)
     static let honey       = dyn(light: 0xE9B96A, dark: 0xE9B96A)
     static let success     = dyn(light: 0x3E7A5A, dark: 0x6FBF8F)
-    static let successSoft = dyn(light: 0xDDEBE2, dark: 0x213A2C)
+    static let successSoft = dyn(light: 0xE0E9E1, dark: 0x213A2C)
     static let warn        = dyn(light: 0xB9741F, dark: 0xE6A44C)
-    static let warnSoft    = dyn(light: 0xF6E7D0, dark: 0x3E2E17)
+    static let warnSoft    = dyn(light: 0xF0E5D2, dark: 0x3E2E17)
     static let onLacquer   = Color.white
 
-    /// Category tints used on tiles, chips and placeholder art.
+    /// Category tints used on Pro-mode chips and placeholder art. Stone, rose-brown, mauve,
+    /// grey lilac, sage, sand: desaturated and a touch darker than the brief's pastels.
     static func tint(_ category: Category) -> Color {
         switch category {
-        case .hair:   return dyn(light: 0xEAD9CB, dark: 0x4A3B30)
-        case .nails:  return dyn(light: 0xF3D0CB, dark: 0x4E3230)
-        case .makeup: return dyn(light: 0xE8D2DF, dark: 0x473341)
-        case .lashes: return dyn(light: 0xD8D4E5, dark: 0x363347)
-        case .brows:  return dyn(light: 0xD9DED0, dark: 0x343B2E)
-        case .theLot: return dyn(light: 0xEFE3C8, dark: 0x4A4128)
+        case .hair:   return dyn(light: 0xDCCFC2, dark: 0x3E332C)
+        case .nails:  return dyn(light: 0xDDC4BC, dark: 0x43322F)
+        case .makeup: return dyn(light: 0xD6C7CE, dark: 0x3E3238)
+        case .lashes: return dyn(light: 0xCFCBD6, dark: 0x34323C)
+        case .brows:  return dyn(light: 0xCBD0C3, dark: 0x323830)
+        case .theLot: return dyn(light: 0xDED3BC, dark: 0x3F3A2C)
         }
     }
 
     /// A deeper companion to each tint, for ink on top of a tinted surface.
     static func tintInk(_ category: Category) -> Color {
         switch category {
-        case .hair:   return dyn(light: 0x6B4A33, dark: 0xE7CDB8)
-        case .nails:  return dyn(light: 0x8C3A34, dark: 0xF0BDB6)
-        case .makeup: return dyn(light: 0x6E3E5C, dark: 0xE6C4DA)
-        case .lashes: return dyn(light: 0x46406B, dark: 0xD3CEEA)
-        case .brows:  return dyn(light: 0x48583A, dark: 0xCFDCC0)
-        case .theLot: return dyn(light: 0x7A5F1F, dark: 0xEBDBAE)
+        case .hair:   return dyn(light: 0x5A4638, dark: 0xE7CDB8)
+        case .nails:  return dyn(light: 0x6E4640, dark: 0xF0BDB6)
+        case .makeup: return dyn(light: 0x5C4452, dark: 0xE6C4DA)
+        case .lashes: return dyn(light: 0x474258, dark: 0xD3CEEA)
+        case .brows:  return dyn(light: 0x44503C, dark: 0xCFDCC0)
+        case .theLot: return dyn(light: 0x66562E, dark: 0xEBDBAE)
         }
     }
 
