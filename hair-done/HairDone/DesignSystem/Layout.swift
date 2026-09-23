@@ -18,6 +18,8 @@ enum Radius {
     static let tile: CGFloat = 14
     static let input: CGFloat = 14
     static let chip: CGFloat = 999
+    /// Buttons are squared, not pills: the luxe direction (docs/design/luxe-benchmark.md).
+    static let button: CGFloat = 6
 }
 
 enum Motion {

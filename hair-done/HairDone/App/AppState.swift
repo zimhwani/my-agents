@@ -36,6 +36,8 @@ final class AppState {
     /// Set when the client taps a pro from anywhere; the home tab pushes it.
     var selectedTab: ClientTab = .home
     var selectedProTab: ProTab = .today
+    /// Screens with their own bottom bar (a pro's profile) hide the custom tab bar while shown.
+    var hidesTabBar = false
 
     init(data: DataService = MockDataService(), payments: PaymentService = MockPaymentService(), location: LocationService = LocationService()) {
         self.data = data

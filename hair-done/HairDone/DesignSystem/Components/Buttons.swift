@@ -26,7 +26,7 @@ struct PrimaryButton: View {
             .foregroundStyle(Palette.onLacquer)
             .frame(maxWidth: .infinity)
             .frame(height: 52)
-            .background(isEnabled ? Palette.lacquer : Palette.inkFaint, in: Capsule())
+            .background(isEnabled ? Palette.lacquer : Palette.inkFaint, in: RoundedRectangle(cornerRadius: Radius.button, style: .continuous))
         }
         .buttonStyle(PressLift())
         .disabled(!isEnabled || isLoading)
@@ -53,8 +53,8 @@ struct SecondaryButton: View {
             .foregroundStyle(Palette.ink)
             .frame(maxWidth: .infinity)
             .frame(height: 52)
-            .background(Palette.card, in: Capsule())
-            .overlay(Capsule().strokeBorder(Palette.line, lineWidth: 1))
+            .background(Palette.card, in: RoundedRectangle(cornerRadius: Radius.button, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: Radius.button, style: .continuous).strokeBorder(Palette.line, lineWidth: 1))
         }
         .buttonStyle(PressLift())
     }

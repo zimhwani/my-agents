@@ -147,7 +147,10 @@ enum BundledWork {
     static func image(for category: Category, seed: Int) -> UIImage? {
         let list = files(for: category)
         guard !list.isEmpty else { return nil }
-        let url = list[abs(seed) % list.count]
+        // Mix the seed so two pros in the same category don't land on the same photos in the same order.
+        var x = UInt64(truncatingIfNeeded: seed) &* 0x9E37_79B9_7F4A_7C15
+        x ^= x >> 29
+        let url = list[Int(x % UInt64(list.count))]
         lock.lock(); defer { lock.unlock() }
         if let cached = cache[url] { return cached }
         guard let image = UIImage(contentsOfFile: url.path) else { return nil }
