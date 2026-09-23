@@ -27,7 +27,7 @@ enum HDFont {
     // MARK: Numbers
 
     /// 28 regular serif, monospaced digits. Totals and the rating on a profile. Never bold.
-    static var numeral: Font { serif(28, .regular, relativeTo: .title).monospacedDigit() }
+    static var numeral: Font { serif(28, .regular, relativeTo: .title1).monospacedDigit() }
     /// 17 regular, monospaced digits. Prices in rows.
     static let price   = Font.system(.body).monospacedDigit()
     static var priceLarge: Font { numeral }

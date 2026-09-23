@@ -21,7 +21,7 @@ QUERIES=(
   "nails|gel manicure close up hands|nail polish application|acrylic nails hand"
   "hair|braiding hair close up|blow dry hair salon|balayage hair back view"
   "makeup|makeup brush eyeshadow close up eye closed|applying lipstick close up lips|makeup artist hands brush face close up|mascara wand close up"
-  "lashes|eyelash extensions tweezers close up eye|false eyelashes application close up|lash lift closed eye close up"
+  "lashes|eyelash extensions|lash extensions close up|eyelashes tweezers|eyelash close up|lash artist"
   "brows|eyebrow threading|brow lamination|eyebrow shaping close up"
   "thelot|bride getting ready hair makeup|getting ready mirror makeup"
 )
@@ -42,7 +42,7 @@ seen = 0
 for p in data.get("photos", []):
     # skip obvious stock-face shots by preferring landscape-free, hand/hair-ish alt text
     alt = (p.get("alt") or "").lower()
-    if any(w in alt for w in ("portrait of", "smiling", "posing", "looking at camera", "mask", "palette", "product", "bottle", "neon", "studio shot")): continue
+    if any(w in alt for w in ("portrait of", "smiling", "posing", "looking at camera", "face mask", "surgical", "palette", "product shot", "bottle", "neon")): continue
     print(p["src"]["large2x"]); seen += 1
     if seen >= need: break
 PY
