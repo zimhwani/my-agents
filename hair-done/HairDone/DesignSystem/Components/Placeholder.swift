@@ -51,8 +51,8 @@ struct WorkTile: View {
                     AsyncImage(url: url) { image in
                         image.resizable().scaledToFill()
                     } placeholder: { art(colors: colors, r: r, w: w, h: h) }
-                } else if let name = BundledWork.imageName(for: item.category, seed: item.seed) {
-                    Image(name).resizable().scaledToFill()
+                } else if let photo = BundledWork.image(for: item.category, seed: item.seed) {
+                    Image(uiImage: photo).resizable().scaledToFill()
                 } else {
                     art(colors: colors, r: r, w: w, h: h)
                 }
@@ -137,24 +137,36 @@ struct Grain: View {
 
 /// Photos dropped into `Resources/Work/` as `work-<category>-<n>.jpg` stand in for real work
 /// until pros upload their own. Picked by seed so a pro's grid shows a stable mix.
+/// Loaded by file URL: `UIImage(named:)` only finds loose JPGs if you spell the extension,
+/// and the asset catalog isn't involved at all.
 enum BundledWork {
-    private static var counts: [Category: Int] = [:]
+    private static var urls: [Category: [URL]] = [:]
+    private static var cache: [URL: UIImage] = [:]
     private static let lock = NSLock()
 
-    static func imageName(for category: Category, seed: Int) -> String? {
-        let n = count(for: category)
-        guard n > 0 else { return nil }
-        return "work-\(category.rawValue.lowercased())-\((abs(seed) % n) + 1)"
+    static func image(for category: Category, seed: Int) -> UIImage? {
+        let list = files(for: category)
+        guard !list.isEmpty else { return nil }
+        let url = list[abs(seed) % list.count]
+        lock.lock(); defer { lock.unlock() }
+        if let cached = cache[url] { return cached }
+        guard let image = UIImage(contentsOfFile: url.path) else { return nil }
+        cache[url] = image
+        return image
     }
 
-    private static func count(for category: Category) -> Int {
+    private static func files(for category: Category) -> [URL] {
         lock.lock(); defer { lock.unlock() }
-        if let c = counts[category] { return c }
-        var c = 0
-        while UIImage(named: "work-\(category.rawValue.lowercased())-\(c + 1)") != nil { c += 1 }
-        // "The lot" borrows from hair and makeup when it has nothing of its own.
-        if c == 0, category == .theLot { counts[category] = 0; return 0 }
-        counts[category] = c
-        return c
+        if let known = urls[category] { return known }
+        var found: [URL] = []
+        var n = 1
+        while true {
+            let name = "work-\(category.rawValue.lowercased())-\(n)"
+            guard let url = ["jpg", "jpeg", "png", "heic"].lazy
+                .compactMap({ Bundle.main.url(forResource: name, withExtension: $0) }).first else { break }
+            found.append(url); n += 1
+        }
+        urls[category] = found
+        return found
     }
 }
