@@ -221,6 +221,94 @@ SCREENS["05-booked"] = page("You're booked", f"""<div class="screen ink">
 <div class="homeind light"></div>
 </div>""")
 
+# ---------------------------------------------------------------- 6-7. Home: the former layout in the luxe language
+# Founder's call (23 Sep): keep the former Home's order (greeting, search, Next up, Who's free, categories,
+# Near you) instead of a full-bleed hero, so no one pro takes the screen. Luxe treatment on top of it.
+MARK = ('<div class="serif" style="position:absolute;z-index:5;top:60px;left:0;width:393px;text-align:center;font-size:22px;font-weight:500">'
+        '<i>hd</i><span style="color:var(--lacquer);font-style:normal">.</span> <i>nd</i><span style="color:var(--lacquer);font-style:normal">.</span></div>')
+PIN = '<svg width="10" height="12" viewBox="0 0 10 12" fill="none" stroke="currentColor" stroke-width="1.2" style="margin:0 6px -1px 0"><path d="M5 11s4-3.9 4-6.6A4 4 0 0 0 1 4.4C1 7.1 5 11 5 11z"/><circle cx="5" cy="4.5" r="1.4"/></svg>'
+CHEV = '<svg width="8" height="14" viewBox="0 0 8 14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="m1.5 1.5 5 5.5-5 5.5"/></svg>'
+LIST = '<svg width="18" height="14" viewBox="0 0 18 14" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><path d="M5 2h12M5 7h12M5 12h12"/><circle cx="1.5" cy="2" r=".6"/><circle cx="1.5" cy="7" r=".6"/><circle cx="1.5" cy="12" r=".6"/></svg>'
+
+def rail(name, label, line, x, top, **k):
+    return (ph(name, x, top, 150, 188, radius=2, **k) +
+            f'<div class="serif" style="position:absolute;left:{x}px;top:{top+198}px;font-size:19px;line-height:24px">{label}</div>'
+            f'<div style="position:absolute;left:{x}px;top:{top+224}px;font-size:13px;color:var(--inkSoft);white-space:nowrap">{line}</div>')
+
+def tile(name, label, x, top, **k):
+    return (ph(name, x, top, 104, 130, radius=2, **k) +
+            f'<div class="serif" style="position:absolute;left:{x}px;top:{top+138}px;font-size:16px;line-height:20px">{label}</div>')
+
+def near(name, first, craft, facts, free, price, top, **k):
+    return (ph(name, 20, top, 96, 120, radius=2, **k) +
+            f'<div style="position:absolute;left:132px;top:{top+4}px;width:241px">'
+            + (f'<div class="eyebrow" style="font-size:11px;color:var(--inkSoft);margin-bottom:5px">{free}</div>' if free else '') +
+            f'<div style="display:flex;justify-content:space-between;align-items:baseline"><div class="serif" style="font-size:22px;line-height:26px">{first}</div>'
+            f'<div class="num" style="font-size:15px">from {price}</div></div>'
+            f'<div style="font-size:14px;margin-top:4px">{craft}</div>'
+            f'<div style="font-size:13px;color:var(--inkSoft);margin-top:3px">{facts}</div></div>'
+            f'<div style="position:absolute;left:132px;top:{top+131}px;width:241px;height:.5px;background:var(--lineStrong)"></div>')
+
+SCREENS["06-home-former-luxe"] = page("Home, former layout", f"""<div class="screen">
+{status("14:14")}
+{MARK}
+<div class="eyebrow" style="position:absolute;left:20px;top:112px;color:var(--inkSoft);display:flex;align-items:center">{PIN}Fitzroy North</div>
+<div class="serif" style="position:absolute;left:20px;top:132px;font-size:40px;line-height:44px;letter-spacing:-.4px">Afternoon, <i>Tash</i>.</div>
+
+<div style="position:absolute;left:20px;top:196px;width:353px;height:46px;border-bottom:1px solid var(--ink);display:flex;align-items:center;gap:12px;color:var(--inkSoft);font-size:17px">
+  <span style="color:var(--ink)">{SEARCH}</span>French tip, blow-dry, a suburb</div>
+
+<div style="position:absolute;left:20px;top:268px;width:353px;height:96px;background:var(--ink);color:var(--paperOnInk);border-radius:6px;overflow:hidden">
+  {ph("work-nails-4", 0, 0, 76, 96, pos="50% 35%")}
+  <div style="position:absolute;left:92px;top:15px;right:34px">
+    <div class="eyebrow" style="font-size:11px;opacity:.7;display:flex;align-items:center"><span style="width:5px;height:5px;border-radius:3px;background:#7FA88A;margin-right:7px"></span>Next up · Confirmed</div>
+    <div class="serif" style="font-size:21px;line-height:26px;margin-top:5px">BIAB with Kiara</div>
+    <div style="font-size:13px;opacity:.72;margin-top:2px">Today, 6:15 pm · at yours</div>
+  </div>
+  <div style="position:absolute;right:16px;top:41px;opacity:.6">{CHEV}</div>
+</div>
+
+<div style="position:absolute;left:20px;top:396px;width:353px;display:flex;justify-content:space-between;align-items:baseline">
+  <div class="serif" style="font-size:26px;line-height:30px">Who's free today</div>
+  <div style="font-size:15px;color:var(--inkSoft)">See all</div>
+</div>
+{rail("work-hair-1", "Aaliyah", "8.4 km · free from 3", 20, 440, pos="50% 40%", zoom=1.12, origin="55% 45%")}
+{rail("work-lashes-2", "Sofia", "5.1 km · free from 4", 182, 440, pos="0% 40%")}
+{rail("work-brows-1", "Priya", "14 km · free from 6", 344, 440, pos="50% 40%")}
+
+{tile("work-hair-3", "Hair", 20, 712, pos="50% 30%", zoom=1.15, origin="50% 35%")}
+{tile("work-nails-1", "Nails", 136, 712, pos="50% 20%", zoom=1.25, origin="45% 25%")}
+{tile("work-thelot-2", "Makeup", 252, 712, pos="50% 30%", zoom=1.5, origin="45% 28%")}
+{tile("work-lashes-1", "Lashes", 368, 712, pos="50% 35%")}
+{tabbar("home")}
+<div class="homeind"></div>
+</div>""")
+
+SCREENS["07-home-former-luxe-scrolled"] = page("Home, former layout, scrolled", f"""<div class="screen">
+{status("14:15")}
+<div style="position:absolute;left:0;top:0;width:393px;height:98px;z-index:30;background:rgba(248,243,236,.86);backdrop-filter:blur(20px);border-bottom:.5px solid rgba(36,26,22,.12)"></div>
+<div style="position:absolute;z-index:31;top:0;left:0">{MARK}</div>
+
+{tile("work-hair-3", "Hair", 20, 120, pos="50% 30%", zoom=1.15, origin="50% 35%")}
+{tile("work-nails-1", "Nails", 136, 120, pos="50% 20%", zoom=1.25, origin="45% 25%")}
+{tile("work-thelot-2", "Makeup", 252, 120, pos="50% 30%", zoom=1.5, origin="45% 28%")}
+{tile("work-lashes-1", "Lashes", 368, 120, pos="50% 35%")}
+
+<div style="position:absolute;left:20px;top:318px;width:353px;display:flex;justify-content:space-between;align-items:center">
+  <div class="serif" style="font-size:26px;line-height:30px">Near you</div>
+  <div style="display:flex;gap:16px;align-items:center;font-size:14px">
+    <span style="display:flex;align-items:center;gap:6px;border-bottom:1px solid var(--ink);padding-bottom:3px">{LIST}List</span>
+    <span style="display:flex;align-items:center;gap:6px;color:var(--inkSoft);padding-bottom:4px">{MAP.replace('width="22" height="22"','width="17" height="17"')}Map</span>
+  </div>
+</div>
+{near("work-nails-2", "Kiara M.", "Nail tech · BIAB, gel, French", "Brunswick · 2.9 km · ★ 4.9 (86)", "Free from 5 pm", "$95", 370, pos="50% 40%")}
+{near("work-hair-2", "Grace L.", "Hair · silk press, braids", "Carlton · 3.8 km · ★ 4.8 (121)", "Free tomorrow", "$120", 518, pos="50% 30%")}
+{near("work-thelot-1", "Mia R.", "Makeup and hair · events", "Richmond · 5.5 km · ★ 5.0 (40)", "", "$180", 666, pos="50% 30%")}
+{tabbar("home")}
+<div class="homeind"></div>
+</div>""")
+
+
 for k, v in SCREENS.items():
     with open(os.path.join(HERE, k + ".html"), "w") as f:
         f.write(v)
