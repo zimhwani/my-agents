@@ -35,16 +35,29 @@ fetch() { # category, query, count -> downloads into $TMP/<category>/
   local json
   json=$(curl -sS -H "Authorization: $PEXELS_API_KEY" \
     "https://api.pexels.com/v1/search?query=$(python3 -c 'import sys,urllib.parse;print(urllib.parse.quote(sys.argv[1]))' "$q")&orientation=portrait&per_page=$((need + 6))")
-  python3 - "$json" "$need" <<'PY' | while read -r url; do
+  python3 - "$json" "$need" "$q" <<'PY' | while read -r url; do
 import json, sys
-data = json.loads(sys.argv[1]); need = int(sys.argv[2])
+try:
+    data = json.loads(sys.argv[1])
+except Exception as e:
+    print("  (pexels returned something that isn't JSON for %r: %s)" % (sys.argv[3], sys.argv[1][:120]), file=sys.stderr); data = {}
+need = int(sys.argv[2])
+if "error" in data or "code" in data:
+    print("  (pexels error for %r: %s)" % (sys.argv[3], data), file=sys.stderr)
+photos = data.get("photos", [])
+if not photos:
+    print("  (no portrait results for %r, total_results=%s)" % (sys.argv[3], data.get("total_results")), file=sys.stderr)
 seen = 0
-for p in data.get("photos", []):
+skipped = []
+for p in photos:
     # skip obvious stock-face shots by preferring landscape-free, hand/hair-ish alt text
     alt = (p.get("alt") or "").lower()
-    if any(w in alt for w in ("portrait of", "smiling", "posing", "looking at camera", "face mask", "surgical", "palette", "product shot", "bottle", "neon")): continue
+    if any(w in alt for w in ("portrait of", "smiling", "posing", "looking at camera", "face mask", "surgical", "palette", "product shot", "bottle", "neon")):
+        skipped.append(alt[:60]); continue
     print(p["src"]["large2x"]); seen += 1
     if seen >= need: break
+if seen == 0 and skipped:
+    print("  (all %d results for %r were filtered out, e.g. %r)" % (len(skipped), sys.argv[3], skipped[0]), file=sys.stderr)
 PY
     mkdir -p "$TMP/$cat_"
     n=$(find "$TMP/$cat_" -type f | wc -l | tr -d ' ')
