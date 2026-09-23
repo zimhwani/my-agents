@@ -6,6 +6,10 @@ that need your logins. Do them in test mode first. Nothing here needs code.
 
 Never paste a secret key into a chat, an issue or the repo. They go straight into the dashboards below.
 
+**Shortcut:** once Stripe Connect is switched on (step 1.1), `tools/connect-backend.sh` does steps 1.2–1.4,
+3 and 4 for you. It creates the webhooks, stores the secrets, turns on sign-in with test numbers and fills in
+`HairDone.xcconfig`. It asks for your Stripe keys and a Supabase access token, hidden, on your Mac.
+
 ## 1. Stripe (test mode first)
 
 1. **Turn on Connect.** Dashboard → Connect → Get started. Choose a platform or marketplace with
