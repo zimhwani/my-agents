@@ -63,21 +63,26 @@ struct HomeView: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: Space.l) {
-            MonogramMark(size: 20)
+            MonogramMark(size: 22)
+                .frame(maxWidth: .infinity)
                 .accessibilityAddTraits(.isHeader)
-            VStack(alignment: .leading, spacing: Space.xs) {
-                Text(greeting)
-                    .font(HDFont.hero)
-                    .foregroundStyle(Palette.ink)
-                    .fixedSize(horizontal: false, vertical: true)
-                HStack(spacing: 5) {
-                    Image(systemName: locationOff ? "location.slash" : "location.fill")
-                        .font(.system(size: 11, weight: .semibold))
+            VStack(alignment: .leading, spacing: Space.s) {
+                HStack(spacing: 6) {
+                    Image(systemName: locationOff ? "location.slash" : "mappin")
+                        .font(.system(size: 10, weight: .medium))
                     Text(suburbLine)
-                        .font(HDFont.sub)
+                        .lineLimit(1)
                 }
+                .homeEyebrow()
                 .foregroundStyle(Palette.inkSoft)
                 .accessibilityElement(children: .combine)
+
+                greetingText
+                    .font(HomeFont.greeting)
+                    .foregroundStyle(Palette.ink)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityLabel(greeting)
+                    .accessibilityAddTraits(.isHeader)
             }
 
             HomeSearchField(text: $query, focused: $searchFocused)
@@ -96,6 +101,14 @@ struct HomeView: View {
         case 17..<22: return "Who's free tonight."
         default: return "Late one. Here's tomorrow."
         }
+    }
+
+    /// The greeting with her name in italic: the one word on Home the serif leans on.
+    private var greetingText: Text {
+        let name = app.firstName.trimmingCharacters(in: .whitespaces)
+        guard !name.isEmpty, hour >= 5, hour < 17 else { return Text(greeting) }
+        let part = hour < 12 ? "Morning, " : "Afternoon, "
+        return Text(part) + Text(name).italic() + Text(".")
     }
 
     private var locationOff: Bool { app.location.hasAsked && !app.location.isAllowed }
@@ -190,7 +203,7 @@ struct HomeView: View {
                 )
             } else {
                 ForEach(matches) { pro in
-                    ProCard(pro: pro, distanceKm: distance(pro), nextFree: nextFreeLabel(pro, on: listDay)) { open(pro) }
+                    HomeProRow(pro: pro, eyebrow: nextFreeLabel(pro, on: listDay), distanceKm: distance(pro)) { open(pro) }
                 }
             }
         }
@@ -201,8 +214,7 @@ struct HomeView: View {
 
     private var whosFree: some View {
         VStack(alignment: .leading, spacing: Space.l) {
-            SectionHeader(title: dayOffset == 0 ? "Who's free today" : "Who's free tomorrow")
-                .screenGutter()
+            homeSection(dayOffset == 0 ? "Who's free today" : "Who's free tomorrow")
 
             if freePros.isEmpty {
                 VStack(alignment: .leading, spacing: Space.xs) {
@@ -218,9 +230,9 @@ struct HomeView: View {
                 .screenGutter()
             } else {
                 ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(alignment: .top, spacing: Space.m) {
+                    HStack(alignment: .top, spacing: 12) {
                         ForEach(freePros) { pro in
-                            ProMiniTile(pro: pro, line: whosFreeLine(pro)) { open(pro) }
+                            HomePortraitTile(item: pro.homeCover, width: 150, title: pro.firstName, line: whosFreeLine(pro)) { open(pro) }
                         }
                     }
                     .screenGutter()
@@ -233,9 +245,9 @@ struct HomeView: View {
 
     private var categories: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: Space.s) {
+            HStack(alignment: .top, spacing: 12) {
                 ForEach(Category.allCases) { c in
-                    HomeCategoryTile(category: c, isSelected: category == c) {
+                    HomeCategoryTile(category: c, isSelected: category == c, isDimmed: category != nil && category != c) {
                         category = (category == c) ? nil : c
                     }
                 }
@@ -249,14 +261,10 @@ struct HomeView: View {
     private var nearYou: some View {
         VStack(alignment: .leading, spacing: Space.l) {
             HStack(alignment: .firstTextBaseline) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(category.map { "\($0.label) near you" } ?? "Near you")
-                        .font(HDFont.heading)
-                        .foregroundStyle(Palette.ink)
-                    Text("Closest first")
-                        .font(HDFont.sub)
-                        .foregroundStyle(Palette.inkSoft)
-                }
+                Text(category.map { "\($0.label) near you" } ?? "Near you")
+                    .font(HomeFont.section)
+                    .foregroundStyle(Palette.ink)
+                    .accessibilityAddTraits(.isHeader)
                 Spacer()
                 HomeListMapToggle(showMap: $showMap)
             }
@@ -287,15 +295,25 @@ struct HomeView: View {
                     .screenGutter()
                     .transition(.opacity)
             } else {
-                VStack(spacing: Space.l) {
+                VStack(spacing: 16) {
                     ForEach(filteredPros) { pro in
-                        ProCard(pro: pro, distanceKm: distance(pro), nextFree: nextFreeLabel(pro, on: listDay)) { open(pro) }
+                        HomeProRow(pro: pro, eyebrow: nextFreeLabel(pro, on: listDay), distanceKm: distance(pro)) { open(pro) }
                     }
                 }
                 .screenGutter()
                 .transition(.opacity)
             }
         }
+    }
+
+    /// A section title in serif.
+    private func homeSection(_ title: String) -> some View {
+        Text(title)
+            .font(HomeFont.section)
+            .foregroundStyle(Palette.ink)
+            .accessibilityAddTraits(.isHeader)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .screenGutter()
     }
 
     // MARK: Book again
@@ -305,11 +323,11 @@ struct HomeView: View {
         let items = bookAgainItems
         if !items.isEmpty {
             VStack(alignment: .leading, spacing: Space.l) {
-                SectionHeader(title: "Book again").screenGutter()
+                homeSection("Book again")
                 ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(alignment: .top, spacing: Space.m) {
+                    HStack(alignment: .top, spacing: 12) {
                         ForEach(items) { item in
-                            ProMiniTile(pro: item.pro, line: item.line) { open(item.pro) }
+                            HomePortraitTile(item: item.pro.homeCover, width: 120, title: item.pro.firstName, line: item.line) { open(item.pro) }
                         }
                     }
                     .screenGutter()
@@ -325,11 +343,11 @@ struct HomeView: View {
         let favs = app.favouritePros
         if !favs.isEmpty {
             VStack(alignment: .leading, spacing: Space.l) {
-                SectionHeader(title: "Favourites").screenGutter()
+                homeSection("Favourites")
                 ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(alignment: .top, spacing: Space.m) {
+                    HStack(alignment: .top, spacing: 12) {
                         ForEach(favs) { pro in
-                            ProMiniTile(pro: pro, line: pro.specialtyLine) { open(pro) }
+                            HomePortraitTile(item: pro.homeCover, width: 120, title: pro.firstName, line: pro.specialtyLine) { open(pro) }
                         }
                     }
                     .screenGutter()
@@ -355,8 +373,8 @@ private struct HomeSearchField: View {
     var body: some View {
         HStack(spacing: 10) {
             Image(systemName: "magnifyingglass")
-                .font(.system(size: 15, weight: .medium))
-                .foregroundStyle(Palette.inkSoft)
+                .font(.system(size: 17, weight: .light))
+                .foregroundStyle(Palette.ink)
             TextField("French tip, blow-dry, a suburb", text: $text)
                 .font(HDFont.body)
                 .focused(focused)
@@ -378,10 +396,10 @@ private struct HomeSearchField: View {
                 .transition(.opacity.combined(with: .scale))
             }
         }
-        .padding(.horizontal, 14)
-        .frame(height: 50)
-        .background(Palette.card, in: RoundedRectangle(cornerRadius: Radius.input, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: Radius.input, style: .continuous).strokeBorder(Palette.line, lineWidth: 1))
+        .frame(height: 48)
+        .overlay(alignment: .bottom) {
+            Rectangle().fill(Palette.ink).frame(height: 1)
+        }
         .animation(Motion.gentle, value: text.isEmpty)
     }
 }
@@ -401,78 +419,56 @@ private struct HomeNextUpCard: View {
         return what
     }
 
+    private var cover: WorkItem? { pro?.homeCover }
+
+    private var statusLine: String {
+        "Next up · " + booking.status.label
+    }
+
     var body: some View {
         Button {
             Haptics.light()
             action()
         } label: {
-            HStack(spacing: Space.m) {
-                Avatar(name: pro?.firstName ?? "", seed: pro?.seed ?? 0, size: 44)
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("Next up").labelStyle()
+            HStack(spacing: 0) {
+                HomePhoto(item: cover, cornerRadius: 0)
+                    .frame(width: 76)
+                    .frame(maxHeight: .infinity)
+                    .clipped()
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 7) {
+                        Circle()
+                            .fill(booking.status == .confirmed ? HomeInk.confirmed : HomeInk.onInk.opacity(0.5))
+                            .frame(width: 5, height: 5)
+                        Text(statusLine)
+                            .homeEyebrow()
+                            .lineLimit(1)
+                    }
+                    .foregroundStyle(HomeInk.onInk.opacity(0.72))
                     Text(title)
-                        .font(HDFont.bodyStrong)
-                        .foregroundStyle(Palette.ink)
+                        .font(HomeFont.nextUp)
+                        .foregroundStyle(HomeInk.onInk)
                         .lineLimit(1)
                     Text(booking.start.friendlyDayTime)
-                        .font(HDFont.sub)
-                        .foregroundStyle(Palette.inkSoft)
+                        .font(HDFont.caption)
+                        .foregroundStyle(HomeInk.onInk.opacity(0.72))
+                        .lineLimit(1)
                 }
+                .padding(.leading, 16)
+                .padding(.vertical, 14)
                 Spacer(minLength: Space.s)
-                StatusBadge(status: booking.status)
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(Palette.inkFaint)
+                    .font(.system(size: 13, weight: .regular))
+                    .foregroundStyle(HomeInk.onInk.opacity(0.6))
+                    .padding(.trailing, 16)
             }
-            .card(padding: Space.m)
+            .frame(height: 96)
+            .background(HomeInk.ink)
+            .clipShape(RoundedRectangle(cornerRadius: Radius.button, style: .continuous))
         }
         .buttonStyle(PressLift(scale: 0.985))
         .accessibilityElement(children: .combine)
         .accessibilityHint("Opens your bookings")
-    }
-}
-
-// MARK: - Category tile
-
-private struct HomeCategoryTile: View {
-    var category: Category
-    var isSelected: Bool
-    var action: () -> Void
-
-    var body: some View {
-        Button {
-            Haptics.selection()
-            action()
-        } label: {
-            VStack(alignment: .leading, spacing: 0) {
-                Image(systemName: category.symbol)
-                    .font(.system(size: 20, weight: .medium))
-                    .foregroundStyle(category.tintInk)
-                Spacer(minLength: Space.s)
-                Text(category.label)
-                    .font(HDFont.subStrong)
-                    .foregroundStyle(category.tintInk)
-                if category == .theLot {
-                    Text("Hair, makeup, nails. For events.")
-                        .font(HDFont.caption)
-                        .foregroundStyle(category.tintInk.opacity(0.8))
-                        .lineLimit(2)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .padding(.top, 2)
-                }
-            }
-            .padding(Space.m)
-            .frame(width: 132, height: 112, alignment: .topLeading)
-            .background(category.tint, in: RoundedRectangle(cornerRadius: Radius.tile, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: Radius.tile, style: .continuous)
-                    .strokeBorder(isSelected ? category.tintInk : Color.clear, lineWidth: 1.5)
-            )
-        }
-        .buttonStyle(PressLift(scale: 0.96))
-        .accessibilityLabel(category.label)
-        .accessibilityHint(isSelected ? "Clears the filter" : "Shows \(category.label.lowercased()) pros")
-        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }
 
@@ -482,13 +478,10 @@ private struct HomeListMapToggle: View {
     @Binding var showMap: Bool
 
     var body: some View {
-        HStack(spacing: 2) {
+        HStack(spacing: 16) {
             segment("List", symbol: "list.bullet", isMap: false)
             segment("Map", symbol: "map", isMap: true)
         }
-        .padding(3)
-        .background(Palette.card, in: Capsule())
-        .overlay(Capsule().strokeBorder(Palette.line, lineWidth: 1))
         .accessibilityElement(children: .contain)
     }
 
@@ -499,18 +492,21 @@ private struct HomeListMapToggle: View {
             Haptics.selection()
             showMap = isMap
         } label: {
-            HStack(spacing: 5) {
-                Image(systemName: symbol).font(.system(size: 11, weight: .semibold))
-                Text(title).font(HDFont.label)
+            HStack(spacing: 6) {
+                Image(systemName: symbol).font(.system(size: 12, weight: .light))
+                Text(title).font(HDFont.sub)
             }
-            .foregroundStyle(selected ? Palette.paper : Palette.inkSoft)
-            .padding(.horizontal, 12)
-            .frame(height: 30)
-            .background(selected ? Palette.ink : Color.clear, in: Capsule())
+            .foregroundStyle(selected ? Palette.ink : Palette.inkSoft)
+            .padding(.bottom, 4)
+            .overlay(alignment: .bottom) {
+                Rectangle().fill(selected ? Palette.ink : Color.clear).frame(height: 1)
+            }
+            .frame(minHeight: 44)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .accessibilityLabel(title)
-        .accessibilityAddTraits(selected ? .isSelected : [])
+        .accessibilityAddTraits(selected ? [.isButton, .isSelected] : [.isButton])
     }
 }
 
