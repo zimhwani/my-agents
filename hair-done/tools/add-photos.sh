@@ -14,12 +14,18 @@ cat_="${1:-}"; src="${2:-}"
 case "$cat_" in hair|nails|makeup|lashes|brows|thelot) ;; *) echo "usage: tools/add-photos.sh <hair|nails|makeup|lashes|brows|thelot> <folder>"; exit 1;; esac
 [[ -d "$src" ]] || { echo "no such folder: $src"; exit 1; }
 out=HairDone/Resources/Work
-n=$(ls "$out"/work-"$cat_"-*.jpg 2>/dev/null | wc -l | tr -d ' ')
-for f in "$src"/*.{jpg,jpeg,JPG,JPEG,png,PNG,heic,HEIC,webp}; do
+mkdir -p "$out"
+shopt -s nullglob nocaseglob
+existing=("$out"/work-"$cat_"-*.jpg)
+n=${#existing[@]}
+found=0
+for f in "$src"/*.{jpg,jpeg,png,heic,webp}; do
   [[ -f "$f" ]] || continue
+  found=1
   n=$((n + 1))
   dest="$out/work-$cat_-$n.jpg"
   sips -s format jpeg -s formatOptions 82 -Z 1200 "$f" --out "$dest" >/dev/null
   echo "$(basename "$f") -> $(basename "$dest")"
 done
+[[ "$found" == 1 ]] || { echo "no photos found in $src"; exit 1; }
 echo "$cat_: $n photo(s). Now: xcodegen generate, then build."

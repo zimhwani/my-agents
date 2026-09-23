@@ -25,7 +25,8 @@ QUERIES=(
 
 fetch() { # category, query, count -> downloads into $TMP/<category>/
   local cat_="$1" q="$2" want="$3"
-  local got=$(ls "$TMP/$cat_" 2>/dev/null | wc -l | tr -d ' ')
+  local got=0
+  [[ -d "$TMP/$cat_" ]] && got=$(find "$TMP/$cat_" -type f | wc -l | tr -d ' ')
   [[ "$got" -ge "$want" ]] && return 0
   local need=$((want - got))
   local json
@@ -43,7 +44,7 @@ for p in data.get("photos", []):
     if seen >= need: break
 PY
     mkdir -p "$TMP/$cat_"
-    n=$(ls "$TMP/$cat_" | wc -l | tr -d ' ')
+    n=$(find "$TMP/$cat_" -type f | wc -l | tr -d ' ')
     curl -sS -L "$url" -o "$TMP/$cat_/$((n + 1)).jpg" && echo "  $cat_: got $((n + 1))"
   done
 }
@@ -53,12 +54,11 @@ for entry in "${QUERIES[@]}"; do
   echo "==> $cat_"
   IFS='|' read -ra terms <<< "$rest"
   for t in "${terms[@]}"; do fetch "$cat_" "$t" "$PER"; done
-  if [[ -d "$TMP/$cat_" ]] && [[ "$(ls "$TMP/$cat_" | wc -l | tr -d ' ')" -gt 0 ]]; then
+  if [[ -d "$TMP/$cat_" ]] && [[ "$(find "$TMP/$cat_" -type f | wc -l | tr -d ' ')" -gt 0 ]]; then
     rm -f HairDone/Resources/Work/work-"$cat_"-*.jpg
-    tools/add-photos.sh "$cat_" "$TMP/$cat_" | tail -1
+    tools/add-photos.sh "$cat_" "$TMP/$cat_" || echo "  $cat_: naming step failed; the downloads are in $TMP/$cat_"
   else
     echo "  $cat_: nothing found; keeps the drawn art"
   fi
 done
-rm -rf "$TMP"
-echo "==> done. Now: xcodegen generate, then build."
+echo "==> done. Now: xcodegen generate, then build. (Downloads kept in $TMP in case you want the originals.)"
