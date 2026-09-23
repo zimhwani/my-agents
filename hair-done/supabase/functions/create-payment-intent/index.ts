@@ -1,46 +1,77 @@
-// POST { booking_id, payment_method_id? }
-// Places a hold (manual capture) for the client's total. Captured by the webhook / sweep when the pro marks done.
-// Returns { client_secret, payment_intent_id, customer_id, ephemeral_key } for PaymentSheet.
-import { stripe, admin, userClient, json, PLATFORM_RATE } from "../_shared/stripe.ts";
+// POST { booking_id }                     → what PaymentSheet needs to take the card for a new booking.
+// POST { booking_id, action: "confirm" }  → after PaymentSheet says done: check with Stripe and mark the
+//                                           booking held (or card saved), so the pro sees the request now
+//                                           rather than when the webhook lands. The webhook does the same.
+//
+// Within 6 days of the start: a PaymentIntent with manual capture (the hold), card saved for later.
+// Further out: a SetupIntent (card saved, no hold); the settle function places the hold 6 days before.
+import {
+  stripe, stripeKey, admin, userClient, json, notConfigured, applicationFee, bookingTotal,
+  customerFor, rememberCard, HOLD_LEAD_MS, type Booking,
+} from "../_shared/stripe.ts";
 
 Deno.serve(async (req) => {
   if (req.method !== "POST") return json({ error: "method" }, 405);
-  const supa = userClient(req);
-  const { data: { user } } = await supa.auth.getUser();
+  if (!stripeKey) return notConfigured();
+  const { data: { user } } = await userClient(req).auth.getUser();
   if (!user) return json({ error: "not_signed_in" }, 401);
 
-  const { booking_id } = await req.json();
-  const { data: b, error } = await supa.from("bookings").select("*, pros(stripe_account_id)").eq("id", booking_id).single();
-  if (error || !b || b.client_id !== user.id) return json({ error: "not_found" }, 404);
-  if (b.stripe_payment_intent_id) return json({ error: "already_held" }, 409);
+  const { booking_id, action } = await req.json();
+  const { data: b } = await admin.from("bookings").select("*").eq("id", booking_id).maybeSingle<Booking>();
+  if (!b || b.client_id !== user.id) return json({ error: "not_found" }, 404);
 
-  // One Stripe customer per profile.
-  const { data: profile } = await admin.from("profiles").select("id, first_name, profile_contacts(email, phone)").eq("id", user.id).single();
-  const { data: existing } = await admin.from("payment_methods").select("stripe_customer_id").eq("profile_id", user.id).limit(1).maybeSingle();
-  let customerId = existing?.stripe_customer_id;
-  if (!customerId) {
-    const contact = (profile as unknown as { profile_contacts?: { email?: string; phone?: string } | null })?.profile_contacts;
-    const c = await stripe.customers.create({ name: profile?.first_name, email: contact?.email ?? undefined, phone: contact?.phone ?? undefined, metadata: { profile_id: user.id } });
-    customerId = c.id;
+  if (action === "confirm") return confirm(b, user.id);
+
+  if (b.status !== "requested" || b.hold_state !== "none") return json({ error: "already_paid" }, 409);
+  const { data: pro } = await admin.from("pros").select("stripe_account_id, payouts_connected").eq("id", b.pro_id).single();
+  if (!pro?.stripe_account_id || !pro.payouts_connected) return json({ error: "pro_payouts_not_set_up" }, 409);
+
+  const customer = await customerFor(user.id);
+  const ephemeralKey = await stripe.ephemeralKeys.create({ customer }, { apiVersion: "2024-06-20" });
+  const metadata = { booking_id: b.id, reference: b.reference, pro_id: b.pro_id ?? "", client_id: user.id, kind: "booking" };
+
+  if (new Date(b.starts_at).getTime() - Date.now() > HOLD_LEAD_MS) {
+    const si = await stripe.setupIntents.create({
+      customer, usage: "off_session", automatic_payment_methods: { enabled: true }, metadata,
+    }, { idempotencyKey: `setup-${b.id}` });
+    await admin.from("bookings").update({ stripe_setup_intent_id: si.id }).eq("id", b.id);
+    return json({ mode: "setup", client_secret: si.client_secret, customer_id: customer, ephemeral_key: ephemeralKey.secret,
+                  amount_cents: bookingTotal(b) });
   }
 
-  const amount = b.services_cents + b.travel_fee_cents + b.booking_fee_cents - b.discount_cents;
-  const applicationFee = Math.round((b.services_cents + b.travel_fee_cents) * PLATFORM_RATE) + b.booking_fee_cents;
-
-  const intent = await stripe.paymentIntents.create({
-    amount,
-    currency: "aud",
-    customer: customerId,
+  const amount = bookingTotal(b);
+  const pi = await stripe.paymentIntents.create({
+    amount, currency: "aud", customer,
     capture_method: "manual",
+    setup_future_usage: "off_session",          // so a tip, or a charge after a late cancel, needs no second tap
     automatic_payment_methods: { enabled: true },
-    application_fee_amount: applicationFee,
-    transfer_data: b.pros?.stripe_account_id ? { destination: b.pros.stripe_account_id } : undefined,
+    application_fee_amount: applicationFee(b, amount),
+    transfer_data: { destination: pro.stripe_account_id },
     description: `Hair Done ${b.reference}`,
-    metadata: { booking_id: b.id, reference: b.reference, pro_id: b.pro_id, client_id: b.client_id },
-  });
-
-  await admin.from("bookings").update({ stripe_payment_intent_id: intent.id }).eq("id", b.id);
-  const ephemeralKey = await stripe.ephemeralKeys.create({ customer: customerId }, { apiVersion: "2024-06-20" });
-
-  return json({ client_secret: intent.client_secret, payment_intent_id: intent.id, customer_id: customerId, ephemeral_key: ephemeralKey.secret });
+    statement_descriptor_suffix: "HAIR DONE",
+    metadata,
+  }, { idempotencyKey: `hold-${b.id}` });
+  await admin.from("bookings").update({ stripe_payment_intent_id: pi.id }).eq("id", b.id);
+  return json({ mode: "payment", client_secret: pi.client_secret, customer_id: customer, ephemeral_key: ephemeralKey.secret,
+                amount_cents: amount });
 });
+
+async function confirm(b: Booking, profileId: string) {
+  if (b.stripe_payment_intent_id) {
+    const pi = await stripe.paymentIntents.retrieve(b.stripe_payment_intent_id);
+    if (pi.status !== "requires_capture") return json({ held: false, stripe_status: pi.status });
+    const pm = typeof pi.payment_method === "string" ? pi.payment_method : pi.payment_method?.id ?? null;
+    if (pm && typeof pi.customer === "string") await rememberCard(profileId, pi.customer, pm);
+    const { data } = await admin.rpc("booking_hold_placed", { b_id: b.id, state: "held", pm });
+    return json({ held: true, booking: data });
+  }
+  if (b.stripe_setup_intent_id) {
+    const si = await stripe.setupIntents.retrieve(b.stripe_setup_intent_id);
+    if (si.status !== "succeeded") return json({ held: false, stripe_status: si.status });
+    const pm = typeof si.payment_method === "string" ? si.payment_method : si.payment_method?.id ?? null;
+    if (pm && typeof si.customer === "string") await rememberCard(profileId, si.customer, pm);
+    const { data } = await admin.rpc("booking_hold_placed", { b_id: b.id, state: "saved", pm });
+    return json({ held: true, booking: data });
+  }
+  return json({ held: false, stripe_status: "no_intent" });
+}

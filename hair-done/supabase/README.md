@@ -1,54 +1,54 @@
 # Hair Done backend
 
-Postgres on Supabase, Stripe for money. The iOS app ships against `MockDataService`; this is what it talks to once `SupabaseDataService` is wired up.
+Postgres on Supabase, Stripe for money. **Live project:** `hair-done` in the Tapinoir organisation,
+Sydney region, ref `yohqeunmgrxyakviofua` (`https://yohqeunmgrxyakviofua.supabase.co`).
+Everything in this folder is deployed there. What's left to switch on is in `../docs/go-live.md`.
 
 ## What's here
 
 | Path | What |
 |---|---|
-| `migrations/0001_init.sql` | Tables, enums, indexes, triggers, `pro_slots()` and `pros_near()` functions, storage buckets |
-| `migrations/0002_rls.sql` | Row-level security for every table, the `move_booking()` state machine, `sweep_bookings()` |
-| `functions/create-payment-intent` | Places the hold (manual capture) for a booking; returns what PaymentSheet needs |
-| `functions/stripe-webhook` | Keeps bookings and payouts in step with Stripe |
+| `migrations/0001_init.sql` | Tables, enums, triggers, storage buckets |
+| `migrations/0002_rls.sql` | Row-level security (several policies replaced in 0003) |
+| `migrations/0003_operational.sql` | Privacy, server-side prices, the state machine with the spec's timings, reliability, the sweep, account deletion, column guards |
+| `migrations/0004_hardening.sql` | Security-advisor tidy-ups |
+| `migrations/0005_schedule.sql` | pg_cron: `sweep_bookings()` every 10 min, the `settle` function every 5 min |
+| `migrations/0006_plain_coordinates.sql` | `lat`/`lng` columns on addresses and pros |
+| `functions/create-payment-intent` | Takes the card for a new booking: a hold if it's within 6 days, else a saved card. `action: "confirm"` marks it held |
+| `functions/pay-booking` | The client's Pay on the Done sheet: capture plus an optional tip |
+| `functions/settle` | Timed Stripe work: deferred holds, releases, cancellation charges, auto-capture |
+| `functions/stripe-webhook` | Keeps bookings, saved cards and payouts in step with Stripe |
 | `functions/connect-onboarding` | Stripe Connect Express link for a pro's payouts |
-| `config.toml` | Supabase CLI config (phone auth, Apple sign-in, function JWT settings) |
+| `functions/payouts-return` | The page Stripe sends a pro back to; hands her to `hairdone://payouts/...` |
 
-## Privacy, as the code does it
+## How the app talks to it
 
-- `profiles` holds names only. Phone and email are in `profile_contacts`, readable by the owner alone. Edge functions read them with the service role.
-- A pro reads bookings through the `bookings_for_pro` view: suburb and postcode always, the street address and access notes only once the booking is confirmed.
-- `availability.weekday` uses Postgres `dow` (0 = Sunday). The app's `Weekday` is 1 = Sunday, so store `Weekday.rawValue - 1`.
+Clients never see a pro's exact location, ABN or Stripe id, and never write prices.
+
+- Browse: `pros_near(lat, lng, cat)`, `pro_card(id)`, `pro_cards(ids)`, `pro_reviews(id)`, `pro_slots(id, day, minutes)`.
+- Book: save an address, then `create_booking(pro, service_ids, starts_at, address_id, notes)`. The server prices it and checks the slot under a lock. Then `create-payment-intent` → PaymentSheet → `create-payment-intent {action: "confirm"}`.
+- Move: `move_booking(id, status, reason)`. The server decides who may do what (spec §5). System lines in the thread are written by the server.
+- Pro side: `bookings_for_pro()`. The street address stays blank until she confirms.
+- Pay: `pay-booking {booking_id, tip_cents}`. Everything else about money is the server's.
+- "Something wrong?": `flag_booking(id, detail)`. Delete account: `delete_my_account()`.
 
 ## Money, as the code does it
 
-- Client total = services + travel fee + $3 booking fee (`bookings.booking_fee_cents`).
-- Hold placed at booking with `capture_method: manual`; captured when the pro marks done (or 12 h later by the sweep).
-- Stripe `application_fee_amount` = 12% of (services + travel) + the $3 booking fee. The rest goes to the pro's Express account via `transfer_data.destination`.
-- Cancellation: `move_booking()` sets `cancellation_charge_cents` (0 with 24 h+ notice, 50% under, 100% no-show). Capture that amount instead of the full hold.
-- Tips after the fact are a second PaymentIntent (`stripe_tip_intent_id`) with no application fee.
+- Client total = services + travel + $3. Hold placed at booking (manual capture). If the start is more than 6 days away the card is saved and `settle` places the hold 6 days before, because Stripe holds lapse at 7.
+- Captured when she taps Pay, or automatically 12 h after done unless she's pressed "Something wrong?" (48 h pause).
+- `application_fee_amount` = 12% of (services + travel) + $3. The rest goes to the pro's Express account (`transfer_data.destination`). A pro without payouts set up can't be booked.
+- Cancellation: free with 24 h notice or while requested; 50% of the pro's price under 24 h; 100% + $3 once she's arrived or on a no-show. `settle` captures that amount from the hold, or releases it.
+- Tips are a second charge with no fee, 100% to the pro.
 
-## Running it
+## Timers
 
-```bash
-supabase start                      # local stack
-supabase db reset                   # applies migrations
-supabase functions serve            # edge functions locally
-supabase secrets set STRIPE_SECRET_KEY=sk_test_... STRIPE_WEBHOOK_SECRET=whsec_...
-```
+| Job | Every | Does |
+|---|---|---|
+| `hairdone-sweep` | 10 min | Unpaid requests lapse at 30 min; unanswered requests decline at 2 h (−2 reliability); in-progress becomes done 12 h after the end |
+| `hairdone-settle` | 5 min | Calls `functions/v1/settle` with the secret from `private.settings` |
 
-For the cloud project: `supabase link --project-ref <ref>` then `supabase db push` and `supabase functions deploy`.
+## Changing things
 
-Schedule the sweep with pg_cron once the project is linked:
-
-```sql
-select cron.schedule('sweep-bookings', '*/10 * * * *', $$select sweep_bookings()$$);
-```
-
-Auto-capture 12 h after done is a second cron job that calls `stripe.paymentIntents.capture` for `done` bookings older than 12 h; do it in an edge function on a schedule, not in SQL.
-
-## Wiring the app
-
-1. Add `supabase-swift` to the Xcode target.
-2. In `SupabaseDataService.swift`, implement each method against the tables above. `pros(near:)` → `rpc("pros_near")`. `slots` → `rpc("pro_slots")`. Status changes → `rpc("move_booking")`.
-3. In `StripePaymentService.swift`, call `create-payment-intent`, present `PaymentSheet` with the returned `client_secret`, `customer_id` and `ephemeral_key`.
-4. Swap the services in `HairDoneApp.swift`.
+Use the Supabase MCP or CLI. For a fresh project: apply the migrations in order, deploy the six functions
+(`settle`, `stripe-webhook` and `payouts-return` with JWT verification off), change the URL in
+`0005_schedule.sql`, then follow `../docs/go-live.md`.

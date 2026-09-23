@@ -24,7 +24,7 @@ enable_confirmations = true
 
 [auth.external.apple]
 enabled = true
-client_id = "com.hairdone.app"
+client_id = "com.keithchinyanda.hairdone"
 secret = "env(SUPABASE_AUTH_EXTERNAL_APPLE_SECRET)"
 
 [functions.create-payment-intent]
@@ -34,4 +34,13 @@ verify_jwt = true
 verify_jwt = true
 
 [functions.stripe-webhook]
-verify_jwt = false
+verify_jwt = false          # Stripe signs it instead
+
+[functions.pay-booking]
+verify_jwt = true
+
+[functions.settle]
+verify_jwt = false          # checks the cron secret held in private.settings
+
+[functions.payouts-return]
+verify_jwt = false          # a public page Stripe sends pros back to
