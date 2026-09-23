@@ -1,5 +1,7 @@
 # Luxe pass: why build 21 reads as "a nice app" and what changes
 
+> **Superseded.** This pass was reverted after it shipped in build 27: on a real phone, removing the cards and colour read as unfinished, not luxe. The app now keeps its cards and tiles and takes only the quieter details from here (status dots, desaturated tints, serif names, the italic greeting, outline tab icons). Treat the rest as a record of what not to do next time: judge a direction on a device, never on a mockup.
+
 Answers to `../build-brief.md` §4 and `../brand.md`. Where this file changes a number the brief set (radius, gutter, section gap, a font size), this file wins and the brief should be updated to match; the tokens and the brand rules it doesn't mention stand.
 
 Written by the UI designer, with the brand guardian reading over the shoulder and the whimsy injector allowed one sentence at the end. Judged from the six TestFlight screenshots and the code that draws them. The gradient tiles are placeholder art; everything below is judged as if they held photos.

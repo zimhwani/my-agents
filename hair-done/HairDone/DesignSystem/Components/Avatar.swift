@@ -9,7 +9,8 @@ struct Avatar: View {
 
     var body: some View {
         ZStack {
-            Circle().fill(Placeholder.gradient(seed: seed))
+            // Oat, not candy: every avatar the same quiet surface so the photos carry the colour.
+            Circle().fill(Palette.dyn(light: 0xEDE4D8, dark: 0x2E2622))
             if let url {
                 AsyncImage(url: url) { image in
                     image.resizable().scaledToFill()
@@ -18,11 +19,11 @@ struct Avatar: View {
             } else {
                 Text(name.initials)
                     .font(.system(size: size * 0.38, weight: .semibold, design: .serif))
-                    .foregroundStyle(Palette.ink.opacity(0.75))
+                    .foregroundStyle(Palette.ink.opacity(0.8))
             }
         }
         .frame(width: size, height: size)
-        .overlay(Circle().strokeBorder(Color.white.opacity(0.6), lineWidth: 1))
+        .overlay(Circle().strokeBorder(Palette.line, lineWidth: 1))
         .accessibilityHidden(true)
     }
 }

@@ -10,12 +10,12 @@ enum Space {
     static let xxl: CGFloat = 32
     static let gutter: CGFloat = 20
     static let cardPadding: CGFloat = 16
-    static let section: CGFloat = 32
+    static let section: CGFloat = 36
 }
 
 enum Radius {
-    static let card: CGFloat = 20
-    static let tile: CGFloat = 16
+    static let card: CGFloat = 18
+    static let tile: CGFloat = 14
     static let input: CGFloat = 14
     static let chip: CGFloat = 999
 }

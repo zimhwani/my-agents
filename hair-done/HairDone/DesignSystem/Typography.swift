@@ -9,7 +9,7 @@ enum HDFont {
     }
     static let hero    = Font.system(.largeTitle, design: .serif).weight(.medium)
     static let title   = Font.system(.title, design: .serif).weight(.medium)
-    static let heading = Font.system(.title3, design: .serif).weight(.medium)
+    static let heading = Font.system(.title2, design: .serif).weight(.medium)
     /// 20 medium serif. Pro names on tiles and cards.
     static let name    = Font.system(.title3, design: .serif).weight(.medium)
     static let body    = Font.system(.body)

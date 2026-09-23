@@ -62,20 +62,21 @@ struct HomeView: View {
     // MARK: Header
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: Space.l) {
-            VStack(alignment: .leading, spacing: Space.xs) {
-                Text(greeting)
-                    .font(HDFont.hero)
+        VStack(alignment: .leading, spacing: Space.xl) {
+            VStack(alignment: .leading, spacing: Space.s) {
+                HStack(spacing: 6) {
+                    Image(systemName: locationOff ? "location.slash" : "location")
+                        .font(.system(size: 10, weight: .semibold))
+                    Text(suburbLine)
+                }
+                .labelStyle()
+                .accessibilityElement(children: .combine)
+
+                greetingText
+                    .font(HDFont.display)
                     .foregroundStyle(Palette.ink)
                     .fixedSize(horizontal: false, vertical: true)
-                HStack(spacing: 5) {
-                    Image(systemName: locationOff ? "location.slash" : "location.fill")
-                        .font(.system(size: 11, weight: .semibold))
-                    Text(suburbLine)
-                        .font(HDFont.sub)
-                }
-                .foregroundStyle(Palette.inkSoft)
-                .accessibilityElement(children: .combine)
+                    .accessibilityLabel(greeting)
             }
 
             HomeSearchField(text: $query, focused: $searchFocused)
@@ -94,6 +95,14 @@ struct HomeView: View {
         case 17..<22: return "Who's free tonight."
         default: return "Late one. Here's tomorrow."
         }
+    }
+
+    /// The greeting with her name in italic: the one word on Home the serif leans on.
+    private var greetingText: Text {
+        let name = app.firstName.trimmingCharacters(in: .whitespaces)
+        guard !name.isEmpty, hour >= 5, hour < 17 else { return Text(greeting) }
+        let part = hour < 12 ? "Morning, " : "Afternoon, "
+        return Text(part) + Text(name).italic() + Text(".")
     }
 
     private var locationOff: Bool { app.location.hasAsked && !app.location.isAllowed }
@@ -409,9 +418,10 @@ private struct HomeNextUpCard: View {
                 VStack(alignment: .leading, spacing: 3) {
                     Text("Next up").labelStyle()
                     Text(title)
-                        .font(HDFont.bodyStrong)
+                        .font(HDFont.name)
                         .foregroundStyle(Palette.ink)
-                        .lineLimit(1)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
                     Text(booking.start.friendlyDayTime)
                         .font(HDFont.sub)
                         .foregroundStyle(Palette.inkSoft)
@@ -444,11 +454,11 @@ private struct HomeCategoryTile: View {
         } label: {
             VStack(alignment: .leading, spacing: 0) {
                 Image(systemName: category.symbol)
-                    .font(.system(size: 20, weight: .medium))
+                    .font(.system(size: 18, weight: .regular))
                     .foregroundStyle(category.tintInk)
                 Spacer(minLength: Space.s)
                 Text(category.label)
-                    .font(HDFont.subStrong)
+                    .font(HDFont.name)
                     .foregroundStyle(category.tintInk)
                 if category == .theLot {
                     Text("Hair, makeup, nails. For events.")
