@@ -64,6 +64,8 @@ struct Tag: View {
         Text(text)
             .font(HDFont.label)
             .foregroundStyle(color)
+            .lineLimit(1)
+            .fixedSize()
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
             .background(background, in: Capsule())

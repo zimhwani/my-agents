@@ -97,9 +97,10 @@ struct ProWorkView: View {
                     WorkTile(item: item)
                         .aspectRatio(1, contentMode: .fit)
                         .overlay(alignment: .topLeading) {
-                            HStack(spacing: 4) {
+                            // The cover is always a pinned photo, so one tag is enough on a tile this size.
+                            Group {
                                 if all.first?.id == item.id { Tag(text: "Cover", color: Palette.ink, background: Palette.paper.opacity(0.92)) }
-                                if item.isPinned { Tag(text: "Pinned", color: Palette.lacquer, background: Palette.paper.opacity(0.92)) }
+                                else if item.isPinned { Tag(text: "Pinned", color: Palette.lacquer, background: Palette.paper.opacity(0.92)) }
                             }
                             .padding(6)
                         }
