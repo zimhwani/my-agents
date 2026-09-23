@@ -477,6 +477,8 @@ def cmd_backtest(args) -> None:
         bars = load_dir(args.data, suffix=f"_{minutes}min.csv")
         if loaded.continuous:  # crypto files are named BTC-USD_15min.csv
             bars = {k.replace("-", "/"): v for k, v in bars.items()}
+            if loaded.universe and not args.symbols:
+                bars = {k: v for k, v in bars.items() if k in loaded.universe}
         daily = load_daily_dir(args.data) or None
         if daily and loaded.continuous:
             daily = {k.replace("-", "/"): v for k, v in daily.items()}
@@ -493,7 +495,10 @@ def cmd_backtest(args) -> None:
     sslip = args.stop_slippage_bps if args.stop_slippage_bps is not None else (20.0 if loaded.continuous else 0.0)
     bt = Backtester(s, loaded, bars, daily=daily, equity=args.equity, fee_bps=fee_bps, stop_fill_lambda=lam,
                     stop_slippage_bps=sslip)
-    res = bt.run()
+    from datetime import date as _date
+    start = _date.fromisoformat(args.start) if args.start else None
+    end = _date.fromisoformat(args.end) if args.end else None
+    res = bt.run(start, end)
     st = res.stats
     params = loaded
     print(f"\n{loaded.name} · {res.days} days · {len(bars)} symbols · fees {fee_bps:.0f} bps/side · "
@@ -545,6 +550,8 @@ def cmd_sweep(args) -> None:
     daily = load_daily_dir(args.data) or None
     if crypto:
         bars = {k.replace("-", "/"): v for k, v in bars.items()}
+        if params.universe and not args.symbols:
+            bars = {k: v for k, v in bars.items() if k in params.universe}
         daily = {k.replace("-", "/"): v for k, v in daily.items()} if daily else None
     if args.symbols:
         bars = {k: v for k, v in bars.items() if k in args.symbols}
@@ -680,6 +687,8 @@ def main(argv: list[str] | None = None) -> None:
                    help="per-side commission in bps (default 25 for crypto, 0 for equities)")
     p.add_argument("--stop-fill-lambda", type=float, default=None,
                    help="0 = stops fill at the stop price, 1 = at the bar low (default 0.5 crypto, 0 equities)")
+    p.add_argument("--start", help="first trading date to include, YYYY-MM-DD (earlier bars still warm up indicators)")
+    p.add_argument("--end", help="last trading date to include, YYYY-MM-DD")
     p.add_argument("--stop-slippage-bps", type=float, default=None,
                    help="extra adverse slip on stop fills (default 20 crypto, 0 equities)")
     p.add_argument("--demo", action="store_true")

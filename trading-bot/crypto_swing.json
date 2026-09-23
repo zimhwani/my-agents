@@ -1,0 +1,42 @@
+{
+  "strategy_name": "Crypto Swing Breakout",
+  "market": "crypto",
+  "direction": "long_only",
+  "universe": [
+    "BTC/USD",
+    "ETH/USD",
+    "SOL/USD",
+    "DOGE/USD",
+    "AVAX/USD",
+    "LINK/USD",
+    "LTC/USD",
+    "DOT/USD",
+    "UNI/USD",
+    "AAVE/USD",
+    "XRP/USD"
+  ],
+  "bar_minutes": 15,
+  "entry": {
+    "breakout_bars": 20,
+    "trend_ema_bars": 200,
+    "min_rel_volume": 1.5,
+    "atr_bars": 14,
+    "stop_atr_mult": 3.0,
+    "max_initial_risk_pct": 6.0,
+    "min_initial_risk_pct": 5.0
+  },
+  "exit": {
+    "partial_profit_trigger_R": 0,
+    "partial_profit_fraction": 0.0,
+    "breakeven_trigger_R": 2.0,
+    "trail": "atr_5.0",
+    "time_stop_minutes": 0,
+    "time_stop_min_r": 0.0,
+    "cooldown_minutes": 0
+  },
+  "risk": {
+    "max_risk_per_trade_pct": 1.0,
+    "max_position_size_pct_of_portfolio": 25,
+    "max_concurrent_positions": 4
+  }
+}
