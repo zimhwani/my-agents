@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// The one red button. Full pill, 54pt, lifts slightly on press. The only capsule left in the app.
+/// The one red button. Full pill, 52pt, lifts slightly on press.
 struct PrimaryButton: View {
     var title: String
     var symbol: String? = nil
@@ -25,7 +25,7 @@ struct PrimaryButton: View {
             .font(HDFont.bodyStrong)
             .foregroundStyle(Palette.onLacquer)
             .frame(maxWidth: .infinity)
-            .frame(height: 54)
+            .frame(height: 52)
             .background(isEnabled ? Palette.lacquer : Palette.inkFaint, in: Capsule())
         }
         .buttonStyle(PressLift())
@@ -34,7 +34,7 @@ struct PrimaryButton: View {
     }
 }
 
-/// Quiet sibling: ink outline on paper, no fill.
+/// Quiet sibling: ink on card with a hairline.
 struct SecondaryButton: View {
     var title: String
     var symbol: String? = nil
@@ -52,9 +52,9 @@ struct SecondaryButton: View {
             .font(HDFont.bodyStrong)
             .foregroundStyle(Palette.ink)
             .frame(maxWidth: .infinity)
-            .frame(height: 54)
-            .contentShape(Capsule())
-            .overlay(Capsule().strokeBorder(Palette.ink, lineWidth: 1))
+            .frame(height: 52)
+            .background(Palette.card, in: Capsule())
+            .overlay(Capsule().strokeBorder(Palette.line, lineWidth: 1))
         }
         .buttonStyle(PressLift())
     }
@@ -78,7 +78,7 @@ struct TertiaryButton: View {
     }
 }
 
-/// Small round icon button (back, close, heart, share). Keeps a card fill so it reads over photos.
+/// Small round icon button (back, close, heart, share).
 struct IconButton: View {
     var symbol: String
     var label: String
@@ -89,7 +89,7 @@ struct IconButton: View {
     var body: some View {
         Button(action: { Haptics.light(); action() }) {
             Image(systemName: filled ? symbol + ".fill" : symbol)
-                .font(.system(size: 16, weight: .regular))
+                .font(.system(size: 17, weight: .medium))
                 .foregroundStyle(tint)
                 .frame(width: 40, height: 40)
                 .background(Palette.card, in: Circle())
@@ -123,7 +123,7 @@ struct StickyBar<Leading: View>: View {
         HStack(spacing: 16) {
             leading()
             PrimaryButton(title: title, isLoading: isLoading, isEnabled: isEnabled, action: action)
-                .frame(maxWidth: 200)
+                .frame(maxWidth: 220)
         }
         .padding(.horizontal, Space.gutter)
         .padding(.top, 12)

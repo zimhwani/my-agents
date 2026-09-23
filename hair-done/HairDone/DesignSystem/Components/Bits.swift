@@ -1,7 +1,6 @@
 import SwiftUI
 
-/// Serif section heading, with an optional italic serif sub-line and a trailing text action.
-/// "Near you / Closest first   See all"
+/// Serif section heading with an optional trailing action. "Near you   See all"
 struct SectionHeader: View {
     var title: String
     var subtitle: String? = nil
@@ -10,21 +9,14 @@ struct SectionHeader: View {
 
     var body: some View {
         HStack(alignment: .firstTextBaseline) {
-            VStack(alignment: .leading, spacing: 3) {
+            VStack(alignment: .leading, spacing: 2) {
                 Text(title).font(HDFont.heading).foregroundStyle(Palette.ink)
-                if let subtitle {
-                    Text(subtitle).font(HDFont.italicSub).foregroundStyle(Palette.inkSoft)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
+                if let subtitle { Text(subtitle).font(HDFont.sub).foregroundStyle(Palette.inkSoft) }
             }
             Spacer()
             if let actionTitle, let action {
                 Button(action: { Haptics.light(); action() }) {
-                    Text(actionTitle)
-                        .font(HDFont.sub.weight(.medium))
-                        .foregroundStyle(Palette.ink)
-                        .underline(true, color: Palette.inkFaint)
-                        .frame(minHeight: 44)
+                    Text(actionTitle).font(HDFont.subStrong).foregroundStyle(Palette.lacquer)
                 }
                 .buttonStyle(.plain)
             }
@@ -33,8 +25,7 @@ struct SectionHeader: View {
     }
 }
 
-/// Empty state: a lacquer full stop, a serif line, a soft sub-line, an optional action. Sits mid-screen.
-/// `symbol` is kept for callers; the mark is the full stop now, so it isn't drawn.
+/// Empty state: a serif line, a soft sub-line, an optional action. Sits mid-screen.
 struct EmptyState: View {
     var symbol: String = "sparkles"
     var title: String
@@ -44,31 +35,27 @@ struct EmptyState: View {
 
     var body: some View {
         VStack(spacing: 12) {
-            Circle()
-                .fill(Palette.lacquer)
-                .frame(width: 6, height: 6)
-                .padding(.bottom, 6)
-                .accessibilityHidden(true)
+            Image(systemName: symbol)
+                .font(.system(size: 28, weight: .light))
+                .foregroundStyle(Palette.inkFaint)
+                .padding(.bottom, 4)
             Text(title).font(HDFont.heading).foregroundStyle(Palette.ink).multilineTextAlignment(.center)
-            if let message { Text(message).font(HDFont.body).foregroundStyle(Palette.inkSoft).multilineTextAlignment(.center) }
+            if let message { Text(message).font(HDFont.sub).foregroundStyle(Palette.inkSoft).multilineTextAlignment(.center) }
             if let actionTitle, let action {
                 Button(action: { Haptics.light(); action() }) {
-                    Text(actionTitle)
-                        .font(HDFont.sub.weight(.medium))
-                        .foregroundStyle(Palette.ink)
-                        .underline(true, color: Palette.inkFaint)
-                        .frame(minHeight: 44)
+                    Text(actionTitle).font(HDFont.subStrong).foregroundStyle(Palette.lacquer)
                 }
                 .buttonStyle(.plain)
+                .padding(.top, 4)
             }
         }
         .padding(.horizontal, 36)
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 56)
+        .padding(.vertical, 48)
     }
 }
 
-/// Key-value row for receipts and breakdowns. Totals are set large and regular in the serif.
+/// Key-value row for receipts and breakdowns.
 struct PriceRow: View {
     var label: String
     var cents: Int
@@ -82,9 +69,8 @@ struct PriceRow: View {
                 if let note { Text(note).font(HDFont.caption).foregroundStyle(Palette.inkSoft) }
             }
             Spacer()
-            Text(Money.format(cents)).font(emphasis ? HDFont.numeral : HDFont.price).foregroundStyle(Palette.ink)
+            Text(Money.format(cents)).font(emphasis ? HDFont.priceLarge : HDFont.price).foregroundStyle(Palette.ink)
         }
-        .padding(.vertical, emphasis ? Space.xs : 0)
         .accessibilityElement(children: .combine)
     }
 }
@@ -101,13 +87,13 @@ struct NavRow: View {
         Button(action: { Haptics.light(); action() }) {
             HStack(spacing: 14) {
                 Image(systemName: symbol)
-                    .font(.system(size: 16, weight: .regular))
+                    .font(.system(size: 16, weight: .medium))
                     .foregroundStyle(tint)
                     .frame(width: 28)
                 Text(title).font(HDFont.body).foregroundStyle(tint)
                 Spacer()
                 if let value { Text(value).font(HDFont.sub).foregroundStyle(Palette.inkSoft) }
-                Image(systemName: "chevron.right").font(.system(size: 12, weight: .medium)).foregroundStyle(Palette.inkFaint)
+                Image(systemName: "chevron.right").font(.system(size: 13, weight: .semibold)).foregroundStyle(Palette.inkFaint)
             }
             .frame(minHeight: 48)
             .contentShape(Rectangle())
@@ -116,7 +102,7 @@ struct NavRow: View {
     }
 }
 
-/// Text field with a label above it. Card fill so it reads as somewhere to type.
+/// Rounded text field with a label above it.
 struct HDTextField: View {
     var label: String
     var placeholder: String = ""
