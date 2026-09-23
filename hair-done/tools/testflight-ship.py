@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Put an uploaded build in front of testers.
 
-    tools/testflight-ship.py 14 --internal     internal testers: no review needed
-    tools/testflight-ship.py 14                external group: submits for beta review
+    tools/testflight-ship.py --internal        newest uploaded build, internal testers (no review)
+    tools/testflight-ship.py 21 --internal     a specific build number
+    tools/testflight-ship.py 21                external group: submits for beta review
 
 Waits for Apple to finish processing, adds the build to the group, and (for
 external testers) submits it for beta review and watches until it settles.
@@ -18,7 +19,7 @@ with contextlib.redirect_stdout(io.StringIO()):
 BASE = "https://api.appstoreconnect.apple.com"
 args = [a for a in sys.argv[1:] if not a.startswith("--")]
 INTERNAL = "--internal" in sys.argv
-VERSION = args[0] if args else sys.exit("usage: testflight-ship.py <build number> [--internal]")
+VERSION = args[0] if args else None
 
 
 def call(method, path, body=None):
@@ -37,6 +38,16 @@ def say(msg):
 
 
 app = status.app
+if VERSION is None:
+    newest = call("GET", "/v1/builds?filter[app]=%s&sort=-uploadedDate&limit=1" % app)[1].get("data") or []
+    if not newest:
+        sys.exit("no builds uploaded yet")
+    VERSION = newest[0]["attributes"]["version"]
+    print("newest upload is build %s" % VERSION, flush=True)
+else:
+    known = [b["attributes"]["version"] for b in (call("GET", "/v1/builds?filter[app]=%s&sort=-uploadedDate&limit=10" % app)[1].get("data") or [])]
+    if known and VERSION not in known:
+        sys.exit("no build %s in App Store Connect. Recent uploads: %s. The number is the commit count; check release.sh's first line." % (VERSION, ", ".join(known)))
 groups = call("GET", "/v1/betaGroups?filter[app]=%s" % app)[1]["data"]
 group = next((g["id"] for g in groups if g["attributes"]["isInternalGroup"] == INTERNAL), None)
 if not group:
