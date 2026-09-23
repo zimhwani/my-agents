@@ -58,7 +58,15 @@ struct BookingFlowView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             footer
         }
-        .paperBackground()
+        .background {
+            // Paper for browsing, ink for committing: the ground turns to ink on review and booked.
+            ZStack {
+                Palette.paper
+                BookingInk.inkGround.opacity(isInk ? 1 : 0)
+            }
+            .ignoresSafeArea()
+            .animation(Motion.gentle, value: isInk)
+        }
         .interactiveDismissDisabled(hasChosenAnything)
         .confirmationDialog("Leave it here?", isPresented: $showLeaveConfirm, titleVisibility: .visible) {
             Button("Leave", role: .destructive) { dismiss() }
@@ -70,7 +78,41 @@ struct BookingFlowView: View {
 
     // MARK: Header
 
+    private var isInk: Bool { step == .review || step == .booked }
+
+    @ViewBuilder
     private var header: some View {
+        switch step {
+        case .review:
+            inkHeader
+        case .booked:
+            // The booked step carries its own "Done".
+            EmptyView()
+        case .services, .time, .place, .notes:
+            paperHeader
+        }
+    }
+
+    /// Ink chrome: a bare chevron, the title centred in paper serif, a quiet close.
+    private var inkHeader: some View {
+        ZStack {
+            Text("Check it over")
+                .font(BookingInk.serif(20, relativeTo: .headline))
+                .foregroundStyle(BookingInk.onInk)
+                .accessibilityAddTraits(.isHeader)
+            HStack(spacing: 0) {
+                BookingInkIconButton(symbol: "chevron.left", label: "Back") { goBack() }
+                Spacer(minLength: 0)
+                BookingInkIconButton(symbol: "xmark", label: "Close", tint: BookingInk.onInkSoft) { close() }
+            }
+        }
+        .frame(height: 44)
+        .padding(.horizontal, Space.s)
+        .padding(.top, Space.s)
+        .padding(.bottom, Space.s)
+    }
+
+    private var paperHeader: some View {
         HStack(spacing: Space.m) {
             if step.canGoBack {
                 IconButton(symbol: "chevron.left", label: "Back") { goBack() }
@@ -109,7 +151,9 @@ struct BookingFlowView: View {
                             payError = nil
                             go(to: .time)
                         },
-                        onTryAgain: { pay() }
+                        onTryAgain: { pay() },
+                        isPaying: isPaying,
+                        onPay: { pay() }
                     )
                 case .booked:
                     if let booked {
@@ -160,20 +204,8 @@ struct BookingFlowView: View {
                     footerLine(notesSummary, strong: false)
                 }
             }
-        case .review:
-            StickyBar(title: payTitle, isLoading: isPaying, isEnabled: draft.paymentMethod != nil, action: { pay() }) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(Money.format(draft.price.clientTotalCents))
-                        .font(HDFont.priceLarge)
-                        .foregroundStyle(Palette.ink)
-                    Text(isPaying ? "Sorting it." : "Held now, charged when she's done.")
-                        .font(HDFont.caption)
-                        .foregroundStyle(Palette.inkSoft)
-                        .lineLimit(2)
-                }
-                .accessibilityElement(children: .combine)
-            }
-        case .booked:
+        case .review, .booked:
+            // The pay buttons live on the ink ticket itself.
             EmptyView()
         }
     }
@@ -204,11 +236,6 @@ struct BookingFlowView: View {
     private var canLeaveWhere: Bool {
         guard let address = draft.address else { return false }
         return pro.comesTo(address)
-    }
-
-    private var payTitle: String {
-        let price = Money.format(draft.price.clientTotalCents)
-        return pro.instantBook ? "Pay \(price)" : "Request · \(price)"
     }
 
     private var hasChosenAnything: Bool {
