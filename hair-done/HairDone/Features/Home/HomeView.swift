@@ -2,10 +2,8 @@ import SwiftUI
 import MapKit
 import CoreLocation
 
-/// The Home tab. It opens on one full-bleed photo of the pro who's coming today, or the nearest one free,
-/// then who's free, categories, near you (list or map), book again and favourites.
-/// Search sits behind the magnifier in the top bar. Every pro tap pushes `Route.pro`.
-/// Layout follows docs/design/mockups/01-home and 02-home-scrolled.
+/// The Home tab. Greeting, search, next booking, who's free, categories, near you (list or map),
+/// book again, favourites. Every pro tap pushes `Route.pro`.
 struct HomeView: View {
     @Environment(AppState.self) private var app
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -16,219 +14,94 @@ struct HomeView: View {
     @State private var showMap = false
     /// 0 is today, 1 is tomorrow. Late at night the lists start on tomorrow.
     @State private var dayOffset = 0
-    /// The magnifier was tapped: the bar shows the search field and the page shows results.
-    @State private var showSearch = false
-    @State private var showAllFree = false
-    /// The top bar turns to paper once the hero has scrolled up under it.
-    @State private var barSolid = false
-    /// Where the top bar ends on screen, measured.
-    @State private var barBottom: CGFloat = 100
     @FocusState private var searchFocused: Bool
 
     var body: some View {
         NavigationStack(path: $path) {
-            ZStack(alignment: .top) {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 0) {
-                        if inSearch {
-                            searchResults
-                                .padding(.top, barBottom + Space.l)
-                        } else {
-                            hero
+            ScrollView {
+                VStack(alignment: .leading, spacing: Space.section) {
+                    header
 
-                            if app.isLoadingPros && app.pros.isEmpty {
-                                HomeSkeleton()
-                                    .padding(.top, 32)
-                            } else {
-                                whosFree
-                                    .padding(.top, 32)
-                                categories
-                                    .padding(.top, Space.section)
-                                nearYou
-                                    .padding(.top, 40)
-                                bookAgain
-                                favourites
+                    if isSearching {
+                        searchResults
+                    } else {
+                        if let next = app.nextBooking {
+                            HomeNextUpCard(booking: next, pro: app.pro(next.proID)) {
+                                app.selectedTab = .bookings
                             }
+                            .screenGutter()
+                        }
+
+                        if app.isLoadingPros && app.pros.isEmpty {
+                            HomeSkeleton().screenGutter()
+                        } else {
+                            whosFree
+                            categories
+                            nearYou
+                            bookAgain
+                            favourites
                         }
                     }
-                    .padding(.bottom, Space.section)
                 }
-                .scrollDismissesKeyboard(.interactively)
-                .refreshable { await app.loadPros() }
-                // The hero runs under the status bar. The tab bar is a bottom inset, so the bottom is left alone.
-                .ignoresSafeArea(edges: .top)
-
-                topBar
+                .padding(.top, Space.s)
+                .padding(.bottom, Space.section)
             }
+            .scrollDismissesKeyboard(.interactively)
+            .refreshable { await app.loadPros() }
             .paperBackground()
-            .onPreferenceChange(HomeBarBottomKey.self) { value in
-                if value > 0, abs(value - barBottom) > 0.5 { barBottom = value }
-            }
-            .onPreferenceChange(HomeHeroBottomKey.self) { heroBottom in
-                let solid = heroBottom < barBottom + 1
-                if solid != barSolid {
-                    withAnimation(reduceMotion ? nil : Motion.gentle) { barSolid = solid }
-                }
-            }
             .toolbar(.hidden, for: .navigationBar)
             .animation(reduceMotion ? nil : Motion.spring, value: category)
             .animation(reduceMotion ? nil : Motion.spring, value: showMap)
-            .animation(reduceMotion ? nil : Motion.spring, value: inSearch)
+            .animation(reduceMotion ? nil : Motion.spring, value: isSearching)
             .animation(reduceMotion ? nil : Motion.spring, value: dayOffset)
             .onAppear { if isLate { dayOffset = 1 } }
-            .sheet(isPresented: $showAllFree) { allFreeSheet }
             .hdDestinations()
         }
     }
 
-    // MARK: Top bar
+    // MARK: Header
 
-    /// The hd. nd. mark centred with the magnifier on the right. Clear over the hero, paper with a blur once
-    /// the hero has gone under it. In search it holds the field and Cancel.
-    private var topBar: some View {
-        let solid = barSolid || inSearch
-        return ZStack {
-            if inSearch {
-                HStack(spacing: Space.xs) {
-                    HomeSearchField(text: $query, focused: $searchFocused)
-                    TertiaryButton(title: "Cancel", tint: Palette.ink) { closeSearch() }
+    private var header: some View {
+        VStack(alignment: .leading, spacing: Space.l) {
+            MonogramMark(size: 20)
+                .accessibilityAddTraits(.isHeader)
+            VStack(alignment: .leading, spacing: Space.xs) {
+                Text(greeting)
+                    .font(HDFont.hero)
+                    .foregroundStyle(Palette.ink)
+                    .fixedSize(horizontal: false, vertical: true)
+                HStack(spacing: 5) {
+                    Image(systemName: locationOff ? "location.slash" : "location.fill")
+                        .font(.system(size: 11, weight: .semibold))
+                    Text(suburbLine)
+                        .font(HDFont.sub)
                 }
-                .padding(.horizontal, Space.gutter - 8)
-                .padding(.leading, 8)
-                .transition(.opacity)
-            } else {
-                MonogramMark(size: HomeFont.markSize, color: solid ? Palette.ink : HomeInk.paper)
-                    .allowsHitTesting(false)
-                    .accessibilityAddTraits(.isHeader)
-                HStack {
-                    Spacer()
-                    Button(action: openSearch) {
-                        Image(systemName: "magnifyingglass")
-                            .font(.system(size: 19, weight: .light))
-                            .foregroundStyle(solid ? Palette.ink : HomeInk.paper)
-                            .frame(width: 44, height: 44)
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Search")
-                    .accessibilityHint("Search pros, services and suburbs")
-                }
-                .padding(.trailing, 9)
+                .foregroundStyle(Palette.inkSoft)
+                .accessibilityElement(children: .combine)
             }
-        }
-        .frame(maxWidth: .infinity)
-        .frame(height: inSearch ? 48 : 32)
-        .padding(.bottom, 8)
-        .background {
-            GeometryReader { geo in
-                Color.clear.preference(key: HomeBarBottomKey.self, value: geo.frame(in: .global).maxY)
-            }
-        }
-        .background {
-            ZStack(alignment: .bottom) {
-                Rectangle().fill(.ultraThinMaterial)
-                Palette.paper.opacity(0.84)
-                Rectangle().fill(Palette.ink.opacity(0.12)).frame(height: 0.5)
-            }
-            .opacity(solid ? 1 : 0)
-            .ignoresSafeArea(edges: .top)
-        }
-    }
 
-    private func openSearch() {
-        Haptics.light()
-        showSearch = true
-        Task {
-            try? await Task.sleep(for: .milliseconds(120))
-            searchFocused = true
+            HomeSearchField(text: $query, focused: $searchFocused)
         }
-    }
-
-    private func closeSearch() {
-        searchFocused = false
-        query = ""
-        showSearch = false
-    }
-
-    // MARK: Hero
-
-    private var hero: some View {
-        let pick = heroPick
-        let loading = app.isLoadingPros && app.pros.isEmpty
-        let headline: String? = pick?.headline ?? (loading ? nil : "No one's near you yet.")
-        var spoken = [eyebrowSpoken]
-        if let headline { spoken.append(headline) }
-        if let facts = pick?.facts { spoken.append(facts) }
-        var onTap: (() -> Void)? = nil
-        if let pro = pick?.pro {
-            onTap = { open(pro) }
-        }
-        return HomeHero(
-            item: pick?.pro.work.first,
-            eyebrow: eyebrow,
-            headline: headline,
-            facts: pick?.facts,
-            accessibilityText: spoken.joined(separator: ". "),
-            onTap: onTap
-        )
-        // A new pro in the hero gets a fresh settle.
-        .id(pick?.pro.id ?? "none")
+        .screenGutter()
     }
 
     private var hour: Int { Date().hourOfDay }
     private var isLate: Bool { hour >= 22 || hour < 5 }
 
-    private var greetingWord: String {
-        switch hour {
-        case 5..<12: return "Morning"
-        case 12..<17: return "Afternoon"
-        case 17..<22: return "Evening"
-        default: return "Late one"
-        }
-    }
-
-    /// "Afternoon, Tash · Fitzroy North", set in tracked capitals on the photo.
-    private var eyebrow: String {
+    private var greeting: String {
         let name = app.firstName.trimmingCharacters(in: .whitespaces)
-        let hello = name.isEmpty ? greetingWord : "\(greetingWord), \(name)"
-        return "\(hello) · \(app.location.suburbGuess)"
-    }
-
-    private var eyebrowSpoken: String {
-        locationOff ? "\(eyebrow). Location's off, showing \(app.location.suburbGuess)" : eyebrow
+        switch hour {
+        case 5..<12: return name.isEmpty ? "Morning." : "Morning, \(name)."
+        case 12..<17: return name.isEmpty ? "Afternoon." : "Afternoon, \(name)."
+        case 17..<22: return "Who's free tonight."
+        default: return "Late one. Here's tomorrow."
+        }
     }
 
     private var locationOff: Bool { app.location.hasAsked && !app.location.isAllowed }
 
-    /// Her pro if she's booked today; otherwise the nearest pro who's free; otherwise the nearest pro.
-    private var heroPick: HomeHeroPick? {
-        if let next = app.nextBooking, next.isToday, let pro = app.pro(next.proID) {
-            let minutes = next.start.hourOfDay * 60 + next.start.minuteOfHour
-            let when = next.start.hourOfDay >= 17 ? "\(shortClock(minutes)) tonight" : "\(next.start.clock) today"
-            let what = next.services.first?.name ?? "Your booking"
-            return HomeHeroPick(pro: pro, headline: "\(pro.firstName), \(when).", facts: "\(what) · at yours in \(next.address.suburb)")
-        }
-        if let pro = freePros.first, let phrase = freePhrase(pro, on: listDay) {
-            return HomeHeroPick(pro: pro, headline: "\(pro.firstName) is \(phrase).", facts: heroFacts(pro))
-        }
-        if let pro = sortedPros.first {
-            return HomeHeroPick(pro: pro, headline: "\(pro.firstName), \(distance(pro).distanceLabel) away.", facts: heroFacts(pro))
-        }
-        return nil
-    }
-
-    /// "Nail tech · Brunswick · 2.9 km · BIAB $95"
-    private func heroFacts(_ pro: Pro) -> String {
-        var parts = [pro.primaryCategory.specialtyTitle, pro.suburb, distance(pro).distanceLabel]
-        if let cheapest = pro.services.min(by: { $0.priceCents < $1.priceCents }) {
-            parts.append("\(cheapest.name) \(cheapest.priceLabel)")
-        }
-        return parts.joined(separator: " · ")
-    }
-
-    /// "Nail tech · St Kilda · 13 km"
-    private func nearFacts(_ pro: Pro) -> String {
-        [pro.primaryCategory.specialtyTitle, pro.suburb, distance(pro).distanceLabel].joined(separator: " · ")
+    private var suburbLine: String {
+        locationOff ? "Location's off. Showing \(app.location.suburbGuess)." : app.location.suburbGuess
     }
 
     // MARK: Data
@@ -263,42 +136,15 @@ struct HomeView: View {
         return "Tomorrow from \(time)"
     }
 
-    /// The same, as the mockup says it in a sentence: "free from 5", "free today", "free tomorrow from 9".
-    private func freePhrase(_ pro: Pro, on day: Date) -> String? {
-        let ranges = pro.availability.ranges(on: day)
-        guard let first = ranges.first, let last = ranges.last else { return nil }
-        let start = day.startOfDay.adding(minutes: first.startMinutes)
-        let end = day.startOfDay.adding(minutes: last.endMinutes)
-        let time = shortClock(first.startMinutes)
-        if Calendar.current.isDateInToday(day) {
-            if end <= Date() { return nil }
-            return start > Date() ? "free from \(time)" : "free today"
-        }
-        return "free tomorrow from \(time)"
-    }
-
-    /// Minutes since midnight as the clock face says it: 1020 → "5", 1050 → "5:30".
-    private func shortClock(_ minutes: Int) -> String {
-        let h = minutes / 60, m = minutes % 60
-        let h12 = h % 12 == 0 ? 12 : h % 12
-        return m == 0 ? "\(h12)" : String(format: "%d:%02d", h12, m)
-    }
-
     private var freePros: [Pro] {
         sortedPros.filter { nextFreeLabel($0, on: listDay) != nil }
     }
 
-    /// Who's free, less the pro already on the hero (unless she's the only one).
-    private var railPros: [Pro] {
-        let heroID = heroPick?.pro.id
-        let others = freePros.filter { $0.id != heroID }
-        return others.isEmpty ? freePros : others
-    }
-
-    /// "8.4 km away, free from 3"
+    /// "1.2 km away, free from 5 pm"
     private func whosFreeLine(_ pro: Pro) -> String {
-        let phrase = freePhrase(pro, on: listDay) ?? "free today"
-        return "\(distance(pro).distanceLabel) away, \(phrase)"
+        let label = nextFreeLabel(pro, on: listDay) ?? "Free today"
+        let lowered = label.prefix(1).lowercased() + String(label.dropFirst())
+        return "\(distance(pro).distanceLabel) away, \(lowered)"
     }
 
     private var bookAgainItems: [HomeBookAgainItem] {
@@ -313,7 +159,6 @@ struct HomeView: View {
     }
 
     private var isSearching: Bool { !query.trimmingCharacters(in: .whitespaces).isEmpty }
-    private var inSearch: Bool { showSearch || isSearching }
 
     private var matches: [Pro] {
         let q = query.trimmingCharacters(in: .whitespaces)
@@ -334,31 +179,8 @@ struct HomeView: View {
     // MARK: Search
 
     private var searchResults: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            if !isSearching {
-                VStack(alignment: .leading, spacing: Space.s) {
-                    Text("A name, a service or a suburb. Or start with one of these.")
-                        .font(HDFont.sub)
-                        .foregroundStyle(Palette.inkSoft)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .padding(.bottom, Space.s)
-                    ForEach(Category.allCases) { c in
-                        Button {
-                            Haptics.selection()
-                            category = c
-                            closeSearch()
-                        } label: {
-                            Text(c.label)
-                                .font(HomeFont.section)
-                                .foregroundStyle(Palette.ink)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityHint("Shows \(c.label.lowercased()) pros near you")
-                    }
-                }
-            } else if matches.isEmpty {
+        VStack(alignment: .leading, spacing: Space.l) {
+            if matches.isEmpty {
                 EmptyState(
                     symbol: "magnifyingglass",
                     title: "Nothing for \"\(query.trimmingCharacters(in: .whitespaces))\".",
@@ -368,8 +190,7 @@ struct HomeView: View {
                 )
             } else {
                 ForEach(matches) { pro in
-                    HomeProRow(pro: pro, eyebrow: nextFreeLabel(pro, on: listDay), facts: nearFacts(pro)) { open(pro) }
-                    Hairline()
+                    ProCard(pro: pro, distanceKm: distance(pro), nextFree: nextFreeLabel(pro, on: listDay)) { open(pro) }
                 }
             }
         }
@@ -379,39 +200,18 @@ struct HomeView: View {
     // MARK: Who's free
 
     private var whosFree: some View {
-        let pros = railPros
-        return VStack(alignment: .leading, spacing: Space.l) {
-            HStack(alignment: .firstTextBaseline) {
-                Text(dayOffset == 0 ? "Who's free today" : "Who's free tomorrow")
-                    .font(HomeFont.section)
-                    .foregroundStyle(Palette.ink)
-                    .accessibilityAddTraits(.isHeader)
-                Spacer(minLength: Space.s)
-                if !freePros.isEmpty {
-                    Button {
-                        Haptics.light()
-                        showAllFree = true
-                    } label: {
-                        Text("See all")
-                            .font(.system(.subheadline))
-                            .foregroundStyle(Palette.inkSoft)
-                            .frame(minHeight: 44)
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(dayOffset == 0 ? "See everyone free today" : "See everyone free tomorrow")
-                }
-            }
-            .screenGutter()
+        VStack(alignment: .leading, spacing: Space.l) {
+            SectionHeader(title: dayOffset == 0 ? "Who's free today" : "Who's free tomorrow")
+                .screenGutter()
 
-            if pros.isEmpty {
+            if freePros.isEmpty {
                 VStack(alignment: .leading, spacing: Space.xs) {
                     Text(dayOffset == 0 ? "No one's free today. Tomorrow's looking better." : "No one's free tomorrow either. Everyone near you is in the list below.")
                         .font(HDFont.body)
                         .foregroundStyle(Palette.inkSoft)
                         .fixedSize(horizontal: false, vertical: true)
                     if dayOffset == 0 {
-                        TertiaryButton(title: "See tomorrow", tint: Palette.ink) { dayOffset = 1 }
+                        TertiaryButton(title: "See tomorrow", tint: Palette.lacquer) { dayOffset = 1 }
                             .padding(.horizontal, -8)
                     }
                 }
@@ -419,14 +219,12 @@ struct HomeView: View {
             } else {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(alignment: .top, spacing: Space.m) {
-                        ForEach(pros) { pro in
-                            HomePortraitTile(item: pro.work.first, width: 300, title: pro.firstName, line: whosFreeLine(pro), titleFont: HomeFont.railName) { open(pro) }
+                        ForEach(freePros) { pro in
+                            ProMiniTile(pro: pro, line: whosFreeLine(pro)) { open(pro) }
                         }
                     }
-                    .scrollTargetLayout()
+                    .screenGutter()
                 }
-                .contentMargins(.horizontal, Space.gutter, for: .scrollContent)
-                .scrollTargetBehavior(.viewAligned)
             }
         }
     }
@@ -435,52 +233,42 @@ struct HomeView: View {
 
     private var categories: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(alignment: .top, spacing: 10) {
+            HStack(spacing: Space.s) {
                 ForEach(Category.allCases) { c in
-                    HomeCategoryTile(category: c, isSelected: category == c, isDimmed: category != nil && category != c) {
+                    HomeCategoryTile(category: c, isSelected: category == c) {
                         category = (category == c) ? nil : c
                     }
                 }
             }
+            .screenGutter()
         }
-        .contentMargins(.horizontal, Space.gutter, for: .scrollContent)
     }
 
     // MARK: Near you
 
     private var nearYou: some View {
-        VStack(alignment: .leading, spacing: Space.m) {
-            HStack(alignment: .center) {
-                Text(category.map { "\($0.label) near you" } ?? "Near you")
-                    .font(HomeFont.section)
-                    .foregroundStyle(Palette.ink)
-                    .accessibilityAddTraits(.isHeader)
-                Spacer(minLength: Space.s)
-                Button {
-                    Haptics.selection()
-                    showMap.toggle()
-                } label: {
-                    Image(systemName: showMap ? "list.bullet" : "map")
-                        .font(.system(size: 20, weight: .light))
+        VStack(alignment: .leading, spacing: Space.l) {
+            HStack(alignment: .firstTextBaseline) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(category.map { "\($0.label) near you" } ?? "Near you")
+                        .font(HDFont.heading)
                         .foregroundStyle(Palette.ink)
-                        .frame(width: 44, height: 44)
-                        .contentShape(Rectangle())
+                    Text("Closest first")
+                        .font(HDFont.sub)
+                        .foregroundStyle(Palette.inkSoft)
                 }
-                .buttonStyle(.plain)
-                .padding(.trailing, -11)
-                .accessibilityLabel(showMap ? "Show as a list" : "Show on a map")
+                Spacer()
+                HomeListMapToggle(showMap: $showMap)
             }
             .screenGutter()
 
             if let category {
-                HStack(spacing: 0) {
-                    Text("Showing \(category.label.lowercased()) only.")
-                        .font(HDFont.sub)
-                        .foregroundStyle(Palette.inkSoft)
-                    TertiaryButton(title: "Show everything", tint: Palette.ink) { self.category = nil }
+                HStack(spacing: Space.s) {
+                    Chip(title: "Everything") { self.category = nil }
+                    Chip(title: category.label, symbol: category.symbol, isSelected: true) { self.category = nil }
                 }
                 .screenGutter()
-                .transition(.opacity)
+                .transition(.opacity.combined(with: .move(edge: .top)))
             }
 
             if filteredPros.isEmpty {
@@ -497,15 +285,14 @@ struct HomeView: View {
             } else if showMap {
                 HomeMap(pros: filteredPros, centre: here, onSelect: open)
                     .screenGutter()
-                    .padding(.top, Space.xs)
                     .transition(.opacity)
             } else {
-                VStack(alignment: .leading, spacing: 44) {
+                VStack(spacing: Space.l) {
                     ForEach(filteredPros) { pro in
-                        HomeNearYouItem(pro: pro, eyebrow: nextFreeLabel(pro, on: listDay), facts: nearFacts(pro)) { open(pro) }
+                        ProCard(pro: pro, distanceKm: distance(pro), nextFree: nextFreeLabel(pro, on: listDay)) { open(pro) }
                     }
                 }
-                .padding(.top, Space.xs)
+                .screenGutter()
                 .transition(.opacity)
             }
         }
@@ -517,12 +304,17 @@ struct HomeView: View {
     private var bookAgain: some View {
         let items = bookAgainItems
         if !items.isEmpty {
-            smallRail(title: "Book again") {
-                ForEach(items) { item in
-                    HomePortraitTile(item: item.pro.work.first, width: 160, title: item.pro.firstName, line: item.line, titleFont: HDFont.name) { open(item.pro) }
+            VStack(alignment: .leading, spacing: Space.l) {
+                SectionHeader(title: "Book again").screenGutter()
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(alignment: .top, spacing: Space.m) {
+                        ForEach(items) { item in
+                            ProMiniTile(pro: item.pro, line: item.line) { open(item.pro) }
+                        }
+                    }
+                    .screenGutter()
                 }
             }
-            .padding(.top, 48)
         }
     }
 
@@ -532,72 +324,19 @@ struct HomeView: View {
     private var favourites: some View {
         let favs = app.favouritePros
         if !favs.isEmpty {
-            smallRail(title: "Favourites") {
-                ForEach(favs) { pro in
-                    HomePortraitTile(item: pro.work.first, width: 160, title: pro.firstName, line: pro.specialtyLine, titleFont: HDFont.name) { open(pro) }
-                }
-            }
-            .padding(.top, 48)
-        }
-    }
-
-    private func smallRail<Content: View>(title: String, @ViewBuilder content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: Space.l) {
-            Text(title)
-                .font(HomeFont.section)
-                .foregroundStyle(Palette.ink)
-                .accessibilityAddTraits(.isHeader)
-                .screenGutter()
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(alignment: .top, spacing: Space.m) {
-                    content()
-                }
-            }
-            .contentMargins(.horizontal, Space.gutter, for: .scrollContent)
-        }
-    }
-
-    // MARK: See all
-
-    private var allFreeSheet: some View {
-        VStack(spacing: 0) {
-            SheetHeader(
-                title: dayOffset == 0 ? "Free today" : "Free tomorrow",
-                subtitle: "Closest first",
-                onClose: { showAllFree = false }
-            )
-            ScrollView {
-                VStack(alignment: .leading, spacing: 0) {
-                    ForEach(freePros) { pro in
-                        HomeProRow(pro: pro, eyebrow: nextFreeLabel(pro, on: listDay), facts: nearFacts(pro)) { openFromSheet(pro) }
-                        Hairline()
+            VStack(alignment: .leading, spacing: Space.l) {
+                SectionHeader(title: "Favourites").screenGutter()
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(alignment: .top, spacing: Space.m) {
+                        ForEach(favs) { pro in
+                            ProMiniTile(pro: pro, line: pro.specialtyLine) { open(pro) }
+                        }
                     }
+                    .screenGutter()
                 }
-                .screenGutter()
-                .padding(.bottom, Space.xl)
             }
         }
-        .paperBackground()
-        .presentationDragIndicator(.visible)
     }
-
-    private func openFromSheet(_ pro: Pro) {
-        showAllFree = false
-        Task {
-            // Let the sheet get out of the way before the push.
-            try? await Task.sleep(for: .milliseconds(350))
-            path.append(.pro(pro))
-        }
-    }
-}
-
-/// Who the hero is about and what it says.
-struct HomeHeroPick {
-    var pro: Pro
-    /// "Kiara is free from 5." or "Kiara, 6:15 tonight."
-    var headline: String
-    /// "Nail tech · Brunswick · 2.9 km · BIAB $95"
-    var facts: String
 }
 
 /// One tile in "Book again": the pro and the last thing she did for you.
@@ -616,7 +355,7 @@ private struct HomeSearchField: View {
     var body: some View {
         HStack(spacing: 10) {
             Image(systemName: "magnifyingglass")
-                .font(.system(size: 15, weight: .regular))
+                .font(.system(size: 15, weight: .medium))
                 .foregroundStyle(Palette.inkSoft)
             TextField("French tip, blow-dry, a suburb", text: $text)
                 .font(HDFont.body)
@@ -639,11 +378,139 @@ private struct HomeSearchField: View {
                 .transition(.opacity.combined(with: .scale))
             }
         }
-        .padding(.horizontal, 12)
-        .frame(height: 44)
-        .background(Palette.card, in: RoundedRectangle(cornerRadius: Radius.button, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: Radius.button, style: .continuous).strokeBorder(Palette.line, lineWidth: 1))
+        .padding(.horizontal, 14)
+        .frame(height: 50)
+        .background(Palette.card, in: RoundedRectangle(cornerRadius: Radius.input, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: Radius.input, style: .continuous).strokeBorder(Palette.line, lineWidth: 1))
         .animation(Motion.gentle, value: text.isEmpty)
+    }
+}
+
+// MARK: - Next up
+
+private struct HomeNextUpCard: View {
+    var booking: Booking
+    var pro: Pro?
+    var action: () -> Void
+
+    private var title: String {
+        let first = booking.services.first?.name ?? "Booking"
+        let rest = booking.services.count - 1
+        let what = rest > 0 ? "\(first) and \(rest) more" : first
+        if let pro { return "\(what) with \(pro.firstName)" }
+        return what
+    }
+
+    var body: some View {
+        Button {
+            Haptics.light()
+            action()
+        } label: {
+            HStack(spacing: Space.m) {
+                Avatar(name: pro?.firstName ?? "", seed: pro?.seed ?? 0, size: 44)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Next up").labelStyle()
+                    Text(title)
+                        .font(HDFont.bodyStrong)
+                        .foregroundStyle(Palette.ink)
+                        .lineLimit(1)
+                    Text(booking.start.friendlyDayTime)
+                        .font(HDFont.sub)
+                        .foregroundStyle(Palette.inkSoft)
+                }
+                Spacer(minLength: Space.s)
+                StatusBadge(status: booking.status)
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(Palette.inkFaint)
+            }
+            .card(padding: Space.m)
+        }
+        .buttonStyle(PressLift(scale: 0.985))
+        .accessibilityElement(children: .combine)
+        .accessibilityHint("Opens your bookings")
+    }
+}
+
+// MARK: - Category tile
+
+private struct HomeCategoryTile: View {
+    var category: Category
+    var isSelected: Bool
+    var action: () -> Void
+
+    var body: some View {
+        Button {
+            Haptics.selection()
+            action()
+        } label: {
+            VStack(alignment: .leading, spacing: 0) {
+                Image(systemName: category.symbol)
+                    .font(.system(size: 20, weight: .medium))
+                    .foregroundStyle(category.tintInk)
+                Spacer(minLength: Space.s)
+                Text(category.label)
+                    .font(HDFont.subStrong)
+                    .foregroundStyle(category.tintInk)
+                if category == .theLot {
+                    Text("Hair, makeup, nails. For events.")
+                        .font(HDFont.caption)
+                        .foregroundStyle(category.tintInk.opacity(0.8))
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.top, 2)
+                }
+            }
+            .padding(Space.m)
+            .frame(width: 132, height: 112, alignment: .topLeading)
+            .background(category.tint, in: RoundedRectangle(cornerRadius: Radius.tile, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: Radius.tile, style: .continuous)
+                    .strokeBorder(isSelected ? category.tintInk : Color.clear, lineWidth: 1.5)
+            )
+        }
+        .buttonStyle(PressLift(scale: 0.96))
+        .accessibilityLabel(category.label)
+        .accessibilityHint(isSelected ? "Clears the filter" : "Shows \(category.label.lowercased()) pros")
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+}
+
+// MARK: - List / map toggle
+
+private struct HomeListMapToggle: View {
+    @Binding var showMap: Bool
+
+    var body: some View {
+        HStack(spacing: 2) {
+            segment("List", symbol: "list.bullet", isMap: false)
+            segment("Map", symbol: "map", isMap: true)
+        }
+        .padding(3)
+        .background(Palette.card, in: Capsule())
+        .overlay(Capsule().strokeBorder(Palette.line, lineWidth: 1))
+        .accessibilityElement(children: .contain)
+    }
+
+    private func segment(_ title: String, symbol: String, isMap: Bool) -> some View {
+        let selected = showMap == isMap
+        return Button {
+            guard !selected else { return }
+            Haptics.selection()
+            showMap = isMap
+        } label: {
+            HStack(spacing: 5) {
+                Image(systemName: symbol).font(.system(size: 11, weight: .semibold))
+                Text(title).font(HDFont.label)
+            }
+            .foregroundStyle(selected ? Palette.paper : Palette.inkSoft)
+            .padding(.horizontal, 12)
+            .frame(height: 30)
+            .background(selected ? Palette.ink : Color.clear, in: Capsule())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(title)
+        .accessibilityAddTraits(selected ? .isSelected : [])
     }
 }
 
@@ -688,7 +555,8 @@ private struct HomeMap: View {
         .mapStyle(.standard(elevation: .flat, pointsOfInterest: .excludingAll))
         .mapControlVisibility(.hidden)
         .frame(height: 440)
-        .clipShape(RoundedRectangle(cornerRadius: 2, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: Radius.card, style: .continuous).strokeBorder(Palette.line, lineWidth: 1))
         .overlay(alignment: .bottomTrailing) {
             Chip(title: "Recentre", symbol: "location") {
                 withAnimation(Motion.spring) { position = HomeMap.home(centre) }
@@ -700,46 +568,42 @@ private struct HomeMap: View {
     private func pin(_ pro: Pro) -> some View {
         VStack(spacing: 3) {
             Avatar(name: pro.firstName, seed: pro.seed, size: 40)
-                .overlay(Circle().strokeBorder(Palette.ink, lineWidth: 1.5))
-            Text(Money.format(pro.cheapestServiceCents))
+                .overlay(Circle().strokeBorder(Palette.lacquer, lineWidth: 2))
+            Text("from \(Money.format(pro.cheapestServiceCents))")
                 .font(HDFont.label)
                 .monospacedDigit()
                 .foregroundStyle(Palette.ink)
                 .padding(.horizontal, 8)
                 .padding(.vertical, 4)
-                .background(Palette.card, in: RoundedRectangle(cornerRadius: 2, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 2, style: .continuous).strokeBorder(Palette.line, lineWidth: 1))
+                .background(Palette.card, in: Capsule())
+                .overlay(Capsule().strokeBorder(Palette.line, lineWidth: 1))
         }
     }
 }
 
 // MARK: - Skeleton
 
-/// Big grey photo blocks, breathing while pros load for the first time. The hero above it is already grey.
+/// Soft rounded blocks in the line colour, breathing while pros load for the first time.
 private struct HomeSkeleton: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var pulse = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Space.l) {
-            block
-                .frame(width: 190, height: 26)
-                .screenGutter()
-            ScrollView(.horizontal, showsIndicators: false) {
+        VStack(alignment: .leading, spacing: Space.section) {
+            VStack(alignment: .leading, spacing: Space.l) {
+                block(width: 160, height: 22)
                 HStack(spacing: Space.m) {
-                    ForEach(0..<2, id: \.self) { _ in block.frame(width: 300, height: 375) }
+                    ForEach(0..<3, id: \.self) { _ in block(width: 150, height: 150, radius: Radius.tile) }
                 }
             }
-            .contentMargins(.horizontal, Space.gutter, for: .scrollContent)
-            .scrollDisabled(true)
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 10) {
-                    ForEach(0..<4, id: \.self) { _ in block.frame(width: 128, height: 170) }
-                }
+            HStack(spacing: Space.s) {
+                ForEach(0..<3, id: \.self) { _ in block(width: 132, height: 112, radius: Radius.tile) }
             }
-            .contentMargins(.horizontal, Space.gutter, for: .scrollContent)
-            .scrollDisabled(true)
-            .padding(.top, Space.xl)
+            VStack(alignment: .leading, spacing: Space.l) {
+                block(width: 120, height: 22)
+                block(height: 230)
+                block(height: 230)
+            }
         }
         .opacity(pulse ? 0.5 : 1)
         .onAppear {
@@ -750,8 +614,11 @@ private struct HomeSkeleton: View {
         .accessibilityLabel("Loading")
     }
 
-    private var block: some View {
-        RoundedRectangle(cornerRadius: 2, style: .continuous).fill(Palette.line)
+    private func block(width: CGFloat? = nil, height: CGFloat, radius: CGFloat = Radius.card) -> some View {
+        RoundedRectangle(cornerRadius: radius, style: .continuous)
+            .fill(Palette.line)
+            .frame(width: width, height: height)
+            .frame(maxWidth: width == nil ? .infinity : nil)
     }
 }
 
