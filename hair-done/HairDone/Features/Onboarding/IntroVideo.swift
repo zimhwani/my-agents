@@ -11,6 +11,7 @@ enum IntroClips {
     static let all: [Clip] = [
         Clip(name: "intro-hair",   remote: nil),
         Clip(name: "intro-makeup", remote: nil),
+        Clip(name: "intro-lashes", remote: nil),
         Clip(name: "intro-nails",  remote: nil)
     ]
 

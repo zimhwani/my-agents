@@ -11,7 +11,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 slot="${1:-}"; src="${2:-}"
-case "$slot" in hair|makeup|nails) ;; *) echo "usage: tools/add-intro.sh <hair|makeup|nails> <video file>"; exit 1;; esac
+case "$slot" in hair|makeup|lashes|nails) ;; *) echo "usage: tools/add-intro.sh <hair|makeup|lashes|nails> <video file>"; exit 1;; esac
 [[ -f "$src" ]] || { echo "no such file: $src"; exit 1; }
 out=HairDone/Resources/Intro
 rm -f "$out"/intro-"$slot".mp4 "$out"/intro-"$slot".mov "$out"/intro-"$slot".m4v
