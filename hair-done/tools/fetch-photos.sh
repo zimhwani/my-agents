@@ -1,8 +1,9 @@
 #!/bin/bash
 # Download free placeholder work photos from Pexels and put them in the app.
 #
-#   PEXELS_API_KEY=xxxx tools/fetch-photos.sh          # four per category
-#   PEXELS_API_KEY=xxxx tools/fetch-photos.sh 6        # six per category
+#   PEXELS_API_KEY=xxxx tools/fetch-photos.sh                 # four per category, all categories
+#   PEXELS_API_KEY=xxxx tools/fetch-photos.sh 6               # six per category
+#   PEXELS_API_KEY=xxxx tools/fetch-photos.sh 4 makeup lashes # only these categories (replaces them)
 #
 # Get a key in a minute at https://www.pexels.com/api/ (free). The Pexels licence
 # allows use in apps without attribution. Photos are portrait, cropped to the work,
@@ -11,14 +12,16 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 : "${PEXELS_API_KEY:?Set PEXELS_API_KEY (free at https://www.pexels.com/api/)}"
 PER="${1:-4}"
+shift || true
+ONLY=("$@")
 TMP=$(mktemp -d)
 
 # category|search terms (first term first; later ones fill in if the first is thin)
 QUERIES=(
   "nails|gel manicure close up hands|nail polish application|acrylic nails hand"
   "hair|braiding hair close up|blow dry hair salon|balayage hair back view"
-  "makeup|makeup artist brush cheek|lipstick application close up|makeup application eyes closed"
-  "lashes|eyelash extensions application|lash lift close up"
+  "makeup|makeup brush eyeshadow close up eye closed|applying lipstick close up lips|makeup artist hands brush face close up|mascara wand close up"
+  "lashes|eyelash extensions tweezers close up eye|false eyelashes application close up|lash lift closed eye close up"
   "brows|eyebrow threading|brow lamination|eyebrow shaping close up"
   "thelot|bride getting ready hair makeup|getting ready mirror makeup"
 )
@@ -39,7 +42,7 @@ seen = 0
 for p in data.get("photos", []):
     # skip obvious stock-face shots by preferring landscape-free, hand/hair-ish alt text
     alt = (p.get("alt") or "").lower()
-    if any(w in alt for w in ("portrait of", "smiling", "posing", "looking at camera")): continue
+    if any(w in alt for w in ("portrait of", "smiling", "posing", "looking at camera", "mask", "palette", "product", "bottle", "neon", "studio shot")): continue
     print(p["src"]["large2x"]); seen += 1
     if seen >= need: break
 PY
@@ -51,6 +54,7 @@ PY
 
 for entry in "${QUERIES[@]}"; do
   cat_="${entry%%|*}"; rest="${entry#*|}"
+  if [[ ${#ONLY[@]} -gt 0 ]] && [[ ! " ${ONLY[*]} " =~ " $cat_ " ]]; then continue; fi
   echo "==> $cat_"
   IFS='|' read -ra terms <<< "$rest"
   for t in "${terms[@]}"; do fetch "$cat_" "$t" "$PER"; done
