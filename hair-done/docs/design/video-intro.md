@@ -68,6 +68,12 @@ Avoid anything with a visible face looking at camera and anything with a brand.
 
 ## Adding them
 
+Quickest: `tools/add-intro.sh hair ~/Downloads/<file>`, then the same for
+`makeup` and `nails`. It names, trims, crops and compresses (with ffmpeg) or
+copies as is (without).
+
+By hand:
+
 1. Put the three files in `HairDone/Resources/Intro/` with the exact names above.
 2. `xcodegen generate` (it picks up the whole folder as resources).
 3. Run. The welcome screen plays them. Remove any one and the others still play;

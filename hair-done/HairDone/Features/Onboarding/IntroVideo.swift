@@ -16,8 +16,9 @@ enum IntroClips {
 
     static func urls() -> [URL] {
         all.compactMap { clip in
-            if let bundled = Bundle.main.url(forResource: clip.name, withExtension: "mp4")
-                ?? Bundle.main.url(forResource: clip.name, withExtension: "mov") { return bundled }
+            for ext in ["mp4", "mov", "m4v"] {
+                if let bundled = Bundle.main.url(forResource: clip.name, withExtension: ext) { return bundled }
+            }
             return clip.remote
         }
     }
