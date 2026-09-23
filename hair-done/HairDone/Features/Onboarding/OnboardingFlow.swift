@@ -141,15 +141,8 @@ private struct OnboardingWelcome: View {
             VStack(alignment: .leading, spacing: 0) {
                 Spacer()
 
-                HStack(alignment: .lastTextBaseline, spacing: 0) {
-                    Text("hd").italic()
-                    Text(".").foregroundStyle(Palette.lacquer)
-                    Text(" nd").italic()
-                    Text(".").foregroundStyle(Palette.lacquer)
-                }
-                .font(.system(size: 22, weight: .medium, design: .serif))
-                .foregroundStyle(onVideo)
-                .padding(.bottom, Space.l)
+                MonogramMark(size: 22, color: onVideo)
+                    .padding(.bottom, Space.l)
                 .accessibilityHidden(true)
 
                 VStack(alignment: .leading, spacing: -2) {

@@ -240,3 +240,22 @@ struct Wordmark: View {
         .accessibilityLabel("Hair done, nails done, everything done")
     }
 }
+
+/// The mark, set in a line: "hd. nd." in serif italic, each full stop in lacquer.
+/// Used in the Home bar and on the welcome screen. The dots stay lacquer on any ground.
+struct MonogramMark: View {
+    var size: CGFloat = 22
+    var color: Color = Palette.ink
+    var body: some View {
+        HStack(alignment: .lastTextBaseline, spacing: 0) {
+            Text("hd").italic()
+            Text(".").foregroundStyle(Palette.lacquer)
+            Text(" nd").italic()
+            Text(".").foregroundStyle(Palette.lacquer)
+        }
+        .font(.system(size: size, weight: .medium, design: .serif))
+        .foregroundStyle(color)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Hair done")
+    }
+}

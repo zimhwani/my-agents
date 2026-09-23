@@ -83,7 +83,7 @@ struct HomeView: View {
 
     // MARK: Top bar
 
-    /// "hair done." centred with the magnifier on the right. Clear over the hero, paper with a blur once
+    /// The hd. nd. mark centred with the magnifier on the right. Clear over the hero, paper with a blur once
     /// the hero has gone under it. In search it holds the field and Cancel.
     private var topBar: some View {
         let solid = barSolid || inSearch
@@ -97,11 +97,8 @@ struct HomeView: View {
                 .padding(.leading, 8)
                 .transition(.opacity)
             } else {
-                Text("hair done.")
-                    .font(HomeFont.wordmark)
-                    .foregroundStyle(solid ? Palette.ink : HomeInk.paper)
+                MonogramMark(size: HomeFont.markSize, color: solid ? Palette.ink : HomeInk.paper)
                     .allowsHitTesting(false)
-                    .accessibilityLabel("Hair done")
                     .accessibilityAddTraits(.isHeader)
                 HStack {
                     Spacer()

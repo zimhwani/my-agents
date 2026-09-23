@@ -72,7 +72,7 @@ SCREENS["01-home"] = page("Home", f'''<div class="screen">
 {ph("work-nails-4", 0, 0, 393, 491, pos="50% 32%")}
 <div style="position:absolute;left:0;top:0;width:393px;height:150px;z-index:2;background:linear-gradient(rgba(36,26,22,.42),rgba(36,26,22,0))"></div>
 <div style="position:absolute;left:0;top:250px;width:393px;height:241px;z-index:2;background:linear-gradient(rgba(36,26,22,0),rgba(36,26,22,.30) 40%,rgba(36,26,22,.62))"></div>
-<div class="serif" style="position:absolute;z-index:5;top:62px;left:0;width:393px;text-align:center;color:#FBF7F2;font-size:19px;font-weight:500;letter-spacing:.1px">hair done.</div>
+<div class="serif" style="position:absolute;z-index:5;top:62px;left:0;width:393px;text-align:center;color:#FBF7F2;font-size:22px;font-weight:500;top:60px"><i>hd</i><span style="color:var(--lacquer);font-style:normal">.</span> <i>nd</i><span style="color:var(--lacquer);font-style:normal">.</span></div>
 <div style="position:absolute;z-index:5;top:63px;right:20px;color:#FBF7F2">{SEARCH}</div>
 <div style="position:absolute;z-index:5;left:20px;bottom:{852-491+22}px;width:353px;color:#FBF7F2">
   <div class="eyebrow" style="opacity:.86;margin-bottom:10px">Afternoon, Tash · Fitzroy North</div>
@@ -98,7 +98,7 @@ SCREENS["02-home-scrolled"] = page("Home scrolled", f'''<div class="screen">
 {ph("work-hair-1", 20, -173, 300, 375, pos="50% 40%", zoom=1.12, origin="55% 45%", radius=2)}
 {ph("work-lashes-2", 332, -173, 300, 375, pos="0% 40%", radius=2)}
 <div style="position:absolute;left:0;top:0;width:393px;height:98px;z-index:30;background:rgba(248,243,236,.84);backdrop-filter:blur(20px);border-bottom:.5px solid rgba(36,26,22,.12)"></div>
-<div class="serif" style="position:absolute;z-index:31;top:62px;left:0;width:393px;text-align:center;font-size:19px;font-weight:500">hair done.</div>
+<div class="serif" style="position:absolute;z-index:31;top:62px;left:0;width:393px;text-align:center;font-size:22px;font-weight:500;top:60px"><i>hd</i><span style="color:var(--lacquer);font-style:normal">.</span> <i>nd</i><span style="color:var(--lacquer);font-style:normal">.</span></div>
 <div style="position:absolute;z-index:31;top:63px;right:20px">{SEARCH}</div>
 
 <div class="serif" style="position:absolute;left:20px;top:212px;font-size:24px;line-height:28px">Aaliyah</div>

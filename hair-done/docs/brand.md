@@ -87,7 +87,8 @@ committed PNGs were drawn with a stand-in serif and should be regenerated once.
 Rules:
 - The in-app mark is `DropMark` (now a dot) only where a small glyph is needed;
   prefer the wordmark. On the welcome screen the `hd. nd.` line sits above the
-  full wordmark.
+  full wordmark. The Home bar carries the `hd. nd.` line, never "hair done.".
+  In code it's `MonogramMark`; don't hand-build it again.
 - Never set it in roman, never all-caps, never add a third line, never let the
   dots be anything but lacquer.
 - Minimum clear space: the height of the *h* on all sides.

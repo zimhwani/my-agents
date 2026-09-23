@@ -7,8 +7,8 @@ import SwiftUI
 
 /// Home's sizes, taken from the approved mockups. Serif is New York; every size scales with Dynamic Type.
 enum HomeFont {
-    /// "hair done." over the hero and in the bar. A logo, so it doesn't scale.
-    static let wordmark = Font.system(size: 19, weight: .medium, design: .serif)
+    /// The hd. nd. mark over the hero and in the bar. A logo, so it doesn't scale.
+    static let markSize: CGFloat = 22
     /// 28 regular serif: "Who's free today", "Near you".
     static let section = Font.system(.title, design: .serif)
     /// 24 regular serif: names under the "Who's free" photos.
