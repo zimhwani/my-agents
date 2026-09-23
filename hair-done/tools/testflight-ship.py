@@ -66,7 +66,14 @@ if build["attributes"]["processingState"] != "VALID":
 
 st, _ = call("POST", "/v1/betaGroups/%s/relationships/builds" % group,
              {"data": [{"type": "builds", "id": build["id"]}]})
-say("processed; added to %s group (HTTP %s)" % ("internal" if INTERNAL else "external", st))
+in_group = any(b["id"] == build["id"] for b in call("GET", "/v1/betaGroups/%s/builds" % group)[1].get("data") or [])
+label = "internal" if INTERNAL else "external"
+if st < 300:
+    say("processed; added to the %s group" % label)
+elif in_group:
+    say("processed; already in the %s group (automatic distribution)" % label)
+else:
+    say("processed, but couldn't add it to the %s group (HTTP %s). Add it in App Store Connect > TestFlight." % (label, st))
 
 if INTERNAL:
     say("internal testers get it now; no review needed")
