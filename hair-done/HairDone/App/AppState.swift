@@ -36,8 +36,12 @@ final class AppState {
     /// Set when the client taps a pro from anywhere; the home tab pushes it.
     var selectedTab: ClientTab = .home
     var selectedProTab: ProTab = .today
-    /// Screens with their own bottom bar (a pro's profile) hide the custom tab bar while shown.
-    var hidesTabBar = false
+    /// Screens that want the tab bar out of the way (a pro's profile, a chat). A count, not a flag,
+    /// so a chat pushed on top of a profile can't bring the bar back when either one leaves.
+    private(set) var tabBarHiders = 0
+    var hidesTabBar: Bool { tabBarHiders > 0 }
+    func hideTabBar() { tabBarHiders += 1 }
+    func showTabBar() { tabBarHiders = max(0, tabBarHiders - 1) }
 
     init(data: DataService = MockDataService(), payments: PaymentService = MockPaymentService(), location: LocationService = LocationService()) {
         self.data = data

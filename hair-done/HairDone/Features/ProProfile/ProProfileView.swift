@@ -86,8 +86,8 @@ struct ProProfileView: View {
         .paperBackground()
         .safeAreaInset(edge: .bottom, spacing: 0) { bookBar }
         .toolbar(.hidden, for: .navigationBar)
-        .onAppear { app.hidesTabBar = true }
-        .onDisappear { app.hidesTabBar = false }
+        .onAppear { app.hideTabBar() }
+        .onDisappear { app.showTabBar() }
         .fullScreenCover(item: $viewing) { item in
             ProfileWorkViewer(items: live.work, current: item)
         }

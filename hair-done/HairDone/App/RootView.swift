@@ -31,13 +31,13 @@ struct ClientShell: View {
     var body: some View {
         @Bindable var app = app
         TabView(selection: $app.selectedTab) {
-            HomeView().toolbar(.hidden, for: .tabBar).tag(ClientTab.home)
-            BookingsView().toolbar(.hidden, for: .tabBar).tag(ClientTab.bookings)
-            InboxView().toolbar(.hidden, for: .tabBar).tag(ClientTab.inbox)
-            AccountView().toolbar(.hidden, for: .tabBar).tag(ClientTab.you)
+            HomeView().hdTab(showsBar).tag(ClientTab.home)
+            BookingsView().hdTab(showsBar).tag(ClientTab.bookings)
+            InboxView().hdTab(showsBar).tag(ClientTab.inbox)
+            AccountView().hdTab(showsBar).tag(ClientTab.you)
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            if !app.hidesTabBar {
+            if showsBar {
                 HDTabBar(items: [
                     .init(id: ClientTab.home.rawValue, title: "Home", symbol: "house"),
                     .init(id: ClientTab.bookings.rawValue, title: "Bookings", symbol: "calendar"),
@@ -49,9 +49,13 @@ struct ClientShell: View {
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
-        .animation(Motion.spring, value: app.hidesTabBar)
+        .animation(Motion.spring, value: showsBar)
+        .trackKeyboard($keyboardUp)
         .task { if app.pros.isEmpty { await app.refreshAll() } }
     }
+
+    @State private var keyboardUp = false
+    private var showsBar: Bool { !app.hidesTabBar && !keyboardUp }
 }
 
 /// Pro mode: Today · Calendar · Inbox · Work · Earnings
@@ -61,22 +65,58 @@ struct ProShell: View {
     var body: some View {
         @Bindable var app = app
         TabView(selection: $app.selectedProTab) {
-            ProTodayView().toolbar(.hidden, for: .tabBar).tag(ProTab.today)
-            ProCalendarView().toolbar(.hidden, for: .tabBar).tag(ProTab.calendar)
-            InboxView().toolbar(.hidden, for: .tabBar).tag(ProTab.inbox)
-            ProWorkView().toolbar(.hidden, for: .tabBar).tag(ProTab.work)
-            ProEarningsView().toolbar(.hidden, for: .tabBar).tag(ProTab.earnings)
+            ProTodayView().hdTab(showsBar).tag(ProTab.today)
+            ProCalendarView().hdTab(showsBar).tag(ProTab.calendar)
+            InboxView().hdTab(showsBar).tag(ProTab.inbox)
+            ProWorkView().hdTab(showsBar).tag(ProTab.work)
+            ProEarningsView().hdTab(showsBar).tag(ProTab.earnings)
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            HDTabBar(items: [
-                .init(id: ProTab.today.rawValue, title: "Today", symbol: "sun.max"),
-                .init(id: ProTab.calendar.rawValue, title: "Calendar", symbol: "calendar"),
-                .init(id: ProTab.inbox.rawValue, title: "Inbox", symbol: "bubble.left", unread: app.unreadCount > 0),
-                .init(id: ProTab.work.rawValue, title: "Work", symbol: "photo.on.rectangle"),
-                .init(id: ProTab.earnings.rawValue, title: "Earnings", symbol: "dollarsign.circle")
-            ], selected: app.selectedProTab.rawValue) { id in
-                if let tab = ProTab(rawValue: id) { app.selectedProTab = tab }
+            if showsBar {
+                HDTabBar(items: [
+                    .init(id: ProTab.today.rawValue, title: "Today", symbol: "sun.max"),
+                    .init(id: ProTab.calendar.rawValue, title: "Calendar", symbol: "calendar"),
+                    .init(id: ProTab.inbox.rawValue, title: "Inbox", symbol: "bubble.left", unread: app.unreadCount > 0),
+                    .init(id: ProTab.work.rawValue, title: "Work", symbol: "photo.on.rectangle"),
+                    .init(id: ProTab.earnings.rawValue, title: "Earnings", symbol: "dollarsign.circle")
+                ], selected: app.selectedProTab.rawValue) { id in
+                    if let tab = ProTab(rawValue: id) { app.selectedProTab = tab }
+                }
+                .transition(.move(edge: .bottom).combined(with: .opacity))
             }
+        }
+        .animation(Motion.spring, value: showsBar)
+        .trackKeyboard($keyboardUp)
+    }
+
+    @State private var keyboardUp = false
+    private var showsBar: Bool { !app.hidesTabBar && !keyboardUp }
+}
+
+// MARK: - Room for the tab bar
+
+extension View {
+    /// Hides the system tab bar and keeps room for `HDTabBar` at the bottom of the tab.
+    /// The bar sits in an inset on the TabView, but a TabView doesn't pass that inset down to its
+    /// tabs, so without this anything pinned to the bottom of a tab (a chat's message field, the
+    /// last row of a list) ends up underneath the bar.
+    func hdTab(_ showsBar: Bool) -> some View {
+        toolbar(.hidden, for: .tabBar)
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                if showsBar {
+                    Color.clear.frame(height: HDTabBar.height).allowsHitTesting(false)
+                }
+            }
+    }
+
+    /// Keeps `isUp` true while the keyboard is on screen, so the tab bar can step aside for it
+    /// the way the system tab bar does.
+    func trackKeyboard(_ isUp: Binding<Bool>) -> some View {
+        onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
+            isUp.wrappedValue = true
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
+            isUp.wrappedValue = false
         }
     }
 }
@@ -91,6 +131,10 @@ struct HDTabBar: View {
         let symbol: String
         var unread: Bool = false
     }
+
+    /// The bar's height above the home indicator: 6 top padding plus 49 for the buttons.
+    /// Tabs reserve exactly this much (see `hdTab`), so keep the two in step.
+    static let height: CGFloat = 55
 
     var items: [Item]
     var selected: String
@@ -124,7 +168,7 @@ struct HDTabBar: View {
                     }
                     .foregroundStyle(isOn ? Palette.ink : Palette.inkSoft)
                     .frame(maxWidth: .infinity)
-                    .frame(minHeight: 49)
+                    .frame(height: 49)
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)

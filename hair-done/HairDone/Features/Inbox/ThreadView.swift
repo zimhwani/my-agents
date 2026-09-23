@@ -116,7 +116,11 @@ struct ThreadView: View {
                 .accessibilityElement(children: .combine)
             }
         }
-        .onAppear { app.markRead(thread) }
+        .onAppear {
+            app.markRead(thread)
+            app.hideTabBar()
+        }
+        .onDisappear { app.showTabBar() }
         .onChange(of: thread.messages.count) { _, _ in app.markRead(thread) }
     }
 
