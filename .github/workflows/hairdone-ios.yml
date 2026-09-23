@@ -1,0 +1,105 @@
+name: Hair Done iOS
+
+# Builds the Hair Done iOS app on a GitHub Mac, so every change is compiled by a real Swift compiler.
+#
+#   Push to the Hair Done branch        -> compile check for the Simulator. Needs no secrets.
+#   Push a tag hairdone-tf-<anything>   -> signed build, uploaded to TestFlight, added to internal testers.
+#   Push a tag hairdone-tf-live-<...>   -> the same, pointed at the live Supabase backend.
+#
+# One-time setup for the TestFlight jobs, as Actions secrets (repo Settings > Secrets and variables > Actions).
+# They're the same values as the Mac's HairDone.xcconfig and ~/.appstoreconnect/private_keys:
+#   HAIRDONE_TEAM_ID        10-character Apple team id
+#   HAIRDONE_ASC_KEY_ID     App Store Connect API key id
+#   HAIRDONE_ASC_ISSUER_ID  App Store Connect issuer id
+#   HAIRDONE_ASC_KEY_P8     the whole AuthKey_<id>.p8 file, pasted as text
+#   HAIRDONE_STRIPE_KEY     optional, pk_test_... for live builds
+#   HAIRDONE_MERCHANT_ID    optional, the Apple Pay merchant id
+# The API key needs the Admin role, so Xcode can use Apple's cloud signing certificate on a machine
+# that has never signed for this team.
+
+on:
+  push:
+    branches: [claude/youthful-wright-9n079z]
+    paths:
+      - "hair-done/HairDone/**"
+      - "hair-done/project.yml"
+      - ".github/workflows/hairdone-ios.yml"
+    tags:
+      - "hairdone-tf-*"
+
+concurrency:
+  group: hairdone-ios-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 60
+    defaults:
+      run:
+        working-directory: hair-done
+    env:
+      TESTFLIGHT: ${{ startsWith(github.ref, 'refs/tags/hairdone-tf-') }}
+      LIVE: ${{ startsWith(github.ref, 'refs/tags/hairdone-tf-live-') }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # the build number is the commit count under hair-done/
+
+      - name: Tools
+        run: |
+          brew install xcodegen >/dev/null
+          sudo xcode-select -s "$(ls -d /Applications/Xcode_16*.app | sort -V | tail -1)"
+          xcodebuild -version
+
+      - name: Settings file
+        env:
+          TEAM: ${{ secrets.HAIRDONE_TEAM_ID }}
+          KEY_ID: ${{ secrets.HAIRDONE_ASC_KEY_ID }}
+          ISSUER: ${{ secrets.HAIRDONE_ASC_ISSUER_ID }}
+          STRIPE_KEY: ${{ secrets.HAIRDONE_STRIPE_KEY }}
+          MERCHANT: ${{ secrets.HAIRDONE_MERCHANT_ID }}
+        run: |
+          {
+            # The compile check needs no team: it builds unsigned for the Simulator.
+            if [ "$TESTFLIGHT" = "true" ]; then echo "HAIRDONE_TEAM_ID = $TEAM"; else echo "HAIRDONE_TEAM_ID ="; fi
+            echo "HAIRDONE_ASC_KEY_ID = $KEY_ID"
+            echo "HAIRDONE_ASC_ISSUER_ID = $ISSUER"
+            if [ "$LIVE" = "true" ]; then
+              echo 'HAIRDONE_SUPABASE_URL = https:/$()/yohqeunmgrxyakviofua.supabase.co'
+              echo 'HAIRDONE_SUPABASE_KEY = sb_publishable_dDCoMmIEzBXsLRi4itW94g_fNS5KY0s'
+              echo "HAIRDONE_STRIPE_KEY = $STRIPE_KEY"
+              echo "HAIRDONE_MERCHANT_ID = $MERCHANT"
+            fi
+          } > HairDone.xcconfig
+          grep -v -E 'KEY_ID|ISSUER' HairDone.xcconfig
+
+      - name: Compile check (Simulator)
+        if: env.TESTFLIGHT != 'true'
+        run: |
+          xcodegen generate
+          status=0
+          xcodebuild build -project HairDone.xcodeproj -scheme HairDone \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath build CODE_SIGNING_ALLOWED=NO > build.log 2>&1 || status=$?
+          grep -E ':[0-9]+:[0-9]+: (error|warning)|BUILD (SUCCEEDED|FAILED)' build.log | sort -u | head -300 || true
+          exit $status
+
+      - name: API key
+        if: env.TESTFLIGHT == 'true'
+        env:
+          KEY_ID: ${{ secrets.HAIRDONE_ASC_KEY_ID }}
+          P8: ${{ secrets.HAIRDONE_ASC_KEY_P8 }}
+        run: |
+          test -n "$KEY_ID" && test -n "$P8" || { echo "::error::Add the HAIRDONE_ASC_* secrets first (see the top of this file)."; exit 1; }
+          mkdir -p ~/.appstoreconnect/private_keys
+          printf '%s\n' "$P8" > ~/.appstoreconnect/private_keys/AuthKey_${KEY_ID}.p8
+
+      - name: Archive and upload to TestFlight
+        if: env.TESTFLIGHT == 'true'
+        run: tools/release.sh
+
+      - name: Add to internal testers
+        if: env.TESTFLIGHT == 'true'
+        timeout-minutes: 30
+        run: python3 tools/testflight-ship.py --internal
