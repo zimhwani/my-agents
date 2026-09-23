@@ -36,6 +36,16 @@ Rules from brand.md: hands and hair, not faces to camera; natural light;
 women of different ages and skin tones across the set; no product shots, no
 logos, no ring lights in frame. Portrait or square crops work best.
 
+## Fastest: one command with a Pexels key
+
+```bash
+PEXELS_API_KEY=your_key tools/fetch-photos.sh
+```
+
+Free key in a minute at https://www.pexels.com/api/. Downloads four portrait
+photos per category with curated searches and runs the naming and resizing.
+Swap any you don't like by hand afterwards; the names just need to stay 1, 2, 3.
+
 ## Adding them (on the Mac)
 
 ```bash

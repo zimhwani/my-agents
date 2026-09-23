@@ -39,9 +39,9 @@ On a real phone: `tools/set_team.sh` writes your Team ID into
 
 ## Placeholder photos
 
-Tiles show drawn placeholder art until there are photos. Drop free-licence
-photos into `HairDone/Resources/Work/` with `tools/add-photos.sh <category>
-<folder>` and they appear everywhere a pro's work does. See
+Tiles show drawn placeholder art until there are photos. `PEXELS_API_KEY=… tools/fetch-photos.sh` pulls free-licence photos into
+`HairDone/Resources/Work/` (or add your own with `tools/add-photos.sh`), and
+they appear everywhere a pro's work does. See
 `docs/design/placeholder-photos.md`.
 
 ## Ship to TestFlight
