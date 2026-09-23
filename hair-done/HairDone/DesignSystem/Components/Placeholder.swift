@@ -51,6 +51,8 @@ struct WorkTile: View {
                     AsyncImage(url: url) { image in
                         image.resizable().scaledToFill()
                     } placeholder: { art(colors: colors, r: r, w: w, h: h) }
+                } else if let name = BundledWork.imageName(for: item.category, seed: item.seed) {
+                    Image(name).resizable().scaledToFill()
                 } else {
                     art(colors: colors, r: r, w: w, h: h)
                 }
@@ -129,5 +131,30 @@ struct Grain: View {
             }
         }
         .allowsHitTesting(false)
+    }
+}
+
+
+/// Photos dropped into `Resources/Work/` as `work-<category>-<n>.jpg` stand in for real work
+/// until pros upload their own. Picked by seed so a pro's grid shows a stable mix.
+enum BundledWork {
+    private static var counts: [Category: Int] = [:]
+    private static let lock = NSLock()
+
+    static func imageName(for category: Category, seed: Int) -> String? {
+        let n = count(for: category)
+        guard n > 0 else { return nil }
+        return "work-\(category.rawValue.lowercased())-\((abs(seed) % n) + 1)"
+    }
+
+    private static func count(for category: Category) -> Int {
+        lock.lock(); defer { lock.unlock() }
+        if let c = counts[category] { return c }
+        var c = 0
+        while UIImage(named: "work-\(category.rawValue.lowercased())-\(c + 1)") != nil { c += 1 }
+        // "The lot" borrows from hair and makeup when it has nothing of its own.
+        if c == 0, category == .theLot { counts[category] = 0; return 0 }
+        counts[category] = c
+        return c
     }
 }

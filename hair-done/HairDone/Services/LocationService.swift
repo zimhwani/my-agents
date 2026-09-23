@@ -37,7 +37,7 @@ final class LocationService: NSObject, CLLocationManagerDelegate {
         coordinate = loc.coordinate
         isUsingRealLocation = true
         CLGeocoder().reverseGeocodeLocation(loc) { [weak self] marks, _ in
-            if let s = marks?.first?.subLocality ?? marks?.first?.locality { self?.suburbGuess = s }
+            if let s = marks?.first?.locality ?? marks?.first?.subLocality { self?.suburbGuess = s }
         }
     }
 

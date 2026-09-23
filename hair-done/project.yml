@@ -39,6 +39,7 @@ targets:
       - path: HairDone
         excludes:
           - "Resources/Intro/README.md"
+          - "Resources/Work/README.md"
     info:
       path: HairDone/Resources/Info.plist
       properties:

@@ -37,6 +37,13 @@ On a real phone: `tools/set_team.sh` writes your Team ID into
   `HairDone/Resources/Intro/`. Until the files are there it shows crossfading
   placeholder art. Spec, shot list and sourcing: `docs/design/video-intro.md`.
 
+## Placeholder photos
+
+Tiles show drawn placeholder art until there are photos. Drop free-licence
+photos into `HairDone/Resources/Work/` with `tools/add-photos.sh <category>
+<folder>` and they appear everywhere a pro's work does. See
+`docs/design/placeholder-photos.md`.
+
 ## Ship to TestFlight
 
 Same pipeline as the Caddy app. One-time setup:

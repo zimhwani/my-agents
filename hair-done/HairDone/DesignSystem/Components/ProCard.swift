@@ -14,11 +14,14 @@ struct ProCard: View {
             VStack(alignment: .leading, spacing: 0) {
                 HStack(spacing: 4) {
                     ForEach(Array(pro.work.prefix(compact ? 2 : 3)), id: \.id) { item in
+                        // Share the width equally. An `.aspectRatio(.fill)` here made the row wider than
+                        // the screen, which pushed the whole Home page off its left edge.
                         WorkTile(item: item, cornerRadius: 0)
-                            .aspectRatio(compact ? 1 : 0.9, contentMode: .fill)
+                            .frame(maxWidth: .infinity)
                     }
                 }
                 .frame(height: compact ? 120 : 150)
+                .clipped()
                 .clipShape(UnevenRoundedRectangle(topLeadingRadius: Radius.card, bottomLeadingRadius: 0, bottomTrailingRadius: 0, topTrailingRadius: Radius.card, style: .continuous))
                 .overlay(alignment: .topLeading) {
                     if let nextFree {
