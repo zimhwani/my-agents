@@ -36,6 +36,7 @@ struct InboxView: View {
             }
             .paperBackground()
             .refreshable { await app.loadThreads() }
+            .task { if app.isLive { await app.loadThreads() } }
             .toolbar(.hidden, for: .navigationBar)
             .hdDestinations()
         }

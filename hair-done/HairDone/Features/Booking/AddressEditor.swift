@@ -134,7 +134,7 @@ struct AddressEditor: View {
             let town = suburb.trimmingCharacters(in: .whitespacesAndNewlines)
             let coordinate = await geocode("\(street), \(town) VIC \(postcode), Australia")
             let saved = Address(
-                id: address?.id ?? "addr_\(UUID().uuidString.prefix(6))",
+                id: address?.id ?? UUID().uuidString.lowercased(),
                 label: resolvedLabel,
                 line1: street,
                 suburb: town,

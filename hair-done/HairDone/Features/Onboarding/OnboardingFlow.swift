@@ -129,6 +129,8 @@ private struct OnboardingWelcome: View {
     @State private var appeared = false
     @State private var appleError: String? = nil
     @State private var isSigningIn = false
+    /// The raw nonce for the Apple request in flight; its hash goes to Apple, the raw one to our server.
+    @State private var nonce = ""
 
     /// Paper-coloured ink for everything sitting on the video.
     private let onVideo = Color(hex: 0xF4ECE4)
@@ -169,7 +171,10 @@ private struct OnboardingWelcome: View {
                     PrimaryButton(title: "Continue with phone", isLoading: false, isEnabled: !isSigningIn, action: onPhone)
 
                     SignInWithAppleButton(.continue) { request in
-                        request.requestedScopes = [.fullName]
+                        let raw = AppleNonce.make()
+                        nonce = raw
+                        request.requestedScopes = [.fullName, .email]
+                        request.nonce = AppleNonce.sha256(raw)
                     } onCompletion: { result in
                         handleApple(result)
                     }
@@ -202,12 +207,19 @@ private struct OnboardingWelcome: View {
 
     private func handleApple(_ result: Result<ASAuthorization, Error>) {
         switch result {
-        case .success:
+        case .success(let authorization):
+            guard let credential = AppleCredential(authorization: authorization, rawNonce: nonce) else {
+                withAnimation(Motion.gentle) { appleError = "Apple didn't come back to us. Try again, or use your phone." }
+                return
+            }
             isSigningIn = true
             appleError = nil
             Task {
-                await app.signInWithApple()
+                await app.signInWithApple(credential)
                 isSigningIn = false
+                if app.stage == .welcome {
+                    withAnimation(Motion.gentle) { appleError = "Apple didn't come back to us. Try again, or use your phone." }
+                }
             }
         case .failure(let error):
             if let e = error as? ASAuthorizationError, e.code == .canceled { return }
@@ -219,12 +231,14 @@ private struct OnboardingWelcome: View {
 // MARK: - Phone
 
 private struct OnboardingPhone: View {
+    @Environment(AppState.self) private var app
     @Binding var phone: String
     var onBack: () -> Void
     var onNext: () -> Void
 
     @FocusState private var focused: Bool
     @State private var error: String? = nil
+    @State private var sending = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -269,7 +283,7 @@ private struct OnboardingPhone: View {
             .scrollDismissesKeyboard(.interactively)
         }
         .safeAreaInset(edge: .bottom) {
-            PrimaryButton(title: "Text me a code", isEnabled: !phone.isEmpty, action: submit)
+            PrimaryButton(title: "Text me a code", isLoading: sending, isEnabled: !phone.isEmpty, action: submit)
                 .screenGutter()
                 .padding(.vertical, Space.m)
                 .background(Palette.paper)
@@ -284,9 +298,20 @@ private struct OnboardingPhone: View {
             withAnimation(Motion.gentle) { error = "That doesn't look like an Australian mobile." }
             return
         }
+        guard !sending else { return }
         phone = AUPhone.display(phone)
         focused = false
-        onNext()
+        sending = true
+        Task {
+            let sent = await app.sendCode(to: phone)
+            sending = false
+            if sent {
+                onNext()
+            } else {
+                Haptics.warning()
+                withAnimation(Motion.gentle) { error = app.lastError ?? "That didn't work. Try again." }
+            }
+        }
     }
 }
 
@@ -371,6 +396,12 @@ private struct OnboardingCode: View {
                                 resendCycle += 1
                                 code = ""
                                 withAnimation(Motion.gentle) { error = nil }
+                                Task {
+                                    let sent = await app.sendCode(to: phone)
+                                    if !sent {
+                                        withAnimation(Motion.gentle) { error = app.lastError ?? "That didn't work. Try again." }
+                                    }
+                                }
                             }
                         }
                         TertiaryButton(title: "Wrong number", action: onBack)
@@ -448,7 +479,7 @@ private struct OnboardingCode: View {
         isVerifying = true
         focused = false
         Task {
-            await app.signIn(phone: phone)
+            await app.verifyCode(code, phone: phone)
             isVerifying = false
             if app.stage == .welcome {
                 Haptics.error()

@@ -40,6 +40,15 @@ Never paste a secret key into a chat, an issue or the repo. They go straight int
 4. Identifiers → your app ID `com.keithchinyanda.hairdone` → tick **Apple Pay Payment Processing** and pick the
    merchant ID. Tick **Sign in with Apple** while you're there.
 5. Put the merchant ID in `HairDone.xcconfig` as `HAIRDONE_MERCHANT_ID`.
+6. Add the Apple Pay entitlement to `HairDone/HairDone.entitlements` (it's left out so builds work before the
+   merchant ID exists; an empty one breaks signing on a phone):
+   ```xml
+   <key>com.apple.developer.in-app-payments</key>
+   <array>
+       <string>merchant.com.keithchinyanda.hairdone</string>
+   </array>
+   ```
+   Until then Apple Pay just doesn't show in the payment sheet; cards work.
 
 ## 3. Sign-in (Supabase → Authentication → Sign In / Providers)
 

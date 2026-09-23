@@ -15,3 +15,17 @@ HAIRDONE_TEAM_ID =
 // is already there if Caddy has shipped from this Mac.
 HAIRDONE_ASC_KEY_ID =
 HAIRDONE_ASC_ISSUER_ID =
+
+// The backend. With the two Supabase lines filled in the app talks to the live
+// project; empty, it runs on its built-in sample data. Both values are public.
+// The $() in the URL is on purpose: in an xcconfig, // starts a comment.
+HAIRDONE_SUPABASE_URL = https:/$()/yohqeunmgrxyakviofua.supabase.co
+HAIRDONE_SUPABASE_KEY = sb_publishable_dDCoMmIEzBXsLRi4itW94g_fNS5KY0s
+
+// Stripe publishable key (pk_test_… first, pk_live_… later): Stripe → Developers → API keys.
+// Empty, bookings skip the card step (sample payments). Needs the Stripe package to have resolved.
+HAIRDONE_STRIPE_KEY =
+
+// Apple Pay merchant ID, e.g. merchant.com.keithchinyanda.hairdone (docs/go-live.md §2).
+// Empty, Apple Pay is left out of the payment sheet and cards still work.
+HAIRDONE_MERCHANT_ID =

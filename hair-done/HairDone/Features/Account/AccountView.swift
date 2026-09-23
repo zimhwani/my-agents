@@ -13,6 +13,9 @@ struct AccountView: View {
     @State private var showLegal = false
     @State private var showProOnboarding = false
     @State private var confirmLogout = false
+    @State private var confirmDelete = false
+    @State private var deleting = false
+    @State private var deleteProblem: String? = nil
 
     private var version: String {
         (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "1.0"
@@ -36,8 +39,15 @@ struct AccountView: View {
                         proModeCard
                     }
 
-                    TertiaryButton(title: "Log out") { confirmLogout = true }
-                        .frame(maxWidth: .infinity)
+                    VStack(spacing: 0) {
+                        TertiaryButton(title: "Log out") { confirmLogout = true }
+                        if deleting {
+                            ProgressView().frame(minHeight: 44)
+                        } else {
+                            TertiaryButton(title: "Delete account", tint: Palette.inkFaint) { confirmDelete = true }
+                        }
+                    }
+                    .frame(maxWidth: .infinity)
                 }
                 .screenGutter()
                 .padding(.bottom, Space.section)
@@ -51,6 +61,17 @@ struct AccountView: View {
             } message: {
                 Text("Your bookings stay put. You'll need a new code to get back in.")
             }
+            .confirmationDialog("Delete your account?", isPresented: $confirmDelete, titleVisibility: .visible) {
+                Button("Delete", role: .destructive) { deleteAccount() }
+                Button("Keep it", role: .cancel) {}
+            } message: {
+                Text("Profile, addresses and cards go. Past receipts stay in your email. Can't be undone.")
+            }
+            .alert("Not yet", isPresented: Binding(get: { deleteProblem != nil }, set: { if !$0 { deleteProblem = nil } })) {
+                Button("OK", role: .cancel) { deleteProblem = nil }
+            } message: {
+                Text(deleteProblem ?? "")
+            }
             .sheet(isPresented: $showDetails) { AccountDetailsSheet().presentationDragIndicator(.visible) }
             .sheet(isPresented: $showAddresses) { AccountAddressesSheet().presentationDragIndicator(.visible) }
             .sheet(isPresented: $showPayments) { AccountPaymentsSheet().presentationDragIndicator(.visible) }
@@ -63,6 +84,15 @@ struct AccountView: View {
                     app.switchMode(.pro)
                 }
             }
+        }
+    }
+
+    private func deleteAccount() {
+        deleting = true
+        Task {
+            let gone = await app.deleteAccount()
+            deleting = false
+            if !gone { deleteProblem = app.lastError ?? "That didn't work. Try again." }
         }
     }
 
@@ -359,9 +389,20 @@ struct AccountPaymentsSheet: View {
                 .listStyle(.insetGrouped)
                 .scrollContentBackground(.hidden)
             }
-            SecondaryButton(title: "Add a card", symbol: "plus") { adding = true }
-                .screenGutter()
-                .padding(.bottom, Space.l)
+            if app.payments.checkoutCard == nil {
+                SecondaryButton(title: "Add a card", symbol: "plus") { adding = true }
+                    .screenGutter()
+                    .padding(.bottom, Space.l)
+            } else {
+                // With Stripe, a card goes in the first time you pay with it, then it's kept here.
+                Text("You add a card when you book. It's kept here for next time.")
+                    .font(HDFont.caption)
+                    .foregroundStyle(Palette.inkSoft)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: .infinity)
+                    .screenGutter()
+                    .padding(.bottom, Space.l)
+            }
         }
         .paperBackground()
         .sheet(isPresented: $adding) {
@@ -474,7 +515,7 @@ struct AccountHelpSheet: View {
         ("What if she's late", "She'll message you from the thread if she's running behind. If she's more than 20 minutes late with no word, message us from here and a person will sort it, usually the same day."),
         ("Safety", "Every pro has had her ID checked before she's listed, and reviews only come from finished, paid bookings. Phone numbers stay hidden until she's confirmed. If anything feels off, report the pro from her profile or the conversation and we'll look at it."),
         ("Reporting a pro", "Open her profile or the conversation and tap Report. Tell us what happened in a line or two. A person reads every one."),
-        ("Deleting your account", "Message us from here and say you'd like your account gone. Profile, addresses and cards go. Past receipts stay in your email. It can't be undone.")
+        ("Deleting your account", "Tap Delete account at the bottom of You. Profile, addresses and cards go. Past receipts stay in your email. It can't be undone, and it has to wait until any booking you've got on is finished.")
     ]
 
     var body: some View {

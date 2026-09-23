@@ -122,6 +122,15 @@ struct ThreadView: View {
         }
         .onDisappear { app.showTabBar() }
         .onChange(of: thread.messages.count) { _, _ in app.markRead(thread) }
+        // No live connection yet: on the real backend an open thread looks for new messages every 8 seconds.
+        .task(id: thread.id) {
+            guard app.isLive else { return }
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(8))
+                if Task.isCancelled { break }
+                await app.refreshThread(thread.id)
+            }
+        }
     }
 
     /// The booking this thread belongs to. Tap to open it.

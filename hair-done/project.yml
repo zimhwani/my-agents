@@ -16,6 +16,13 @@ configFiles:
   Debug: HairDone.xcconfig
   Release: HairDone.xcconfig
 
+# Stripe's PaymentSheet takes the card at checkout. The app still builds without it
+# (`#if canImport(StripePaymentSheet)`), falling back to the sample payments.
+packages:
+  Stripe:
+    url: https://github.com/stripe/stripe-ios-spm
+    from: "24.0.0"
+
 settings:
   base:
     MARKETING_VERSION: "1.0"
@@ -40,6 +47,9 @@ targets:
         excludes:
           - "Resources/Intro/README.md"
           - "Resources/Work/README.md"
+    dependencies:
+      - package: Stripe
+        product: StripePaymentSheet
     info:
       path: HairDone/Resources/Info.plist
       properties:
@@ -66,9 +76,24 @@ targets:
         # Declared once so App Store Connect stops asking on every upload.
         # The only cryptography is HTTPS through URLSession, which is exempt.
         ITSAppUsesNonExemptEncryption: false
+        # hairdone://payouts/done and /refresh come back from Stripe's payout setup
+        # (via the payouts-return function); hairdone://stripe-redirect from a bank's card check.
+        CFBundleURLTypes:
+          - CFBundleURLName: com.keithchinyanda.hairdone
+            CFBundleURLSchemes:
+              - hairdone
+        # The backend, from HairDone.xcconfig. Empty means the app runs on its sample data.
+        # Read by AppConfig.
+        HDSupabaseURL: $(HAIRDONE_SUPABASE_URL)
+        HDSupabaseKey: $(HAIRDONE_SUPABASE_KEY)
+        HDStripeKey: $(HAIRDONE_STRIPE_KEY)
+        HDMerchantID: $(HAIRDONE_MERCHANT_ID)
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.keithchinyanda.hairdone
+        # Sign in with Apple. Apple Pay's entitlement is added by hand once the merchant ID
+        # exists (docs/go-live.md): with an empty merchant ID it would break device builds.
+        CODE_SIGN_ENTITLEMENTS: HairDone/HairDone.entitlements
         # iPhone only. Portrait alone, laid out for a phone width.
         TARGETED_DEVICE_FAMILY: "1"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon

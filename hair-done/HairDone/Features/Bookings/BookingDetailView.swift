@@ -11,6 +11,7 @@ struct BookingDetailView: View {
     @State private var showCancel = false
     @State private var showReview = false
     @State private var cancelling = false
+    @State private var showFlag = false
 
     private var booking: Booking? { app.bookings.first { $0.id == bookingID } }
 
@@ -74,6 +75,18 @@ struct BookingDetailView: View {
             }
             .presentationDetents([.medium])
             .presentationDragIndicator(.visible)
+        }
+        .confirmationDialog("Something wrong?", isPresented: $showFlag, titleVisibility: .visible) {
+            Button("Hold off the charge") {
+                Task {
+                    if await app.flag(booking, detail: "") {
+                        app.show("Held off. A person will be in touch within two days.")
+                    }
+                }
+            }
+            Button("Leave it", role: .cancel) {}
+        } message: {
+            Text("We'll hold off charging your card for up to 48 hours while a person looks. Then message us from Help and say what happened.")
         }
     }
 
@@ -271,6 +284,9 @@ struct BookingDetailView: View {
                     Text("Get receipt").font(HDFont.subStrong).foregroundStyle(Palette.inkSoft).frame(minHeight: 44)
                 }
                 .simultaneousGesture(TapGesture().onEnded { Haptics.light() })
+                if booking.status == .done {
+                    TertiaryButton(title: "Something wrong?") { showFlag = true }
+                }
 
             case .cancelledByClient, .cancelledByPro, .declined, .noShow:
                 if let pro {
@@ -322,21 +338,24 @@ struct BookingDetailView: View {
     @ViewBuilder
     private func simulateMenu(_ booking: Booking) -> some View {
         #if DEBUG
-        Menu {
-            if let next = nextStatus(after: booking.status) {
-                Button {
-                    Task { await app.update(booking, to: next) }
-                } label: {
-                    Label("Move to \(next.timelineTitle)", systemImage: "arrow.right")
+        // Sample data only: the real server won't let a client move her own booking along.
+        if !app.isLive {
+            Menu {
+                if let next = nextStatus(after: booking.status) {
+                    Button {
+                        Task { await app.update(booking, to: next) }
+                    } label: {
+                        Label("Move to \(next.timelineTitle)", systemImage: "arrow.right")
+                    }
+                } else {
+                    Text("Nothing further to simulate")
                 }
-            } else {
-                Text("Nothing further to simulate")
+            } label: {
+                Image(systemName: "ellipsis.circle")
+                    .foregroundStyle(Palette.inkSoft)
             }
-        } label: {
-            Image(systemName: "ellipsis.circle")
-                .foregroundStyle(Palette.inkSoft)
+            .accessibilityLabel("Simulate")
         }
-        .accessibilityLabel("Simulate")
         #else
         EmptyView()
         #endif

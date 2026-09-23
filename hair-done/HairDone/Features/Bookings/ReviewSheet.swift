@@ -59,9 +59,22 @@ struct ReviewSheet: View {
         rating > 0 && rating < 3 ? "What went wrong? We read these too." : "What was she like? The next woman deciding will read this."
     }
 
-    private var sendTitle: String { tipCents > 0 ? "Send and tip \(Money.format(tipCents))" : "Send" }
+    /// On the real backend a done booking isn't charged until she pays here (or 12 hours pass).
+    private var paying: Bool { app.isLive && booking.status == .done }
+
+    /// A tip goes through with the payment, so on the real backend it's offered only until then.
+    private var canTip: Bool { app.isLive ? booking.status == .done : booking.status.isFinished }
+
+    private var sendTitle: String {
+        if paying { return "Pay \(Money.format(booking.price.clientTotalCents + tipCents))" }
+        return tipCents > 0 ? "Send and tip \(Money.format(tipCents))" : "Send"
+    }
 
     private var thanksLine: String {
+        if paying && rating > 2 {
+            return "Paid. \(Money.format(booking.price.clientTotalCents + tipCents)) to \(proName), receipt in your inbox."
+        }
+        if paying { return "Paid. Thanks for telling us. A person will look at this." }
         if rating <= 2 { return "Thanks for telling us. A person will look at this." }
         if tipCents > 0 { return "Thanks. \(Money.format(tipCents)) to \(proName), on top of the rest." }
         return "Thanks. \(proName) will see it, and so will the next woman deciding."
@@ -115,7 +128,7 @@ struct ReviewSheet: View {
                         }
                         .transition(.move(edge: .bottom).combined(with: .opacity))
 
-                        if booking.status.isFinished {
+                        if canTip {
                             tipSection.transition(.move(edge: .bottom).combined(with: .opacity))
                         }
                     }
@@ -205,9 +218,9 @@ struct ReviewSheet: View {
         sending = true
         focus = nil
         Task {
-            await app.review(booking, rating: rating, text: text.trimmingCharacters(in: .whitespacesAndNewlines), tipCents: tipCents)
+            let done = await app.review(booking, rating: rating, text: text.trimmingCharacters(in: .whitespacesAndNewlines), tipCents: tipCents)
             sending = false
-            sent = true
+            if done { sent = true }
         }
     }
 }

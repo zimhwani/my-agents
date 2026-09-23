@@ -277,7 +277,7 @@ struct IconGlyph: View {
 extension WorkItem {
     /// A brand-new tile with placeholder art. Real image data comes later.
     static func placeholder(category: Category, caption: String = "") -> WorkItem {
-        WorkItem(id: "w_\(UUID().uuidString.prefix(8))", category: category, caption: caption, seed: Int.random(in: 1...9_999))
+        WorkItem(id: UUID().uuidString.lowercased(), category: category, caption: caption, seed: Int.random(in: 1...9_999))
     }
 }
 
@@ -337,7 +337,7 @@ enum SuggestedServices {
             ("Hair + nails", 16000, 120, "Two things, one visit."),
             ("The lot", 32000, 180, "Hair, makeup and nails. Event ready.")]
         }
-        return rows.map { Service(id: "s_\(UUID().uuidString.prefix(6))", name: $0.0, category: category, priceCents: $0.1, minutes: $0.2, detail: $0.3) }
+        return rows.map { Service(id: UUID().uuidString.lowercased(), name: $0.0, category: category, priceCents: $0.1, minutes: $0.2, detail: $0.3) }
     }
 }
 
@@ -414,7 +414,7 @@ struct ServiceEditorSheet: View {
                 .padding(.vertical, Space.l)
             }
             PrimaryButton(title: "Save", isEnabled: canSave) {
-                onSave(Service(id: existingID ?? "s_\(UUID().uuidString.prefix(6))", name: name.trimmingCharacters(in: .whitespaces),
+                onSave(Service(id: existingID ?? UUID().uuidString.lowercased(), name: name.trimmingCharacters(in: .whitespaces),
                                category: category, priceCents: priceCents, minutes: minutes, detail: detail, isPopular: isPopular))
                 dismiss()
             }

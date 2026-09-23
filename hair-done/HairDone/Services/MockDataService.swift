@@ -1,7 +1,8 @@
 import Foundation
 import CoreLocation
 
-/// In-memory backend. Deterministic seed, small artificial delays so loading states show.
+/// In-memory backend for previews and for running without backend keys.
+/// Deterministic seed, small artificial delays so loading states show.
 final class MockDataService: DataService {
     private var client: Client? = MockData.client
     private var proSelf: Pro = MockData.proSelf
@@ -9,6 +10,7 @@ final class MockDataService: DataService {
     private var bookings: [Booking] = MockData.bookings() + MockData.proBookings().filter { $0.id != "pb_3" }
     private var threads: [MessageThread] = MockData.threads()
     private var payouts: [Payout] = MockData.payouts()
+    private var blocked: Set<String> = []
     private var signedIn = false
 
     /// Set to 0 in previews/tests.
@@ -21,35 +23,50 @@ final class MockDataService: DataService {
 
     // MARK: Session
 
-    func signIn(phone: String) async throws -> Client {
+    func sendCode(phone: String) async throws { await pause(1.5) }
+    func verifyCode(phone: String, code: String) async throws -> Client {
         await pause(2)
         signedIn = true
         return client ?? MockData.client
     }
-    func signInWithApple() async throws -> Client {
+    func signInWithApple(_ credential: AppleCredential) async throws -> Client {
         await pause(1.5)
         signedIn = true
         return client ?? MockData.client
     }
-    func currentClient() async -> Client? { client }
+    /// Signed out at launch, so the app opens on the welcome screen as it always has.
+    func currentClient() async -> Client? { signedIn ? client : nil }
     func currentPro() async -> Pro? { proSelf }
     func updateClient(_ client: Client) async throws { await pause(0.5); self.client = client }
-    func updatePro(_ pro: Pro) async throws {
+    func updatePro(_ pro: Pro) async throws -> Pro {
         await pause(0.5)
         proSelf = pro
         if let i = pros.firstIndex(where: { $0.id == pro.id }) { pros[i] = pro }
+        return pro
+    }
+    func signOut() async { signedIn = false }
+    func deleteAccount() async throws {
+        await pause()
+        if bookings.contains(where: { $0.clientID == client?.id && ($0.status.isUpcoming || $0.status == .done) }) {
+            throw DataError.liveBooking
+        }
+        signedIn = false
     }
 
     // MARK: Discovery
 
     func pros(near coordinate: CLLocationCoordinate2D, category: Category?) async throws -> [Pro] {
         await pause()
-        var list = pros.filter { $0.isActive }
+        var list = pros.filter { $0.isActive && !blocked.contains($0.id) }
         if let category { list = list.filter { $0.specialties.contains(category) } }
         return list.sorted { $0.distanceKm(from: coordinate) < $1.distanceKm(from: coordinate) }
     }
 
     func pro(id: String) async throws -> Pro? { await pause(0.3); return pros.first { $0.id == id } }
+
+    func proCards(ids: [String]) async throws -> [Pro] { pros.filter { ids.contains($0.id) } }
+
+    func clientNames(ids: [String]) async throws -> [String: String] { MockData.clientNames }
 
     func slots(for pro: Pro, on day: Date, minutes: Int) async throws -> [TimeSlot] {
         await pause(0.6)
@@ -91,6 +108,8 @@ final class MockDataService: DataService {
         return bookings.filter { $0.proID == proID }.sorted { $0.start < $1.start }
     }
 
+    func booking(id: String) async throws -> Booking? { bookings.first { $0.id == id } }
+
     func createBooking(_ draft: BookingDraft) async throws -> Booking {
         await pause(2)
         guard let start = draft.start, let address = draft.address, let clientID = client?.id else { throw DataError.notSignedIn }
@@ -114,6 +133,11 @@ final class MockDataService: DataService {
             Message(id: "m_\(id)_0", threadID: "th_\(id)", senderID: "system", text: intro, sentAt: now, isSystem: true)
         ]))
         return booking
+    }
+
+    func abandonBooking(id: String) async {
+        bookings.removeAll { $0.id == id }
+        threads.removeAll { $0.bookingID == id }
     }
 
     func updateStatus(bookingID: String, to status: BookingStatus, reason: String?) async throws -> Booking {
@@ -157,6 +181,12 @@ final class MockDataService: DataService {
         return bookings[i]
     }
 
+    func flagBooking(bookingID: String, detail: String) async throws -> Booking {
+        await pause(0.5)
+        guard let b = bookings.first(where: { $0.id == bookingID }) else { throw DataError.notFound }
+        return b
+    }
+
     // MARK: Messaging
 
     func threads(userID: String) async throws -> [MessageThread] {
@@ -165,6 +195,8 @@ final class MockDataService: DataService {
             .sorted { ($0.last?.sentAt ?? .distantPast) > ($1.last?.sentAt ?? .distantPast) }
     }
 
+    func thread(id: String) async throws -> MessageThread? { threads.first { $0.id == id } }
+
     func send(text: String, threadID: String, senderID: String) async throws -> MessageThread {
         await pause(0.3)
         guard let i = threads.firstIndex(where: { $0.id == threadID }) else { throw DataError.notFound }
@@ -172,6 +204,17 @@ final class MockDataService: DataService {
         if senderID == threads[i].clientID { threads[i].unreadForPro += 1; threads[i].unreadForClient = 0 } else { threads[i].unreadForClient += 1; threads[i].unreadForPro = 0 }
         return threads[i]
     }
+
+    func markRead(threadID: String, asPro: Bool) async {
+        guard let i = threads.firstIndex(where: { $0.id == threadID }) else { return }
+        if asPro { threads[i].unreadForPro = 0 } else { threads[i].unreadForClient = 0 }
+    }
+
+    // MARK: Safety
+
+    func blockedIDs() async throws -> Set<String> { blocked }
+    func block(userID: String) async throws { await pause(0.3); blocked.insert(userID) }
+    func report(userID: String, bookingID: String?, reason: String, detail: String) async throws { await pause(0.5) }
 
     // MARK: Pro
 

@@ -70,6 +70,10 @@ struct ProOnboardingFlow: View {
         }
         .paperBackground()
         .animation(Motion.spring, value: step)
+        // Stripe tells the server when payouts are on; the app hears about it on the way back.
+        .onChange(of: app.proSelf?.payoutsConnected) { _, on in
+            if on == true { withAnimation(Motion.spring) { payoutsOn = true } }
+        }
         .onChange(of: picks) { _, new in
             guard !new.isEmpty else { return }
             let category = specialties.first ?? .hair
@@ -377,10 +381,13 @@ struct ProOnboardingFlow: View {
     private func setUpPayouts() async {
         fetchingURL = true
         defer { fetchingURL = false }
+        // The payout link belongs to a pro profile, so on the real backend she's saved as one first.
+        if app.isLive && app.proSelf == nil { await app.saveProSelf(draftPro()) }
         do {
-            let url = try await app.payments.payoutOnboardingURL(proID: app.client?.id ?? "new")
+            let url = try await app.payments.payoutOnboardingURL(proID: app.proSelf?.id ?? app.client?.id ?? "new")
             openURL(url)
-            withAnimation(Motion.spring) { payoutsOn = true }
+            // The sample data says yes straight away; the real answer comes back from Stripe.
+            if !app.isLive { withAnimation(Motion.spring) { payoutsOn = true } }
         } catch {
             app.show("That didn't work. Try again.")
         }
@@ -389,12 +396,20 @@ struct ProOnboardingFlow: View {
     private func finish() async {
         saving = true
         defer { saving = false }
+        await app.saveProSelf(draftPro())
+        Haptics.success()
+        onFinished()
+    }
+
+    /// Her profile as the steps have it so far.
+    private func draftPro() -> Pro {
         let client = app.client
         let coordinate = app.location.coordinate
         var availability = WeeklyAvailability.standard
         availability.hours = hours
         let pro = Pro(
-            id: app.proSelf?.id ?? "pro_\(UUID().uuidString.prefix(6))",
+            // On the real backend a pro's id is her account's id.
+            id: app.proSelf?.id ?? (app.isLive ? app.client?.id : nil) ?? "pro_\(UUID().uuidString.prefix(6))",
             firstName: client?.firstName ?? "You",
             lastInitial: String(client?.lastName.prefix(1) ?? "").uppercased(),
             specialties: specialties,
@@ -420,9 +435,7 @@ struct ProOnboardingFlow: View {
             abn: abnDigits,
             payoutsConnected: payoutsOn
         )
-        await app.saveProSelf(pro)
-        Haptics.success()
-        onFinished()
+        return pro
     }
 }
 

@@ -160,7 +160,8 @@ struct ReviewStep: View {
         .safeAreaInset(edge: .bottom, spacing: 0) { payBar }
         .onAppear {
             if draft.paymentMethod == nil {
-                draft.paymentMethod = app.client?.defaultPayment ?? applePay ?? cards.first
+                // With Stripe's sheet there may be nothing saved yet: the card goes in at checkout.
+                draft.paymentMethod = app.client?.defaultPayment ?? applePay ?? cards.first ?? app.payments.checkoutCard
             }
         }
         .sheet(isPresented: $showAddCard) {
@@ -465,7 +466,10 @@ struct ReviewStep: View {
     private func errorCard(_ error: BookingFlowError) -> some View {
         switch error {
         case .declined:
-            inkErrorCard(message: error.message, actionTitle: "Add a card") { showAddCard = true }
+            inkErrorCard(message: error.message, actionTitle: "Add a card") {
+                // Stripe's sheet takes the new card itself, so go straight back to it.
+                if let card = app.payments.checkoutCard { pick(card); onTryAgain() } else { showAddCard = true }
+            }
         case .slotTaken:
             inkErrorCard(message: error.message, actionTitle: "Pick another", action: onPickAnotherTime)
         case .other:
@@ -553,7 +557,10 @@ private struct PaymentPickerSheet: View {
                             if card.id != cards.last?.id { Hairline() }
                         }
                         if !cards.isEmpty || applePay != nil { Hairline() }
-                        Button(action: { Haptics.light(); showAddCard = true }) {
+                        Button(action: {
+                            Haptics.light()
+                            if let card = app.payments.checkoutCard { choose(card) } else { showAddCard = true }
+                        }) {
                             HStack(spacing: Space.s) {
                                 Image(systemName: "plus.circle").font(.system(size: 18, weight: .medium))
                                 Text("Add a card").font(HDFont.subStrong)

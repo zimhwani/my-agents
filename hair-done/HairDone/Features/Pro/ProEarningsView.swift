@@ -260,7 +260,8 @@ struct PayoutDetailsSheet: View {
         do {
             let url = try await app.payments.payoutOnboardingURL(proID: pro.id)
             openURL(url)
-            if !connected {
+            // The real answer comes back from Stripe (AppState.payoutsReturned); the sample data says yes now.
+            if !connected && !app.isLive {
                 var updated = pro
                 updated.payoutsConnected = true
                 await app.saveProSelf(updated)

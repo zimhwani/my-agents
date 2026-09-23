@@ -6,15 +6,20 @@ struct RootView: View {
 
     var body: some View {
         ZStack {
-            switch app.stage {
-            case .welcome, .signedIn:
-                OnboardingFlow()
-                    .transition(.opacity)
-            case .ready:
-                Group {
-                    if app.mode == .pro { ProShell() } else { ClientShell() }
+            if app.isRestoring {
+                // A moment on paper while a saved session is picked up, rather than a flash of the welcome video.
+                Palette.paper.ignoresSafeArea()
+            } else {
+                switch app.stage {
+                case .welcome, .signedIn:
+                    OnboardingFlow()
+                        .transition(.opacity)
+                case .ready:
+                    Group {
+                        if app.mode == .pro { ProShell() } else { ClientShell() }
+                    }
+                    .transition(.asymmetric(insertion: .move(edge: .bottom).combined(with: .opacity), removal: .opacity))
                 }
-                .transition(.asymmetric(insertion: .move(edge: .bottom).combined(with: .opacity), removal: .opacity))
             }
         }
         .animation(Motion.springSlow, value: app.stage)

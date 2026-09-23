@@ -13,7 +13,8 @@ hair-done/
 │   ├── App/                  HairDoneApp (entry), AppState (the shared model), RootView (shells + tabs), Routes
 │   ├── DesignSystem/         Palette, HDFont, Space/Radius/Motion, Haptics, Formatting, Components/
 │   ├── Models/               Category, Pro/Service/WorkItem/Review, Availability, Booking/Address/Client/etc
-│   ├── Services/             DataService protocol, MockDataService + MockData, PaymentService, LocationService
+│   ├── Services/             DataService protocol, SupabaseDataService (+ SupabaseAPI, SupabaseRows), MockDataService + MockData,
+│   │                         PaymentService (Stripe PaymentSheet and a mock), AppConfig, Keychain, AppleSignIn, LocationService
 │   ├── Features/             One folder per area: Onboarding, Home, ProProfile, Booking, Bookings, Inbox, Account, Pro
 │   └── Resources/            Assets.xcassets (AccentColor, AppIcon)
 ├── supabase/                 Postgres schema, RLS, edge functions
@@ -22,7 +23,7 @@ hair-done/
 
 ## Rules
 
-1. **iOS 17, Swift 5 language mode, no packages.** `@Observable`, `NavigationStack`, `TabView`. No Combine, no UIKit views unless wrapped for a reason.
+1. **iOS 17, Swift 5 language mode, one package** (Stripe's `StripePaymentSheet`, behind `#if canImport` so the app builds without it). `@Observable`, `NavigationStack`, `TabView`. No Combine, no UIKit views unless wrapped for a reason.
 2. **Read `AppState` from the environment**: `@Environment(AppState.self) private var app`. For bindings: `@Bindable var app = app` at the top of `body`.
 3. **Never hard-code a colour, font or spacing.** `Palette.*`, `HDFont.*`, `Space.*`, `Radius.*`, `Motion.*`. Category tints: `category.tint` / `category.tintInk`.
 4. **Copy comes from `docs/copy-deck.md`.** Look the screen up before writing a string. If a line isn't there, write one in the brief's voice and check it against the banned list in `docs/build-brief.md` §3.
@@ -39,3 +40,7 @@ hair-done/
     `previewApp()` lives in `App/Preview.swift`.
 12. **Data flow**: views call `app.book(_:)`, `app.update(_:to:)`, `app.send(_:in:)`, `app.review(...)`, `app.reschedule(...)`, `app.saveProSelf(_:)`. Don't call `app.data` directly from a view except for `slots(for:on:minutes:)`.
 13. **No banned words anywhere**, including comments and preview data.
+14. **Backend**: `AppState.configured()` picks `SupabaseDataService` when `HairDone.xcconfig` has the Supabase URL and key
+    (read through `AppConfig` from Info.plist), and the mocks otherwise. Previews always use the mocks. The server prices
+    bookings, checks slots and moves statuses; charging, releasing and auto-capture run on its timers, never in the app.
+    Branch on `app.isLive` only where the sample data has to pretend to be the server.

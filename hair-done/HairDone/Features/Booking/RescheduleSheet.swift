@@ -96,7 +96,7 @@ struct RescheduleSheet: View {
             let moved = app.bookings.first { $0.id == booking.id }?.start == start
                 || app.proBookings.first { $0.id == booking.id }?.start == start
             guard moved else {
-                withAnimation(Motion.spring) { problem = "That didn't work. Try again." }
+                withAnimation(Motion.spring) { problem = app.lastError ?? "That didn't work. Try again." }
                 return
             }
             dismiss()

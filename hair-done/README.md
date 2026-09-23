@@ -5,7 +5,7 @@ An iOS app for women in Melbourne who want their hair, nails, makeup, lashes or 
 ```
 hair-done/
 ├── project.yml           xcodegen generate → HairDone.xcodeproj (gitignored)
-├── HairDone/             SwiftUI source (iOS 17+, no packages)
+├── HairDone/             SwiftUI source (iOS 17+; one package, Stripe's PaymentSheet)
 ├── supabase/             Postgres schema, row-level security, Stripe edge functions
 ├── docs/                 Brief, brand, copy deck, product spec, UX flows, engineering guide
 ├── tools/                release.sh, testflight-ship.py, asc-status.py, set_team.sh
@@ -22,8 +22,10 @@ open HairDone.xcodeproj
 ```
 
 Pick an iPhone simulator and press Run. No accounts, keys or network needed:
-the app runs on seeded mock data so every screen works on first launch. The
-`.xcodeproj` is generated from `project.yml` and gitignored, same as Caddy.
+without a `HairDone.xcconfig` (or with its Supabase lines empty) the app runs
+on seeded mock data so every screen works on first launch. With the lines from
+`HairDone.xcconfig.example` it talks to the live backend; see `docs/go-live.md`.
+The `.xcodeproj` is generated from `project.yml` and gitignored, same as Caddy.
 
 On a real phone: `tools/set_team.sh` writes your Team ID into
 `HairDone.xcconfig`, then Run.

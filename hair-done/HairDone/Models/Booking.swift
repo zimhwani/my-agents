@@ -30,7 +30,8 @@ struct PaymentMethod: Identifiable, Hashable, Codable {
     var label: String {
         switch kind {
         case .applePay: return "Apple Pay"
-        case .card: return "\(brand) ending \(last4)"
+        // A card that goes in at checkout, in Stripe's sheet: "Paying with a card".
+        case .card: return last4.isEmpty ? "a card" : "\(brand) ending \(last4)"
         }
     }
 }

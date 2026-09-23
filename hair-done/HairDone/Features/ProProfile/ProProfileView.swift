@@ -88,6 +88,8 @@ struct ProProfileView: View {
         .toolbar(.hidden, for: .navigationBar)
         .onAppear { app.hideTabBar() }
         .onDisappear { app.showTabBar() }
+        // A card from a list has no reviews; her full profile comes in when it's opened.
+        .task { if app.isLive { await app.loadProDetail(pro.id) } }
         .fullScreenCover(item: $viewing) { item in
             ProfileWorkViewer(items: live.work, current: item)
         }
@@ -983,6 +985,7 @@ private struct ProfileReportSheet: View {
     @State private var reason: String? = nil
     @State private var note = ""
     @State private var confirmBlock = false
+    @State private var sending = false
 
     private let reasons = [
         "Photos aren't her work",
@@ -1044,9 +1047,17 @@ private struct ProfileReportSheet: View {
 
                         HDTextField(label: "", placeholder: "Only we see this.", text: $note, axis: .vertical)
 
-                        PrimaryButton(title: "Send report", isEnabled: reason != nil) {
-                            app.show("Sent. A person reads every one, and we'll get back to you within two days.")
-                            dismiss()
+                        PrimaryButton(title: "Send report", isLoading: sending, isEnabled: reason != nil) {
+                            guard let picked = reason else { return }
+                            sending = true
+                            Task {
+                                let sent = await app.report(pro.id, reason: picked, detail: note.trimmingCharacters(in: .whitespacesAndNewlines))
+                                sending = false
+                                if sent {
+                                    app.show("Sent. A person reads every one, and we'll get back to you within two days.")
+                                    dismiss()
+                                }
+                            }
                         }
                     }
                     .screenGutter()
@@ -1062,8 +1073,12 @@ private struct ProfileReportSheet: View {
         .presentationDragIndicator(.visible)
         .confirmationDialog("Block \(pro.firstName)?", isPresented: $confirmBlock, titleVisibility: .visible) {
             Button("Block", role: .destructive) {
-                app.show("Blocked.")
-                dismiss()
+                Task {
+                    if await app.block(pro.id) {
+                        app.show("Blocked.")
+                        dismiss()
+                    }
+                }
             }
             Button("Leave it", role: .cancel) { }
         } message: {
