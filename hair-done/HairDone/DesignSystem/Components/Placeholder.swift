@@ -100,7 +100,7 @@ struct WorkTile: View {
             Ellipse()
                 .fill(Color.white.opacity(0.35))
                 .frame(width: w * 0.35, height: h * 0.18)
-                .rotationEffect(.degrees(-30 + d * 40))
+                .rotationEffect(.degrees(Double(-30 + d * 40)))
                 .blur(radius: 6)
                 .offset(x: -w * 0.2, y: -h * 0.25)
             Grain().opacity(0.06).blendMode(.multiply)
