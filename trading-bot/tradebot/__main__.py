@@ -446,6 +446,52 @@ def cmd_arb_monitor(args) -> None:
                             report_every=args.report_every, duration=args.minutes * 60 if args.minutes else None))
 
 
+def cmd_report(args) -> None:
+    """Why are trades losing? Hold time, stop distance and exit reason for the live journal."""
+    s = _settings(args)
+    from collections import Counter
+    from .journal import Journal
+    from .models import px
+    trades = [t for t in Journal(args.journal or s.journal_file).load() if t.status == "CLOSED"]
+    if args.last:
+        trades = trades[-args.last:]
+    if not trades:
+        print(f"no closed trades in {args.journal or s.journal_file}")
+        return
+    wins = [t for t in trades if t.realized_pnl > 0]
+    total_r = sum(t.r_multiple for t in trades)
+    pnl = sum(t.realized_pnl for t in trades)
+    print(f"{len(trades)} closed · {len(wins)} profitable · total {total_r:+.2f}R · ${pnl:+,.2f}")
+    holds = []
+    print(f"{'symbol':<10}{'entry (ET)':<13}{'hold':>7}{'entry':>12}{'stop':>12}{'stop %':>8}{'best R':>8}"
+          f"{'exit':>12}{'R':>7}  exits")
+    for t in trades:
+        end = t.last_exit_time or t.entry_time
+        mins = (end - t.entry_time).total_seconds() / 60.0
+        holds.append(mins)
+        stop_pct = (t.entry_price - t.stop_initial) / t.entry_price * 100.0 if t.entry_price else 0.0
+        rps = t.risk_per_share or 1e-12
+        best = (t.highest - t.entry_price) / rps if t.highest else 0.0
+        reasons = ",".join(f.reason for f in t.exits)
+        print(f"{t.symbol:<10}{t.entry_time:%m-%d %H:%M}  {mins:>6.0f}m{px(t.entry_price):>12}{px(t.stop_initial):>12}"
+              f"{stop_pct:>7.2f}%{best:>+8.2f}{px(t.exit_price_avg):>12}{t.r_multiple:>+7.2f}  {reasons}")
+    holds.sort()
+    print(f"\nhold minutes: median {holds[len(holds)//2]:.0f}, shortest {holds[0]:.0f}, longest {holds[-1]:.0f}")
+    print("exit reasons:", dict(Counter(t.exits[-1].reason for t in trades if t.exits)))
+    never_green = sum(1 for t in trades if t.highest and t.highest <= t.entry_price)
+    print(f"trades that never traded above entry: {never_green} of {len(trades)}")
+    fast = sum(1 for h in holds if h <= 10)
+    print(f"stopped within 10 minutes of entry: {fast} of {len(trades)}")
+    import re as _re
+
+    def kind(reason: str) -> str:  # which rule set opened the trade, from its signal text
+        m = _re.search(r"\((\d+) bars\)", reason or "")
+        if m:
+            return f"breakout {m.group(1)} bars"
+        return (reason or "?").split(" ")[0]
+    print("entry rule sets seen:", dict(Counter(kind(t.reason) for t in trades)))
+
+
 def cmd_backtest(args) -> None:
     s = _settings(args)
     _logging(s)
@@ -672,6 +718,9 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--days", type=int, default=3)
     p.add_argument("--symbols", nargs="*")
     p.add_argument("--strategy", help="rules file to replay instead of STRATEGY_FILE (e.g. crypto_15m.json)")
+    p = sub.add_parser("report", help="break down live trades: hold time, stop distance, exit reasons")
+    p.add_argument("--journal", help="journal file (default: DATA_DIR/trades.jsonl)")
+    p.add_argument("--last", type=int, default=0, help="only the most recent N trades")
     p = sub.add_parser("arb-monitor", help="measure cross-venue crypto spreads net of fees (Coinbase/Kraken/Alpaca)")
     p.add_argument("--symbols", nargs="*")
     p.add_argument("--minutes", type=float, default=0, help="stop after N minutes (default: run until ctrl-c)")
@@ -719,7 +768,7 @@ def main(argv: list[str] | None = None) -> None:
      "telegram-test": cmd_telegram_test, "fetch-data": cmd_fetch_data, "backtest": cmd_backtest,
      "analyze": cmd_analyze, "sweep": cmd_sweep, "dashboard": cmd_dashboard,
      "fetch-gappers": cmd_fetch_gappers, "fetch-crypto": cmd_fetch_crypto,
-     "crypto-explain": cmd_crypto_explain, "arb-monitor": cmd_arb_monitor}[args.cmd](args)
+     "crypto-explain": cmd_crypto_explain, "arb-monitor": cmd_arb_monitor, "report": cmd_report}[args.cmd](args)
 
 
 if __name__ == "__main__":
