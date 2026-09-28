@@ -1,31 +1,34 @@
 import type { FlightProvider } from "../types";
-import { AmadeusProvider, amadeusConfigFromEnv } from "./amadeus";
 import { SampleProvider } from "./sample";
+import { SerpApiProvider, serpApiConfigFromEnv } from "./serpapi";
 
-let cached: FlightProvider | null = null;
-
-/**
- * FLIGHT_PROVIDER=auto (default) picks Amadeus when credentials exist and
- * otherwise falls back to the offline sample data. Force with "amadeus" or "sample".
- */
-export function getProvider(env: NodeJS.ProcessEnv = process.env): FlightProvider {
-  if (cached) return cached;
-  const mode = (env.FLIGHT_PROVIDER ?? "auto").toLowerCase();
-  const cfg = amadeusConfigFromEnv(env);
-  if (mode === "sample") cached = new SampleProvider();
-  else if (mode === "amadeus") {
-    if (!cfg) throw new Error("FLIGHT_PROVIDER=amadeus but AMADEUS_CLIENT_ID / AMADEUS_CLIENT_SECRET are not set");
-    cached = new AmadeusProvider(cfg);
-  } else cached = cfg ? new AmadeusProvider(cfg) : new SampleProvider();
-  return cached;
+export interface ProviderOptions {
+  /** A key supplied by the browser (the traveller's own SerpApi key). Env wins when set. */
+  serpApiKey?: string | null;
+  env?: Record<string, string | undefined>;
 }
 
-export function providerStatus(env: NodeJS.ProcessEnv = process.env) {
-  const p = getProvider(env);
+/**
+ * FLIGHT_PROVIDER=auto (default) uses Google Flights via SerpApi when a key is
+ * available (from the environment, or passed per request) and otherwise falls
+ * back to the offline sample data. Force with "serpapi" or "sample".
+ */
+export function getProvider(opts: ProviderOptions = {}): FlightProvider {
+  const env = opts.env ?? process.env;
+  const mode = (env.FLIGHT_PROVIDER ?? "auto").toLowerCase();
+  const cfg = serpApiConfigFromEnv(env) ?? (opts.serpApiKey?.trim() ? { apiKey: opts.serpApiKey.trim() } : null);
+  if (mode === "sample") return new SampleProvider();
+  if (mode === "serpapi" && !cfg) throw new Error("FLIGHT_PROVIDER=serpapi but no SERPAPI_KEY is set");
+  return cfg ? new SerpApiProvider(cfg) : new SampleProvider();
+}
+
+export function providerStatus(opts: ProviderOptions & { anthropicKey?: string | null } = {}) {
+  const env = opts.env ?? process.env;
+  const p = getProvider(opts);
   return {
     provider: p.name,
     isSample: p.isSample,
-    amadeusEnv: p.name === "amadeus" ? (env.AMADEUS_ENV === "production" ? "production" : "test") : null,
-    claude: Boolean(env.ANTHROPIC_API_KEY?.trim()),
+    liveSource: p.name === "serpapi" ? "Google Flights via SerpApi" : null,
+    claude: Boolean(env.ANTHROPIC_API_KEY?.trim() || opts.anthropicKey?.trim()),
   };
 }

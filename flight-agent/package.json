@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "scan": "tsx scripts/scan.ts",
-    "demo": "node demo/build.mjs"
+    "demo": "node demo/build.mjs",
+    "build:edge": "node edge/build.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.126.0",

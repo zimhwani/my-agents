@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { defaultParams } from "@/lib/params";
-import { AmadeusProvider, mapAmadeusOffer, parseIsoDuration } from "@/lib/providers/amadeus";
+import { getProvider } from "@/lib/providers";
+import { SerpApiProvider, mapSerpItinerary } from "@/lib/providers/serpapi";
 import { SampleProvider, seasonMultiplier } from "@/lib/providers/sample";
 import { runScan } from "@/lib/search";
 
@@ -47,49 +48,70 @@ describe("scan", () => {
   });
 });
 
-describe("amadeus mapping", () => {
-  it("parses ISO durations", () => {
-    expect(parseIsoDuration("PT14H20M")).toBe(860);
-    expect(parseIsoDuration("PT9H")).toBe(540);
-    expect(parseIsoDuration("P1DT2H5M")).toBe(1565);
-    expect(parseIsoDuration(undefined)).toBe(0);
-  });
-  it("maps a flight offer", () => {
-    const raw = {
-      id: "7",
-      numberOfBookableSeats: 4,
-      itineraries: [
-        { duration: "PT25H40M", segments: [
-          { departure: { iataCode: "MEL", at: "2026-12-03T22:15:00" }, arrival: { iataCode: "DOH", at: "2026-12-04T05:35:00" }, carrierCode: "QR", number: "905", duration: "PT14H20M", aircraft: { code: "77W" } },
-          { departure: { iataCode: "DOH", at: "2026-12-04T08:05:00" }, arrival: { iataCode: "HRE", at: "2026-12-04T15:55:00" }, carrierCode: "QR", number: "1363", duration: "PT8H50M" },
-        ] },
-      ],
-      price: { grandTotal: "5320.40", total: "5320.40", currency: "AUD" },
-      validatingAirlineCodes: ["QR"],
-      travelerPricings: [{ travelerType: "ADULT", price: { total: "1600.20" } }, { travelerType: "CHILD", price: { total: "1060.00" } }],
-    };
+describe("serpapi mapping", () => {
+  const raw = {
+    flights: [
+      { departure_airport: { name: "Melbourne Airport", id: "MEL", time: "2026-12-03 22:15" }, arrival_airport: { name: "Hamad International", id: "DOH", time: "2026-12-04 05:35" }, duration: 860, airplane: "Boeing 777", airline: "Qatar Airways", flight_number: "QR 905" },
+      { departure_airport: { name: "Hamad International", id: "DOH", time: "2026-12-04 08:05" }, arrival_airport: { name: "Harare", id: "HRE", time: "2026-12-04 15:55" }, duration: 530, airplane: "Boeing 787", airline: "Qatar Airways", flight_number: "QR 1363" },
+    ],
+    layovers: [{ duration: 150, name: "Hamad International", id: "DOH" }],
+    total_duration: 1540,
+    price: 5320,
+    departure_token: "abc",
+  };
+  it("maps an itinerary", () => {
     const p = defaultParams(NOW);
-    const o = mapAmadeusOffer(raw, p, "2026-12-03", undefined, { carriers: { QR: "QATAR AIRWAYS" }, aircraft: { "77W": "BOEING 777-300ER" } });
-    expect(o.price).toEqual({ total: 5320.4, currency: "AUD", perAdult: 1600.2, perChild: 1060 });
+    const o = mapSerpItinerary(raw, p, "2026-12-03", "2026-12-24", "https://www.google.com/travel/flights?x", 0)!;
+    expect(o.price).toEqual({ total: 5320, currency: "AUD" });
+    expect(o.validatingCarrier).toBe("QR");
     expect(o.validatingCarrierName).toBe("Qatar Airways");
+    expect(o.outbound.segments[0].flightNumber).toBe("QR905");
+    expect(o.outbound.segments[0].departure).toBe("2026-12-03T22:15");
     expect(o.outbound.durationMin).toBe(1540);
     expect(o.outbound.layovers).toEqual([{ airport: "DOH", minutes: 150, overnight: false }]);
-    expect(o.outbound.segments[0].aircraft).toBe("BOEING 777-300ER");
-    expect(o.bookingUrl).toMatch(/google\.com\/travel\/flights/);
+    expect(o.inbound).toBeUndefined();
+    expect(o.returnDate).toBe("2026-12-24");
+    expect(o.bookingUrl).toBe("https://www.google.com/travel/flights?x");
   });
-  it("sends the right request and surfaces API errors", async () => {
-    const calls: { url: string; init: RequestInit }[] = [];
-    const fakeFetch = (async (url: string | URL | Request, init?: RequestInit) => {
-      calls.push({ url: String(url), init: init ?? {} });
-      if (String(url).includes("oauth2/token")) return new Response(JSON.stringify({ access_token: "tok", expires_in: 1799 }), { status: 200 });
-      return new Response(JSON.stringify({ errors: [{ status: 400, code: 477, title: "INVALID FORMAT", detail: "bad date" }] }), { status: 400 });
+  it("skips itineraries without a price", () => {
+    expect(mapSerpItinerary({ ...raw, price: undefined }, defaultParams(NOW), "2026-12-03", undefined)).toBeNull();
+  });
+  it("builds the right query and surfaces API errors", async () => {
+    const calls: string[] = [];
+    const fakeFetch = (async (url: string | URL | Request) => {
+      calls.push(String(url));
+      return new Response(JSON.stringify({ error: "Invalid API key." }), { status: 401 });
     }) as typeof fetch;
-    const prov = new AmadeusProvider({ clientId: "id", clientSecret: "secret", env: "test" }, fakeFetch);
-    await expect(prov.search(defaultParams(NOW), "2026-12-03", "2026-12-24")).rejects.toThrow(/INVALID FORMAT: bad date/);
-    expect(calls[0].url).toBe("https://test.api.amadeus.com/v1/security/oauth2/token");
-    const body = JSON.parse(String(calls[1].init.body));
-    expect(body.originDestinations).toHaveLength(2);
-    expect(body.travelers.map((t: { travelerType: string }) => t.travelerType)).toEqual(["ADULT", "ADULT", "CHILD", "CHILD"]);
-    expect(body.currencyCode).toBe("AUD");
+    const prov = new SerpApiProvider({ apiKey: "k" }, fakeFetch);
+    await expect(prov.search(defaultParams(NOW), "2026-12-03", "2026-12-24")).rejects.toThrow(/Invalid API key/);
+    const q = new URL(calls[0]).searchParams;
+    expect(q.get("engine")).toBe("google_flights");
+    expect(q.get("departure_id")).toBe("MEL");
+    expect(q.get("arrival_id")).toBe("HRE");
+    expect(q.get("outbound_date")).toBe("2026-12-03");
+    expect(q.get("return_date")).toBe("2026-12-24");
+    expect(q.get("type")).toBe("1");
+    expect(q.get("adults")).toBe("2");
+    expect(q.get("children")).toBe("2");
+    expect(q.get("currency")).toBe("AUD");
+    expect(q.get("stops")).toBe("3");
+    expect(q.get("api_key")).toBe("k");
+  });
+  it("returns mapped offers from best and other flights", async () => {
+    const fakeFetch = (async () => new Response(JSON.stringify({ best_flights: [raw], other_flights: [{ ...raw, price: 6000 }], search_metadata: { google_flights_url: "https://g/x" } }), { status: 200 })) as typeof fetch;
+    const prov = new SerpApiProvider({ apiKey: "k" }, fakeFetch);
+    const offers = await prov.search({ ...defaultParams(NOW), tripType: "oneway" }, "2026-12-03");
+    expect(offers.map((o) => o.price.total)).toEqual([5320, 6000]);
+    expect(offers[0].returnDate).toBeUndefined();
+  });
+});
+
+describe("provider selection", () => {
+  it("uses the browser key when the environment has none, and env first otherwise", () => {
+    expect(getProvider({ env: {} }).name).toBe("sample");
+    expect(getProvider({ env: {}, serpApiKey: "browserkey" }).name).toBe("serpapi");
+    expect(getProvider({ env: { SERPAPI_KEY: "envkey" } }).name).toBe("serpapi");
+    expect(getProvider({ env: { FLIGHT_PROVIDER: "sample", SERPAPI_KEY: "envkey" } }).name).toBe("sample");
+    expect(() => getProvider({ env: { FLIGHT_PROVIDER: "serpapi" } })).toThrow(/SERPAPI_KEY/);
   });
 });

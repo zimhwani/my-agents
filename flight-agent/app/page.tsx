@@ -5,8 +5,10 @@ import { Results } from "@/components/Results";
 import { SearchForm } from "@/components/SearchForm";
 import { Tracker, type Snapshot } from "@/components/Tracker";
 import { VoicePanel } from "@/components/VoicePanel";
+import { KeysPanel } from "@/components/KeysPanel";
 import { useSpeech } from "@/hooks/useSpeech";
 import { airportLabel } from "@/lib/airports";
+import { apiHeaders, apiUrl, loadKeys, saveKeys, type StoredKeys } from "@/lib/client";
 import { formatTime, sampleDates, spokenDate, spokenDuration, todayISO } from "@/lib/dates";
 import { routeLabel, spokenMoney, spokenOffer, spokenScanSummary } from "@/lib/format";
 import { HELP_TEXT, parseIntent } from "@/lib/intent";
@@ -18,7 +20,7 @@ const HISTORY_KEY = "flight-agent:history";
 const PARAMS_KEY = "flight-agent:params";
 const TRACK_KEY = "flight-agent:tracking";
 
-interface Status { provider: "amadeus" | "sample"; isSample: boolean; amadeusEnv: string | null; claude: boolean }
+interface Status { provider: "serpapi" | "sample"; isSample: boolean; liveSource: string | null; claude: boolean }
 
 function load<T>(key: string, fallback: T): T {
   try {
@@ -49,6 +51,9 @@ export default function Page() {
   const [tracking, setTracking] = useState<{ enabled: boolean; intervalHours: number }>({ enabled: false, intervalHours: 6 });
   const [nextRunAt, setNextRunAt] = useState<number | null>(null);
   const [priceAlert, setPriceAlert] = useState<string | null>(null);
+  const [keys, setKeys] = useState<StoredKeys>({ serpApiKey: "", anthropicKey: "" });
+  const keysRef = useRef(keys);
+  keysRef.current = keys;
 
   const paramsRef = useRef(params);
   paramsRef.current = params;
@@ -62,8 +67,11 @@ export default function Page() {
     setHistory(load<Snapshot[]>(HISTORY_KEY, []));
     setParams(normalizeParams(load(PARAMS_KEY, {})));
     setTracking(load(TRACK_KEY, { enabled: false, intervalHours: 6 }));
-    fetch("/api/status").then((r) => r.json()).then(setStatus).catch(() => setStatus(null));
+    setKeys(loadKeys());
   }, []);
+  useEffect(() => {
+    fetch(apiUrl("status"), { headers: apiHeaders(keys, false) }).then((r) => r.json()).then(setStatus).catch(() => setStatus(null));
+  }, [keys]);
   useEffect(() => save(PARAMS_KEY, params), [params]);
   useEffect(() => save(TRACK_KEY, tracking), [tracking]);
 
@@ -86,7 +94,7 @@ export default function Page() {
     setDateFilter(null);
     setSelectedId(null);
     try {
-      const res = await fetch("/api/search", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(p) });
+      const res = await fetch(apiUrl("search"), { method: "POST", headers: apiHeaders(keysRef.current), body: JSON.stringify(p) });
       const json = (await res.json()) as ScanResult & { error?: string };
       if (!res.ok || json.error) throw new Error(json.error ?? `Search failed (${res.status})`);
       setResult(json);
@@ -227,9 +235,9 @@ export default function Page() {
       }
       try {
         const r = resultRef.current;
-        const res = await fetch("/api/interpret", {
+        const res = await fetch(apiUrl("interpret"), {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: apiHeaders(keysRef.current),
           body: JSON.stringify({
             utterance: text,
             params: paramsRef.current,
@@ -264,7 +272,7 @@ export default function Page() {
         <div className="pills">
           {status && (
             <span className={`pill ${status.isSample ? "warn" : "ok"}`}>
-              {status.isSample ? "sample fares" : `live fares · Amadeus ${status.amadeusEnv}`}
+              {status.isSample ? "sample fares" : "live fares · Google Flights"}
             </span>
           )}
           {status && <span className={`pill ${status.claude ? "ok" : ""}`}>{status.claude ? "voice: Claude" : "voice: built-in parser"}</span>}
@@ -279,6 +287,8 @@ export default function Page() {
       {result?.warnings.filter((w) => !w.startsWith("Showing sample")).slice(0, 3).map((w) => (
         <div key={w} className="notice">{w}</div>
       ))}
+
+      <KeysPanel keys={keys} status={status} onSave={(k) => { setKeys(k); saveKeys(k); setResult(null); }} />
 
       <SearchForm params={params} onChange={updateParams} onSearch={() => runSearch()} loading={loading} datesToScan={datesToScan} />
 
@@ -297,7 +307,7 @@ export default function Page() {
       />
 
       <footer className="foot">
-        {result?.isSample ? "Sample fares are modelled on real MEL–HRE routings and seasonal pricing, not live quotes. " : ""}
+        {result?.isSample ? "Sample fares are modelled on real MEL–HRE routings and seasonal pricing, not live quotes. " : "Live fares come from Google Flights; for return trips the price shown is the round-trip fare and the return leg is chosen when booking. "}
         Prices are for the whole party in {params.currency}. “Best” balances price, total travel time, interchange quality and family-friendly timings.
       </footer>
     </main>

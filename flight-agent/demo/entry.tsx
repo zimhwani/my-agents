@@ -23,7 +23,7 @@ function json(body: unknown, status = 200): Response {
 window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
   const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
   const body = init?.body ? (JSON.parse(String(init.body)) as Record<string, unknown>) : {};
-  if (url.endsWith("/api/status")) return json({ provider: "sample", isSample: true, amadeusEnv: null, claude: false });
+  if (url.endsWith("/api/status")) return json({ provider: "sample", isSample: true, liveSource: null, claude: false });
   if (url.endsWith("/api/search")) return json(await runScan(normalizeParams(body), provider, { concurrency: 4 }));
   if (url.endsWith("/api/interpret")) {
     const utterance = typeof body.utterance === "string" ? body.utterance : "";

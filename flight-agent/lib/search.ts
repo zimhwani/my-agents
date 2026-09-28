@@ -85,7 +85,7 @@ export async function runScan(params: SearchParams, provider: FlightProvider, op
   }
 
   const ranked = sortOffers(rankOffers(pool), "best").slice(0, MAX_OFFERS_TOTAL);
-  if (provider.isSample) warnings.unshift("Showing sample fares. Add Amadeus keys in .env.local for live prices.");
+  if (provider.isSample) warnings.unshift("Showing sample fares. Add a SerpApi key for live Google Flights prices.");
 
   return {
     params,

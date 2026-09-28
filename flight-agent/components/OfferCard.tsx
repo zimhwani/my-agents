@@ -59,7 +59,7 @@ export function OfferCard({ offer, position, selected, onSelect }: { offer: Rank
       {selected && (
         <div className="legs">
           <Leg label="Out" it={o.outbound} />
-          {o.inbound && <Leg label="Back" it={o.inbound} />}
+          {o.inbound ? <Leg label="Back" it={o.inbound} /> : o.returnDate ? <div className="leg"><div className="lbl">Back</div><div className="summary-line">Return leg on {humanDate(o.returnDate)} is chosen when booking; the price covers the round trip.</div></div> : null}
         </div>
       )}
       <div className="offer-actions">

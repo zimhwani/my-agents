@@ -8,3 +8,5 @@ out/
 next-env.d.ts
 data/cache/
 demo/dist/
+edge/dist/*
+!edge/dist/page.html

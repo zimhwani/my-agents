@@ -50,7 +50,7 @@ export interface Itinerary {
 
 export interface FlightOffer {
   id: string;
-  provider: "amadeus" | "sample";
+  provider: "serpapi" | "sample";
   price: { total: number; currency: string; perAdult?: number; perChild?: number };
   validatingCarrier: string;
   validatingCarrierName: string;
@@ -86,7 +86,7 @@ export interface DatePricePoint {
 
 export interface ScanResult {
   params: SearchParams;
-  provider: "amadeus" | "sample";
+  provider: "serpapi" | "sample";
   isSample: boolean;
   generatedAt: string;
   offers: RankedOffer[];
@@ -96,7 +96,7 @@ export interface ScanResult {
 }
 
 export interface FlightProvider {
-  readonly name: "amadeus" | "sample";
+  readonly name: "serpapi" | "sample";
   readonly isSample: boolean;
   search(params: SearchParams, departureDate: string, returnDate?: string): Promise<FlightOffer[]>;
 }

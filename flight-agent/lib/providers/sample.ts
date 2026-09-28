@@ -1,7 +1,7 @@
 /**
  * Deterministic sample fares modelled on the real MEL <-> HRE routings
  * (Gulf carriers via Doha/Dubai, Singapore Airlines + Airlink via Johannesburg,
- * Qantas + Airlink via Sydney/Johannesburg). Used when no Amadeus keys are set
+ * Qantas + Airlink via Sydney/Johannesburg). Used when no SerpApi key is set
  * so the app, the voice agent and the tests all work offline. Prices are
  * plausible AUD levels with seasonal peaks, not live quotes.
  */
