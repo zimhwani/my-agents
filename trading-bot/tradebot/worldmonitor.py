@@ -196,7 +196,7 @@ class WorldMonitor:
         status, raw = self._t(self.base + path + q, headers)
         if status in (401, 403):
             raise RuntimeError(f"World Monitor {path} -> {status}: needs an API key (WORLDMONITOR_API_KEY, "
-                               "from worldmonitor.app/pro)")
+                               f"from worldmonitor.app/pro); body: {raw[:120]!r}")
         if status >= 400:
             raise RuntimeError(f"World Monitor {path} -> {status}: {raw[:200]!r}")
         data = json.loads(raw.decode() or "null")
@@ -211,6 +211,97 @@ class WorldMonitor:
 
     def earnings(self) -> dict[str, str]:
         return parse_earnings(self.get("earnings_calendar"))
+
+    def notes(self, symbols: list[str]) -> str:
+        try:
+            earn = self.earnings()
+        except Exception:
+            earn = {}
+        return watchlist_notes(symbols, self.headlines(), earn)
+
+
+# -- free sources (no key) ------------------------------------------------------------------------
+FF_CALENDAR = "https://nfs.faireconomy.media/ff_calendar_thisweek.json"  # Forex Factory's public weekly export
+YAHOO_RSS = "https://feeds.finance.yahoo.com/rss/2.0/headline?s={symbol}&region=US&lang=en-US"
+
+
+def parse_rss(xml_bytes: bytes, source: str = "") -> list[Headline]:
+    import xml.etree.ElementTree as ET
+    from email.utils import parsedate_to_datetime
+    out = []
+    try:
+        root = ET.fromstring(xml_bytes)
+    except ET.ParseError:
+        return out
+    for item in root.iter("item"):
+        title = (item.findtext("title") or "").strip()
+        if not title:
+            continue
+        when = None
+        pub = item.findtext("pubDate")
+        if pub:
+            try:
+                when = clock.to_et(parsedate_to_datetime(pub))
+            except (TypeError, ValueError):
+                when = None
+        out.append(Headline(title=title, source=(item.findtext("source") or source).strip(),
+                            url=(item.findtext("link") or "").strip(), time=when))
+    return out
+
+
+class FreeNews:
+    """Key-free fallback: Forex Factory's weekly calendar JSON for the macro blackout and Yahoo
+    Finance's per-ticker RSS for watchlist headlines. Same interface as WorldMonitor."""
+
+    def __init__(self, calendar_url: str = FF_CALENDAR, transport: Transport | None = None,
+                 cache_seconds: float = 3600.0):
+        self.calendar_url = calendar_url
+        self._t = transport or _http
+        self.cache_seconds = cache_seconds
+        self._cache: dict[str, tuple[float, object]] = {}
+
+    def _fetch(self, url: str) -> bytes:
+        hit = self._cache.get(url)
+        if hit and _time.time() - hit[0] < self.cache_seconds:
+            return hit[1]  # type: ignore[return-value]
+        status, raw = self._t(url, {"User-Agent": "Mozilla/5.0 (tradebot)", "Accept": "*/*"})
+        if status >= 400:
+            raise RuntimeError(f"{url.split('?')[0]} -> {status}: {raw[:120]!r}")
+        self._cache[url] = (_time.time(), raw)
+        return raw
+
+    def economic_events(self) -> list[MacroEvent]:
+        return parse_economic(json.loads(self._fetch(self.calendar_url).decode() or "[]"))
+
+    def symbol_headlines(self, symbol: str) -> list[Headline]:
+        return parse_rss(self._fetch(YAHOO_RSS.format(symbol=urllib.parse.quote(symbol))), "Yahoo Finance")
+
+    def headlines(self) -> list[Headline]:
+        return []  # no general digest without a key; per-symbol feeds are used instead
+
+    def earnings(self) -> dict[str, str]:
+        return {}
+
+    def notes(self, symbols: list[str], per_symbol: int = 2, max_age_hours: int = 36) -> str:
+        lines, cutoff = [], clock.now_et() - timedelta(hours=max_age_hours)
+        for sym in symbols:
+            if "/" in sym:  # crypto pairs have no Yahoo equity feed
+                continue
+            try:
+                heads = [h for h in self.symbol_headlines(sym) if h.time is None or h.time >= cutoff]
+            except Exception as exc:
+                log.debug("%s headlines: %s", sym, exc)
+                continue
+            if heads:
+                lines.append(f"{sym}: " + " | ".join(h.title[:110] for h in heads[:per_symbol]))
+        return "\n".join(lines)
+
+
+def make_news(settings):
+    """World Monitor when a key is configured, otherwise the free sources."""
+    if getattr(settings, "worldmonitor_api_key", ""):
+        return WorldMonitor(settings.worldmonitor_api_key)
+    return FreeNews(getattr(settings, "macro_calendar_url", "") or FF_CALENDAR)
 
 
 def blackout(events: list[MacroEvent], now: datetime, before_min: int, after_min: int) -> MacroEvent | None:

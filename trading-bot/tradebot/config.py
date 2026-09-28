@@ -134,8 +134,9 @@ class Settings:
     dashboard_data_url: str = ""
     dashboard_sources: str = ""  # "Equities=https://.../tradebot,Crypto=https://.../crypto" for a multi-bot page
     # World Monitor news/calendar (https://www.worldmonitor.app): macro blackout + alert context
-    worldmonitor_enabled: bool = False
+    worldmonitor_enabled: bool = False   # news on (World Monitor with a key, free sources without)
     worldmonitor_api_key: str = ""
+    macro_calendar_url: str = ""         # key-free calendar JSON (default: Forex Factory weekly export)
     macro_blackout_before_min: int = 15
     macro_blackout_after_min: int = 30
     # paths
@@ -264,7 +265,8 @@ class Settings:
             vercel_blob_prefix=_env("VERCEL_BLOB_PREFIX", "tradebot"),
             dashboard_data_url=_env("DASHBOARD_DATA_URL"),
             dashboard_sources=_env("DASHBOARD_SOURCES"),
-            worldmonitor_enabled=_bool("WORLDMONITOR_ENABLED", False),
+            worldmonitor_enabled=_bool("NEWS_ENABLED", False) or _bool("WORLDMONITOR_ENABLED", False),
+            macro_calendar_url=_env("MACRO_CALENDAR_URL"),
             worldmonitor_api_key=_env("WORLDMONITOR_API_KEY"),
             macro_blackout_before_min=_int("MACRO_BLACKOUT_BEFORE_MIN", 15),
             macro_blackout_after_min=_int("MACRO_BLACKOUT_AFTER_MIN", 30),

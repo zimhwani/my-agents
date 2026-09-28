@@ -70,8 +70,8 @@ class TradingLoop:
         self.news = None
         self._news_at: datetime | None = None
         if getattr(settings, "worldmonitor_enabled", False):
-            from .worldmonitor import WorldMonitor
-            self.news = WorldMonitor(settings.worldmonitor_api_key)
+            from .worldmonitor import make_news
+            self.news = make_news(settings)
         if loaded.scan_kind == "static":
             self.scanner = StaticScanner(broker, settings, loaded.universe or settings.universe)
         elif loaded.scan_kind == "gap":
@@ -239,13 +239,7 @@ class TradingLoop:
         if self.news is None or not symbols:
             return ""
         try:
-            from .worldmonitor import watchlist_notes
-            heads = self.news.headlines()
-            try:
-                earn = self.news.earnings()
-            except Exception:
-                earn = {}
-            return watchlist_notes(symbols, heads, earn)
+            return self.news.notes(symbols)
         except Exception as exc:
             log.warning("World Monitor headlines unavailable: %s", exc)
             return ""

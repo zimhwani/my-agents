@@ -68,3 +68,38 @@ def test_client_sends_key_caches_and_explains_auth_errors():
     seen = []
     WorldMonitor("", transport=lambda u, h: (seen.append(h), (200, b"[]"))[1]).get("earnings_calendar")
     assert "X-WorldMonitor-Key" not in seen[0]  # no key configured -> no header
+
+
+def test_free_sources_forex_factory_and_yahoo_rss(settings):
+    from tradebot.worldmonitor import FreeNews, WorldMonitor, make_news, parse_rss
+    ff = json.dumps([
+        {"title": "CPI m/m", "country": "USD", "date": "2026-10-14T08:30:00-04:00", "impact": "High",
+         "forecast": "0.3%", "previous": "0.4%"},
+        {"title": "Bank Holiday", "country": "JPY", "date": "2026-10-12T00:00:00-04:00", "impact": "Holiday"},
+        {"title": "Crude Oil Inventories", "country": "USD", "date": "2026-10-14T10:30:00-04:00", "impact": "Medium"}]).encode()
+    rss = (b'<?xml version="1.0"?><rss><channel><title>x</title>'
+           b'<item><title>Kodiak shares surge on trial win</title><link>http://y/1</link>'
+           b'<pubDate>Mon, 28 Sep 2026 12:00:00 +0000</pubDate></item>'
+           b'<item><title>Old story</title><pubDate>Mon, 01 Jan 2024 12:00:00 +0000</pubDate></item>'
+           b'</channel></rss>')
+    urls = []
+
+    def transport(url, headers):
+        urls.append(url)
+        return (200, ff) if "faireconomy" in url else (200, rss)
+
+    fn = FreeNews(transport=transport)
+    ev = fn.economic_events()
+    assert [e.name for e in ev if e.high_impact and e.us] == ["CPI m/m"]
+    t = datetime(2026, 10, 14, 8, 30, tzinfo=clock.ET)
+    assert blackout(ev, t - timedelta(minutes=5), 15, 30).name == "CPI m/m"
+    heads = parse_rss(rss)
+    assert heads[0].title.startswith("Kodiak") and heads[0].time.tzinfo is not None
+    fn.economic_events()
+    assert sum("faireconomy" in u for u in urls) == 1  # cached
+    notes = fn.notes(["KOD", "BTC/USD"], max_age_hours=24 * 365 * 5)
+    assert notes.startswith("KOD: Kodiak shares surge") and "BTC" not in notes
+    assert parse_rss(b"not xml") == []
+    assert isinstance(make_news(settings), FreeNews)
+    settings.worldmonitor_api_key = "k"
+    assert isinstance(make_news(settings), WorldMonitor)

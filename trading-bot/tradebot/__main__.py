@@ -453,7 +453,39 @@ def cmd_news(args) -> None:
     s = _settings(args)
     import json as _json
     from datetime import timedelta
-    from .worldmonitor import PATHS, WorldMonitor, blackout, mentions
+    from .worldmonitor import FF_CALENDAR, PATHS, YAHOO_RSS, FreeNews, WorldMonitor, blackout, make_news, mentions
+    if not s.worldmonitor_api_key and not args.worldmonitor:
+        fn = FreeNews(s.macro_calendar_url or FF_CALENDAR)
+        print("No WORLDMONITOR_API_KEY: using free sources (Forex Factory calendar, Yahoo Finance RSS)")
+        if args.raw:
+            for url in [fn.calendar_url] + [YAHOO_RSS.format(symbol=x) for x in (args.symbols or ["NVDA"])[:2]]:
+                try:
+                    print(f"=== {url}\n{fn._fetch(url)[: args.raw_chars].decode(errors='replace')}\n")
+                except Exception as exc:
+                    print(f"=== {url}\nERROR {exc}\n")
+            return
+        now = clock.now_et()
+        try:
+            events = fn.economic_events()
+            soon = [e for e in events if e.time and now - timedelta(hours=1) <= e.time <= now + timedelta(days=args.days)]
+            print(f"Economic calendar: {len(events)} events this week, {len(soon)} in the next {args.days} days")
+            for e in sorted(soon, key=lambda e: e.time):
+                flag = "HIGH" if e.high_impact and e.us else "    "
+                print(f"  {flag} {e.time:%a %m-%d %H:%M} ET  {e.country:<4} {e.name}  {e.impact}")
+            ev = blackout(events, now, s.macro_blackout_before_min, s.macro_blackout_after_min)
+            print(f"Blackout now: {ev.name + ' at ' + format(ev.time, '%H:%M') if ev else 'no'}")
+        except Exception as exc:
+            print(f"Economic calendar unavailable: {exc}")
+        for sym in args.symbols or []:
+            try:
+                heads = fn.symbol_headlines(sym.upper())
+                print(f"\n{sym.upper()}: {len(heads)} headline(s)")
+                for h in heads[: args.limit]:
+                    print(f"  {h.time:%m-%d %H:%M}  " if h.time else "  ", end="")
+                    print(h.title[:120])
+            except Exception as exc:
+                print(f"{sym.upper()}: headlines unavailable: {exc}")
+        return
     wm = WorldMonitor(s.worldmonitor_api_key, variant=args.variant)
     if args.raw:
         for name in PATHS:
@@ -835,6 +867,7 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--limit", type=int, default=15)
     p.add_argument("--raw", action="store_true", help="print raw API responses (to check the data format)")
     p.add_argument("--raw-chars", type=int, default=2500)
+    p.add_argument("--worldmonitor", action="store_true", help="query World Monitor even without a key")
     p = sub.add_parser("research", help="rank strategies: in/out-of-sample, benchmark, sensitivity, report")
     p.add_argument("--strategies", nargs="+", default=["strategies/*.json", "crypto_swing.json"],
                    help="rules files or globs to evaluate")
