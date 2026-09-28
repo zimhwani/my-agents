@@ -30,6 +30,27 @@ class Gapper:
     prev_close: float | None = None
 
 
+# Yahoo exchange codes for the main US listing venues (Nasdaq tiers, NYSE, NYSE American, Arca, Cboe BZX)
+LISTED_EXCHANGES = {"NMS", "NGM", "NCM", "NAS", "NYQ", "NYS", "ASE", "PCX", "BTS"}
+OTC_EXCHANGES = {"PNK", "OQB", "OQX", "OEM", "OBB", "OTC", "OGM"}
+
+
+def is_listed(symbol: str, exchange: str | None = None) -> bool:
+    """True for exchange-listed US stocks; False for OTC / pink-sheet names.
+
+    Foreign ADRs and ordinaries on the OTC market (AMSSY, VTKLY, CURLF...) gap most mornings
+    because their home market traded overnight, but trade thinly in the US, barely show on the
+    IEX feed and often aren't offered by the broker. When the venue is known it decides; when it
+    isn't, 5-letter symbols ending in Y or F (the OTC ADR / foreign-ordinary convention) are out."""
+    if exchange:
+        ex = exchange.upper()
+        if ex in OTC_EXCHANGES:
+            return False
+        if ex in LISTED_EXCHANGES:
+            return True
+    return not (len(symbol) == 5 and symbol[-1] in "YF")
+
+
 class DataProvider(Protocol):
     def daily_bars(self, symbol: str, days: int) -> list[Bar]: ...
     def intraday_bars(self, symbol: str, bar_minutes: int, days: int,
@@ -128,6 +149,8 @@ class YFinanceData:
                 sym = row.get("symbol", "")
                 if not sym or "." in sym or "-" in sym or "^" in sym:
                     continue  # skip units/warrants/preferreds/indices
+                if not is_listed(sym, row.get("exchange")):
+                    continue  # OTC ADRs gap on their home market's move and barely trade here
                 out.append(Gapper(symbol=sym, price=float(row.get("regularMarketPrice") or 0),
                                   gap_pct=float(row.get("regularMarketChangePercent") or 0),
                                   market_cap=float(row["marketCap"]) if row.get("marketCap") else None,

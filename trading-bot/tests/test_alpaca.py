@@ -129,3 +129,12 @@ def test_assets_and_multi_daily_bars():
     bars = d.multi_daily_bars(["AAPL", "MSFT"], clock.at(DAY, clock.MARKET_OPEN))
     assert [b.close for b in bars["AAPL"]] == [1.5, 2.5] and bars["AAPL"][0].time.time() == clock.MARKET_CLOSE
     assert len(bars["MSFT"]) == 1
+
+
+def test_otc_adrs_are_not_listed():
+    from tradebot.marketdata import is_listed
+    for sym in ("AMSSY", "VTKLY", "CSNVY", "RBSFY", "KGFHY", "CURLF", "NNCHY"):
+        assert not is_listed(sym), sym
+    for sym in ("VKTX", "ONON", "AKAM", "NLST", "AAPL", "QNT", "P"):
+        assert is_listed(sym), sym
+    assert not is_listed("ABCD", "PNK") and is_listed("GOOGY", "NMS")  # venue beats the symbol rule

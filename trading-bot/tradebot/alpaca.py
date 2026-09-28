@@ -220,9 +220,12 @@ class AlpacaData:
         Market cap is checked via Yahoo when available."""
         out: list[Gapper] = []
         seen: set[str] = set()
+        listed = self._listed_symbols()
         if self._aux is not None and hasattr(self._aux, "gappers"):
             try:
                 for g in self._aux.gappers(min_gap_pct, min_price, min_market_cap, limit):
+                    if listed is not None and g.symbol not in listed:
+                        continue  # not on NASDAQ/NYSE/ARCA/AMEX at Alpaca (OTC, delisted, foreign)
                     if g.symbol not in seen:
                         seen.add(g.symbol)
                         out.append(g)
@@ -248,6 +251,23 @@ class AlpacaData:
             out.append(Gapper(sym, float(price), gap, cap, float(prev)))
         out.sort(key=lambda g: -g.gap_pct)
         return out[:limit]
+
+    def _listed_symbols(self) -> set[str] | None:
+        """Exchange-listed symbols, refreshed once a day; None if the asset list is unavailable
+        (the Yahoo side still drops OTC names by venue/symbol convention)."""
+        today = clock.now_et().date()
+        cached = getattr(self, "_listed_cache", None)
+        if cached and cached[0] == today:
+            return cached[1]
+        try:
+            syms = set(self.assets())
+        except Exception as exc:
+            log.warning("asset list unavailable (%s); OTC filter falls back to symbol rules", exc)
+            return None
+        if not syms:
+            return None
+        self._listed_cache = (today, syms)
+        return syms
 
     # -- delegated to Yahoo when available ------------------------------------------
     def market_cap(self, symbol: str) -> float | None:
