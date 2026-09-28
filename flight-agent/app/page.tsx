@@ -1,5 +1,7 @@
 "use client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { load } from "@/lib/storage";
 import { Conversation, VoiceBar } from "@/components/Conversation";
 import { PlaneIcon, SettingsIcon } from "@/components/Icons";
 import { PriceCalendar } from "@/components/PriceCalendar";
@@ -28,14 +30,6 @@ interface Prefs { theme: Theme; handsFree: boolean; speakReplies: boolean }
 
 const GREETING = "When would you like to fly to Harare? Try “mid to late November, back early January”.";
 
-function load<T>(key: string, fallback: T): T {
-  try {
-    const raw = localStorage.getItem(key);
-    return raw ? { ...fallback, ...(JSON.parse(raw) as T) } : fallback;
-  } catch {
-    return fallback;
-  }
-}
 function save(key: string, value: unknown) {
   try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* private mode etc. */ }
 }
@@ -49,6 +43,14 @@ function datesToSearch(p: SearchParams): number {
 }
 
 export default function Page() {
+  return (
+    <ErrorBoundary>
+      <FlightAgent />
+    </ErrorBoundary>
+  );
+}
+
+function FlightAgent() {
   const [params, setParams] = useState<SearchParams>(() => defaultParams());
   const [result, setResult] = useState<ScanResult | null>(null);
   const [loading, setLoading] = useState(false);
@@ -85,7 +87,7 @@ export default function Page() {
 
   // Restore per-browser state.
   useEffect(() => {
-    setHistory(load<Snapshot[]>(HISTORY_KEY, []));
+    setHistory(load<Snapshot[]>(HISTORY_KEY, []).filter((h) => h && typeof h.at === "string" && Array.isArray(h.window)));
     setParams(normalizeParams(load(PARAMS_KEY, {})));
     setTracking(load(TRACK_KEY, { enabled: false, intervalHours: 6 }));
     setPrefs(load(PREFS_KEY, { theme: "system", handsFree: false, speakReplies: true }));
