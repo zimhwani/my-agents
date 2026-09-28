@@ -43,7 +43,9 @@ describe("stopover fares", () => {
       expect(stop.stopover).toBe(true);
       expect(stop.minutes).toBeGreaterThan(2.5 * 24 * 60);
       expect(o.outbound.durationMin).toBeLessThan(40 * 60);
-      expect(o.warnings.join(" ")).not.toMatch(/Dubai/);
+      // The multi-day stop itself is never flagged (a connection home via Dubai still can be).
+      const flaggedHours = o.warnings.map((w) => /Dubai \((\d+)h/.exec(w)?.[1]).filter(Boolean).map(Number);
+      expect(flaggedHours.every((h) => h < 24)).toBe(true);
       expect(o.outbound.layovers.filter((l) => !l.stopover)).toEqual([]);
     }
   });
