@@ -1,11 +1,11 @@
 /**
  * Supabase Edge Function: serves the single-page app and its API from one URL.
- * Built by `npm run build:edge` into edge/dist/index.js (see edge/build.mjs).
+ * Built by `npm run build:edge` into edge/bundle/index.js (see edge/build.mjs).
  */
 import { handleApiRequest } from "../lib/api";
 // The built page is inlined here by esbuild's text loader (empty in the "remote" build,
 // which fetches the page from PAGE_URL instead so the deployed function stays small).
-import inlinePage from "./dist/page.html";
+import inlinePage from "./bundle/page.html";
 
 declare const DEFAULT_PAGE_URL: string;
 declare const Deno: { env: { toObject(): Record<string, string> }; serve(handler: (req: Request) => Promise<Response> | Response): void };

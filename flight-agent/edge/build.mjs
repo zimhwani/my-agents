@@ -1,4 +1,4 @@
-// Builds the hosted bundle: edge/dist/page.html (the app) and edge/dist/index.js
+// Builds the hosted bundle: edge/bundle/page.html (the app) and edge/bundle/index.js
 // (a Deno server that serves the page and the API). Usage: npm run build:edge
 import * as esbuild from "esbuild";
 import fs from "node:fs";
@@ -9,9 +9,9 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 // Where the "remote" server build fetches the page from (override at runtime with PAGE_URL).
 const pageUrlArg = process.argv.find((a) => a.startsWith("--page-url="))?.slice("--page-url=".length);
 const branch = pageUrlArg ? null : (process.env.PAGE_BRANCH ?? "main");
-const DEFAULT_PAGE_URL = pageUrlArg ?? `https://raw.githubusercontent.com/zimhwani/my-agents/${branch}/flight-agent/edge/dist/page.html`;
+const DEFAULT_PAGE_URL = pageUrlArg ?? `https://raw.githubusercontent.com/zimhwani/my-agents/${branch}/flight-agent/edge/bundle/page.html`;
 const root = path.join(here, "..");
-const dist = path.join(here, "dist");
+const dist = path.join(here, "bundle");
 fs.mkdirSync(dist, { recursive: true });
 
 // 1. The page.
@@ -76,6 +76,6 @@ for (const [outfile, plugins] of [["index.js", [denoNpm]], ["index-remote.js", [
     outfile: path.join(dist, outfile),
     banner: { js: "globalThis.__ENV__ = globalThis.Deno ? Deno.env.toObject() : {};" },
   });
-  console.log(`Wrote edge/dist/${outfile} (${(fs.statSync(path.join(dist, outfile)).size / 1024).toFixed(0)} kB)`);
+  console.log(`Wrote edge/bundle/${outfile} (${(fs.statSync(path.join(dist, outfile)).size / 1024).toFixed(0)} kB)`);
 }
-console.log(`Wrote edge/dist/page.html (${(html.length / 1024).toFixed(0)} kB) for ${pkg.name}; remote build fetches ${DEFAULT_PAGE_URL}`);
+console.log(`Wrote edge/bundle/page.html (${(html.length / 1024).toFixed(0)} kB) for ${pkg.name}; remote build fetches ${DEFAULT_PAGE_URL}`);
