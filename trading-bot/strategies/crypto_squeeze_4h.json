@@ -1,0 +1,48 @@
+{
+  "strategy_name": "4h Volatility Squeeze",
+  "market": "crypto",
+  "direction": "long_only",
+  "mode": "squeeze",
+  "thesis": "Volatility clusters: after a quiet spell (Bollinger bandwidth in its lowest fifth for 30 days) the next expansion is large, and in an uptrend it resolves upward more often than not. The box gives a tight, logical stop, and the 48-hour time stop exits breakouts that go nowhere.",
+  "risks": "Thinly documented after costs; squeezes in downtrends break down (skipped, but regime shifts happen mid-trade); false breakouts from the box are common.",
+  "universe": [
+    "BTC/USD",
+    "ETH/USD",
+    "SOL/USD",
+    "DOGE/USD",
+    "AVAX/USD",
+    "LINK/USD",
+    "LTC/USD",
+    "DOT/USD",
+    "UNI/USD",
+    "AAVE/USD",
+    "XRP/USD"
+  ],
+  "bar_minutes": 240,
+  "entry": {
+    "squeeze_bars": 20,
+    "squeeze_lookback": 180,
+    "squeeze_pct": 0.2,
+    "box_bars": 6,
+    "trend_ema_bars": 50,
+    "min_rel_volume": 0,
+    "atr_bars": 14,
+    "stop_atr_mult": 1.5,
+    "min_initial_risk_pct": 2.0,
+    "max_initial_risk_pct": 10
+  },
+  "exit": {
+    "cooldown_minutes": 0,
+    "partial_profit_trigger_R": 0,
+    "partial_profit_fraction": 0,
+    "breakeven_trigger_R": 1.0,
+    "trail": "atr_2.5",
+    "time_stop_minutes": 2880,
+    "time_stop_min_r": 1.0
+  },
+  "risk": {
+    "max_risk_per_trade_pct": 1.0,
+    "max_position_size_pct_of_portfolio": 25,
+    "max_concurrent_positions": 4
+  }
+}

@@ -9,7 +9,7 @@ exits at the bar close where the rule fires, forced flat at FORCE_CLOSE_TIME.
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 
 from . import clock
@@ -35,6 +35,7 @@ class BacktestResult:
     start_equity: float
     end_equity: float
     days: int
+    equity_curve: list = field(default_factory=list)  # [(date, end-of-day equity marked to market)]
 
 
 def _as_loaded(params_or_loaded, settings: Settings) -> LoadedStrategy:
@@ -68,8 +69,14 @@ class Backtester:
         self.exits = ExitManager(self.loaded.exits, None if self.loaded.continuous else settings.force_close_time)
         self.gate = RiskGate(settings, honour_kill_switch=False)  # a live KILL file must not blank a backtest
 
+    def _history_days(self, n_bars: int) -> int:
+        """Calendar days of bars needed to cover n_bars of this timeframe (plus slack)."""
+        return max(5, int(n_bars * self.bar_minutes / 1440) + 2)
+
     def _atr(self, symbol: str, now: datetime) -> float:
-        bars = self.sim.intraday_bars(symbol, self.bar_minutes, 5)
+        # 24/7 markets: every bar counts (the old RTH filter dropped most crypto bars and all daily ones)
+        bars = self.sim.intraday_bars(symbol, self.bar_minutes, self._history_days(self.atr_period * 4),
+                                      self.loaded.continuous)
         return atr_of(bars[-(self.atr_period * 4):], self.atr_period) or 0.0
 
     def run(self, start=None, end=None) -> BacktestResult:
@@ -94,6 +101,7 @@ class Backtester:
                 log.warning("%d/%d symbols have <200 daily bars before %s; their early days are skipped "
                             "by the SMA filter. Re-run `fetch-data --daily-only` to extend daily history.",
                             len(short), len(self.daily), first)
+        curve: list = []
         for d in sorted(by_day):
             day = DayStats(start_equity=self.sim.net_liquidation())
             symbols_today = by_day[d]
@@ -162,9 +170,10 @@ class Backtester:
                         held.add(sym)
             if self.exec.open_trades:  # data ended before the forced close
                 self.exec.flatten_all("eod", clock.at(d, self.s.force_close_time))
+            curve.append((d, self.sim.net_liquidation()))
         trades = self.journal.load()
         return BacktestResult(trades=trades, stats=compute_stats(trades), start_equity=start_equity,
-                              end_equity=self.sim.net_liquidation(), days=len(by_day))
+                              end_equity=self.sim.net_liquidation(), days=len(by_day), equity_curve=curve)
 
 
     # -- 24/7 markets: one timeline across the whole dataset -----------------------------
@@ -183,9 +192,12 @@ class Backtester:
         days = set()
         last_exit: dict[str, datetime] = {}
         cd = timedelta(minutes=self.loaded.cooldown_minutes)
+        curve: list = []
         for slot in sorted(by_slot):
             now = slot + width
             if day_date != now.date():
+                if day_date is not None:
+                    curve.append((day_date, self.sim.net_liquidation()))  # prices are still the prior close
                 day_date = now.date()
                 days.add(day_date)
                 day = DayStats(start_equity=self.sim.net_liquidation())
@@ -198,7 +210,7 @@ class Backtester:
                 b = bar_at.get(t.symbol)
                 if b is None:
                     continue
-                recent = self.sim.intraday_bars(t.symbol, self.bar_minutes, 3)[-120:]
+                recent = self.sim.intraday_bars(t.symbol, self.bar_minutes, self._history_days(120), True)[-120:]
                 actions = self.exits.manage(t, b.close, self._atr(t.symbol, now), now, b.high, b.low, bars=recent)
                 if actions:
                     self.exec.apply(t, actions, now)
@@ -227,6 +239,8 @@ class Backtester:
                     held.add(sym)
         if self.exec.open_trades:
             self.exec.flatten_all("end", self.sim.now)
+        if day_date is not None:
+            curve.append((day_date, self.sim.net_liquidation()))
         trades = self.journal.load()
         return BacktestResult(trades=trades, stats=compute_stats(trades), start_equity=start_equity,
-                              end_equity=self.sim.net_liquidation(), days=len(days))
+                              end_equity=self.sim.net_liquidation(), days=len(days), equity_curve=curve)

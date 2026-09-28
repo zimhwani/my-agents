@@ -38,5 +38,8 @@
     "max_risk_per_trade_pct": 1.0,
     "max_position_size_pct_of_portfolio": 25,
     "max_concurrent_positions": 4
-  }
+  },
+  "thesis": "15-minute breakout of the prior 5-hour high in an uptrend on above-average volume, with a stop 5-6% away so fees are a tenth of the risk, no partial, breakeven at 2R and a 5-ATR trail.",
+  "risks": "Chosen by a 90-day sweep, so its recent results are in-sample; the stop is wide for a 15-minute entry, so trades are held for days; thin-book volume filter.",
+  "tuned": "Parameters picked by a 90-day fee-aware sweep ending 2026-09-23. Any result inside that window is in-sample, including most of this report's out-of-sample period."
 }

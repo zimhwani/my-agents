@@ -97,8 +97,10 @@ class TradingLoop:
 
     # -- helpers ---------------------------------------------------------------
     def _bar_boundary(self, now: datetime) -> datetime:
-        m = self.bar_minutes
-        return now.replace(minute=(now.minute // m) * m, second=0, microsecond=0)
+        """Start of the current bar, aligned to UTC epoch multiples (works for 5-min through 1-day)."""
+        step = self.bar_minutes * 60
+        ts = now.timestamp()
+        return datetime.fromtimestamp(ts - (ts % step), tz=now.tzinfo)
 
     def _fresh_grace(self) -> timedelta:
         """How long after a bar boundary we keep re-fetching until the newest bar shows up."""
@@ -115,6 +117,16 @@ class TradingLoop:
         The provider may not have published the just-closed bar on the first tick after the
         boundary; if it is missing we keep re-fetching for a short grace period instead of
         caching the stale list for the whole bar (which silently skipped every breakout)."""
+        if self.bar_minutes >= 60:
+            # hourly-and-slower bars: the venue's bar alignment varies (daily crypto bars are not
+            # always stamped at 00:00 UTC), so just refresh every 5 minutes -- cheap at this cadence
+            last = self._bars_at.get(symbol)
+            if symbol not in self._bars or last is None or now - last >= timedelta(minutes=5):
+                self._bars[symbol] = self.b.intraday_bars(symbol, self.bar_minutes, self.loaded.intraday_days,
+                                                          self.loaded.include_premarket)
+                self._bars_at[symbol] = now
+                self._stale.discard(symbol)
+            return self._bars[symbol]
         boundary = self._bar_boundary(now)
         if self._bars_at.get(symbol) != boundary or symbol not in self._bars:
             bars = self.b.intraday_bars(symbol, self.bar_minutes, self.loaded.intraday_days,
@@ -149,8 +161,12 @@ class TradingLoop:
         return atr_of(bars[-(self.atr_period * 4):], self.atr_period) or 0.0
 
     def _cooling(self, symbol: str, now: datetime) -> bool:
-        """True if this symbol was closed less than cooldown_minutes ago."""
+        """True if this symbol was closed less than cooldown_minutes ago. 24/7 bots also wait at least
+        one bar after an exit: the backtest evaluates once per bar, the live loop every poll, and
+        without this a stopped trade could re-enter on the very signal that just failed."""
         cd = self.loaded.cooldown_minutes
+        if self.loaded.continuous:
+            cd = max(cd, self.bar_minutes)
         if cd <= 0:
             return False
         for t in self.exec.closed_today:

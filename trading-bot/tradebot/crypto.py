@@ -38,6 +38,14 @@ class CryptoRules:
                                     # fade = the breakout signal traded SHORT (backtest only: Alpaca spot can't short)
     rsi_bars: int = 14
     rsi_buy: float = 30.0           # pullback: previous bar's RSI must be below this
+    squeeze_bars: int = 20          # squeeze: Bollinger length used for bandwidth
+    squeeze_lookback: int = 180     # squeeze: bars of bandwidth history to rank against
+    squeeze_pct: float = 0.2        # squeeze: bandwidth must sit in the lowest this-fraction of that history
+    box_bars: int = 6               # squeeze: the compression box whose high must be broken
+    final_target_r: float = 0.0     # close everything at this R (0 = no target; mean reversion uses one)
+    trail_from_entry: bool = False  # True: trail from the first bar (chandelier); False: only after breakeven
+    thesis: str = ""                # why the edge might exist (shown in the research report)
+    risks: str = ""                 # what would break it (shown in the research report)
     breakout_bars: int = 20
     trend_ema_bars: int = 200
     min_rel_volume: float = 1.5
@@ -65,6 +73,11 @@ class CryptoRules:
             bar_minutes=int(raw.get("bar_minutes", 15)),
             mode=str(raw.get("mode", e.get("mode", "breakout"))).lower(),
             rsi_bars=int(e.get("rsi_bars", 14)), rsi_buy=float(e.get("rsi_buy", 30.0)),
+            squeeze_bars=int(e.get("squeeze_bars", 20)), squeeze_lookback=int(e.get("squeeze_lookback", 180)),
+            squeeze_pct=float(e.get("squeeze_pct", 0.2)), box_bars=int(e.get("box_bars", 6)),
+            final_target_r=float(x.get("final_target_R", 0.0)),
+            trail_from_entry=bool(x.get("trail_from_entry", False)),
+            thesis=str(raw.get("thesis", "")), risks=str(raw.get("risks", "")),
             breakout_bars=int(e.get("breakout_bars", 20)), trend_ema_bars=int(e.get("trend_ema_bars", 200)),
             min_rel_volume=float(e.get("min_rel_volume", 1.5)), atr_bars=int(e.get("atr_bars", 14)),
             stop_atr_mult=float(e.get("stop_atr_mult", 2.0)),
@@ -92,7 +105,8 @@ class CryptoRules:
             mode = "none"
         return ExitRules(partial_r=self.partial_r, partial_fraction=self.partial_fraction,
                          breakeven_r=self.breakeven_r, trail_mode=mode, trail_atr_mult=mult,
-                         trail_after_breakeven_only=True, trail_min_r=1.0, final_target_r=0.0,
+                         trail_after_breakeven_only=not self.trail_from_entry, trail_min_r=1.0,
+                         final_target_r=self.final_target_r,
                          time_stop_minutes=self.time_stop_minutes, time_stop_min_r=self.time_stop_min_r,
                          fractional=True)
 
@@ -107,12 +121,12 @@ class CryptoMomentum:
         self.bar_minutes = self.r.bar_minutes
         self.window_start: time = time(0, 0)
         self.window_end: time = time(23, 59, 59)
-        bars_needed = self.r.trend_ema_bars + max(self.r.breakout_bars, self.r.rsi_bars * 6) + 5
+        bars_needed = self.r.trend_ema_bars + self._pattern_bars() + 5
         self.intraday_days = max(3, int(bars_needed * self.bar_minutes / 1440) + 2)
 
     # gates, in the order they are checked; explain() reports the first one that fails
     GATES = ("history", "no_breakout", "not_first_bar", "below_ema", "low_relvol", "no_dip", "no_turn",
-             "no_atr", "stop_too_wide", "signal")
+             "no_squeeze", "no_atr", "stop_too_wide", "signal")
 
     def evaluate(self, symbol: str, intraday: list[Bar], daily: list[Bar], now: datetime) -> Signal | None:
         return self._eval(symbol, intraday, now)[0]
@@ -131,11 +145,13 @@ class CryptoMomentum:
         r = self.r
         width = timedelta(minutes=self.bar_minutes)
         bars = [b for b in intraday if b.time + width <= now]
-        need = r.trend_ema_bars + max(r.breakout_bars, r.rsi_bars * 3) + 2
+        need = r.trend_ema_bars + self._pattern_bars() + 2
         if len(bars) < need:
             return None, "history"
         if r.mode == "pullback":
             return self._eval_pullback(symbol, bars, now)
+        if r.mode == "squeeze":
+            return self._eval_squeeze(symbol, bars, now)
         last, prev = bars[-1], bars[-2]
         window = bars[-(r.breakout_bars + 1):-1]
         hh = max(b.high for b in window)
@@ -169,6 +185,65 @@ class CryptoMomentum:
         return Signal(symbol=symbol, side=LONG, entry=entry, stop=entry - dist, target=entry + 3 * dist,
                       atr=a, time=now, reason=reason), "signal"
 
+
+    def _pattern_bars(self) -> int:
+        """Bars of history the entry pattern needs on top of the trend EMA."""
+        r = self.r
+        if r.mode == "squeeze":
+            return r.squeeze_lookback + r.squeeze_bars + r.box_bars
+        if r.mode == "pullback":
+            return r.rsi_bars * 6
+        return r.breakout_bars
+
+    @staticmethod
+    def _bandwidth(closes: list[float]) -> float:
+        n = len(closes)
+        mean = sum(closes) / n
+        var = sum((c - mean) ** 2 for c in closes) / n
+        return 4.0 * var ** 0.5 / mean if mean > 0 else 0.0
+
+    def _eval_squeeze(self, symbol: str, bars: list[Bar], now: datetime) -> tuple[Signal | None, str]:
+        """Volatility-compression breakout: Bollinger bandwidth in the bottom squeeze_pct of its recent
+        history, then the first close above the compression box's high, in an uptrend. Stop under the
+        box (at least stop_atr_mult ATRs)."""
+        r = self.r
+        last, prev = bars[-1], bars[-2]
+        box = bars[-(r.box_bars + 1):-1]
+        box_high, box_low = max(b.high for b in box), min(b.low for b in box)
+        if last.close <= box_high:
+            return None, "no_breakout"
+        if prev.close > max(b.high for b in bars[-(r.box_bars + 2):-2]):
+            return None, "not_first_bar"
+        closes = [b.close for b in bars]
+        trend = ema(closes[-(r.trend_ema_bars * 4):], r.trend_ema_bars)
+        if trend is None or last.close <= trend:
+            return None, "below_ema"
+        # bandwidth of the window ending on the bar before the breakout, ranked against its history
+        hist = [self._bandwidth(closes[i - r.squeeze_bars:i])
+                for i in range(len(closes) - 1 - r.squeeze_lookback, len(closes))]
+        now_bw = hist[-2]
+        # share of the history at or below today's bandwidth: a flat history ranks 1.0 (no squeeze)
+        rank = sum(1 for h in hist[:-2] if h <= now_bw) / max(1, len(hist) - 2)
+        if rank > r.squeeze_pct:
+            return None, "no_squeeze"
+        if r.min_rel_volume > 0:
+            avg_vol = sum(b.volume for b in box) / len(box)
+            if avg_vol <= 0 or last.volume / avg_vol < r.min_rel_volume:
+                return None, "low_relvol"
+        a = atr_of(bars[-(r.atr_bars * 4):], r.atr_bars)
+        if not a or a <= 0:
+            return None, "no_atr"
+        entry = last.close
+        stop = min(box_low, entry - r.stop_atr_mult * a)
+        if r.min_initial_risk_pct > 0:
+            stop = min(stop, entry * (1 - r.min_initial_risk_pct / 100.0))
+        risk = entry - stop
+        if risk <= 0 or risk / entry * 100.0 > r.max_initial_risk_pct:
+            return None, "stop_too_wide"
+        reason = (f"squeeze bw rank {rank:.2f} <= {r.squeeze_pct:.2f}, box {box_low:.4g}-{box_high:.4g} "
+                  f"({r.box_bars} bars), EMA{r.trend_ema_bars} {trend:.4g}, ATR {a:.4g}")
+        return Signal(symbol=symbol, side=LONG, entry=entry, stop=stop, target=entry + 3 * risk,
+                      atr=a, time=now, reason=reason), "signal"
 
     def _eval_pullback(self, symbol: str, bars: list[Bar], now: datetime) -> tuple[Signal | None, str]:
         """Buy the first green bar after an RSI dip while price holds above the trend EMA.

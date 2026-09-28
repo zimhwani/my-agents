@@ -363,7 +363,7 @@ def cmd_fetch_crypto(args) -> None:
     s = _settings(args)
     _logging(s)
     from datetime import timedelta
-    from .alpaca_broker import AlpacaCryptoData, fname
+    from .alpaca_broker import AlpacaCryptoData, alpaca_timeframe, fname
     from .data import save_csv
     loaded = load_strategy(args.strategy or s.strategy_file, s.allow_shorts)
     symbols = args.symbols or loaded.universe or s.universe
@@ -374,7 +374,7 @@ def cmd_fetch_crypto(args) -> None:
     start = clock.now_et() - timedelta(days=args.days)
     print(f"Fetching {args.days} days of {minutes}-min crypto bars for {len(symbols)} symbols -> {out}")
     for sym in symbols:
-        bars = d.bars(sym, f"{minutes}Min", start)
+        bars = d.bars(sym, alpaca_timeframe(minutes), start)
         daily = d.bars(sym, "1Day", start - timedelta(days=30))
         save_csv(bars, out / f"{fname(sym)}_{minutes}min.csv")
         save_csv(daily, out / f"{fname(sym)}_1d.csv")
@@ -387,7 +387,7 @@ def cmd_crypto_explain(args) -> None:
     s = _settings(args)
     _logging(s)
     from datetime import timedelta
-    from .alpaca_broker import AlpacaCryptoData
+    from .alpaca_broker import AlpacaCryptoData, alpaca_timeframe
     from .crypto import CryptoMomentum, ema
     loaded = load_strategy(args.strategy or s.strategy_file, s.allow_shorts)
     strat = loaded.strategy
@@ -404,7 +404,7 @@ def cmd_crypto_explain(args) -> None:
     print(f"{'pair':<10}{'bars':>6}{'above_ema':>11}" + "".join(f"{g:>15}" for g in gates))
     totals = {g: 0 for g in gates}
     for sym in symbols:
-        bars = d.bars(sym, f"{minutes}Min", start)
+        bars = d.bars(sym, alpaca_timeframe(minutes), start)
         cutoff = clock.now_et() - timedelta(days=args.days)
         counts = {g: 0 for g in gates}
         n = 0
@@ -446,6 +446,65 @@ def cmd_arb_monitor(args) -> None:
           f"fees bps {fees}; report every {args.report_every}s; ctrl-c to stop")
     asyncio.run(run_monitor(book, symbols, s.alpaca_api_key, s.alpaca_api_secret, s.data_dir / "arb_events.csv",
                             report_every=args.report_every, duration=args.minutes * 60 if args.minutes else None))
+
+
+def cmd_research(args) -> None:
+    """Systematic research: in/out-of-sample backtests, benchmark, sensitivity, ranked report."""
+    s = _settings(args)
+    _logging(s)
+    import glob
+    import json as _json
+    import logging as _logging_mod
+    from datetime import timedelta
+    from .data import load_dir, save_csv
+    from .research import Options, render, run_strategy, to_json
+    files: list[str] = []
+    for pattern in args.strategies:
+        files += sorted(glob.glob(pattern)) or [pattern]
+    loaded = {f: load_strategy(f) for f in files}
+    data = Path(args.data)
+    data.mkdir(parents=True, exist_ok=True)
+    by_tf: dict[int, list[str]] = {}
+    for f, ld in loaded.items():
+        by_tf.setdefault(int(getattr(ld.strategy, "bar_minutes", 5)), []).append(f)
+
+    if args.fetch_days:
+        from .alpaca_broker import AlpacaCryptoData, alpaca_timeframe, fname
+        d = AlpacaCryptoData(s.alpaca_api_key, s.alpaca_api_secret)
+        for minutes, fs in sorted(by_tf.items()):
+            if not all(loaded[f].continuous for f in fs):
+                print(f"skipping fetch for {minutes}-min equities strategies; supply their CSVs in {data}")
+                continue
+            days = args.fetch_days if minutes >= 60 else min(args.fetch_days, args.max_intraday_days)
+            symbols = sorted({sym for f in fs for sym in (loaded[f].universe or [])})
+            for sym in symbols:
+                out = data / f"{fname(sym)}_{minutes}min.csv"
+                if out.exists() and not args.refetch:
+                    continue
+                bars = d.bars(sym, alpaca_timeframe(minutes), clock.now_et() - timedelta(days=days))
+                save_csv(bars, out)
+                print(f"fetched {sym} {minutes}-min: {len(bars)} bars", flush=True)
+
+    opts = Options(equity=args.equity, oos_frac=args.oos_frac, fee_bps=args.fee_bps,
+                   stop_fill_lambda=args.stop_fill_lambda, stop_slippage_bps=args.stop_slippage_bps,
+                   sensitivity=not args.no_sensitivity, walk_forward=args.walk_forward, min_trades=args.min_trades)
+    _logging_mod.getLogger("tradebot").setLevel(_logging_mod.WARNING)  # per-fill sim logs would drown progress
+    reports = []
+    for minutes, fs in sorted(by_tf.items()):
+        bars = load_dir(data, suffix=f"_{minutes}min.csv")  # one timeframe in memory at a time
+        bars = {k.replace("-", "/"): v for k, v in bars.items()}
+        for f in fs:
+            print(f"== {loaded[f].name} ({minutes}-min, {len(bars)} symbols on disk)", flush=True)
+            rep = run_strategy(s, f, {minutes: bars}, opts, progress=lambda m: print("   " + m, flush=True))
+            print(f"   -> {rep.verdict}  OOS return {rep.oos.total_return:+.1%}  Sharpe {rep.oos.sharpe:.2f}  "
+                  f"maxDD {rep.oos.max_dd:.1%}  trades {rep.full.trades}  {rep.error}", flush=True)
+            reports.append(rep)
+        del bars
+    out = Path(args.out) if args.out else s.data_dir / "research_report.md"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(render(reports, opts))
+    out.with_suffix(".json").write_text(_json.dumps(to_json(reports), indent=1, default=str))
+    print(f"\nreport -> {out}\njson   -> {out.with_suffix('.json')}")
 
 
 def cmd_report(args) -> None:
@@ -720,6 +779,23 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--days", type=int, default=3)
     p.add_argument("--symbols", nargs="*")
     p.add_argument("--strategy", help="rules file to replay instead of STRATEGY_FILE (e.g. crypto_15m.json)")
+    p = sub.add_parser("research", help="rank strategies: in/out-of-sample, benchmark, sensitivity, report")
+    p.add_argument("--strategies", nargs="+", default=["strategies/*.json", "crypto_swing.json"],
+                   help="rules files or globs to evaluate")
+    p.add_argument("--data", default="data/research", help="bar CSVs, one file per symbol per timeframe")
+    p.add_argument("--fetch-days", type=int, default=0, help="download this many days of crypto bars first")
+    p.add_argument("--refetch", action="store_true", help="re-download even if the CSV exists")
+    p.add_argument("--max-intraday-days", type=int, default=180,
+                   help="cap history for sub-hourly bars (memory on small servers)")
+    p.add_argument("--equity", type=float, default=3560)
+    p.add_argument("--oos-frac", type=float, default=0.33)
+    p.add_argument("--walk-forward", type=int, default=0, help="number of walk-forward folds (0 = off)")
+    p.add_argument("--no-sensitivity", action="store_true")
+    p.add_argument("--min-trades", type=int, default=30)
+    p.add_argument("--fee-bps", type=float, default=None)
+    p.add_argument("--stop-fill-lambda", type=float, default=None)
+    p.add_argument("--stop-slippage-bps", type=float, default=None)
+    p.add_argument("--out", help="report path (default DATA_DIR/research_report.md)")
     p = sub.add_parser("report", help="break down live trades: hold time, stop distance, exit reasons")
     p.add_argument("--journal", help="journal file (default: DATA_DIR/trades.jsonl)")
     p.add_argument("--last", type=int, default=0, help="only the most recent N trades")
@@ -770,7 +846,8 @@ def main(argv: list[str] | None = None) -> None:
      "telegram-test": cmd_telegram_test, "fetch-data": cmd_fetch_data, "backtest": cmd_backtest,
      "analyze": cmd_analyze, "sweep": cmd_sweep, "dashboard": cmd_dashboard,
      "fetch-gappers": cmd_fetch_gappers, "fetch-crypto": cmd_fetch_crypto,
-     "crypto-explain": cmd_crypto_explain, "arb-monitor": cmd_arb_monitor, "report": cmd_report}[args.cmd](args)
+     "crypto-explain": cmd_crypto_explain, "arb-monitor": cmd_arb_monitor, "report": cmd_report,
+     "research": cmd_research}[args.cmd](args)
 
 
 if __name__ == "__main__":

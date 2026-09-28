@@ -1,0 +1,45 @@
+{
+  "strategy_name": "1h Volume Breakout",
+  "market": "crypto",
+  "direction": "long_only",
+  "mode": "breakout",
+  "thesis": "The 15-minute swing rules' shape (wide stop, no partial, breakeven at 2R) on hourly bars: a daily-high breakout on above-average volume in an established uptrend. The most active variant with a plausible fee budget.",
+  "risks": "Alpaca volume is its own venue's thin book, so the volume filter is noisy; breakouts in chop fail fast; the stop is wide relative to hourly noise, so losers are slow.",
+  "universe": [
+    "BTC/USD",
+    "ETH/USD",
+    "SOL/USD",
+    "DOGE/USD",
+    "AVAX/USD",
+    "LINK/USD",
+    "LTC/USD",
+    "DOT/USD",
+    "UNI/USD",
+    "AAVE/USD",
+    "XRP/USD"
+  ],
+  "bar_minutes": 60,
+  "entry": {
+    "breakout_bars": 24,
+    "trend_ema_bars": 200,
+    "min_rel_volume": 1.2,
+    "atr_bars": 14,
+    "stop_atr_mult": 3.0,
+    "min_initial_risk_pct": 3.0,
+    "max_initial_risk_pct": 8
+  },
+  "exit": {
+    "cooldown_minutes": 0,
+    "partial_profit_trigger_R": 0,
+    "partial_profit_fraction": 0,
+    "breakeven_trigger_R": 2.0,
+    "trail": "atr_5.0",
+    "time_stop_minutes": 0,
+    "time_stop_min_r": 0
+  },
+  "risk": {
+    "max_risk_per_trade_pct": 1.0,
+    "max_position_size_pct_of_portfolio": 25,
+    "max_concurrent_positions": 4
+  }
+}

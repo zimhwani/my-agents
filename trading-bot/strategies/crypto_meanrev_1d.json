@@ -1,0 +1,46 @@
+{
+  "strategy_name": "Daily Mean Reversion",
+  "market": "crypto",
+  "direction": "long_only",
+  "mode": "pullback",
+  "thesis": "Short-term overreaction: in an uptrend, a 3-day RSI below 15 marks forced selling and liquidations that tend to snap back within days. Buy the first up-day, take profit at half the stop distance, and leave after five days regardless.",
+  "risks": "Dips in a turning market keep falling (2022-style), and all coins trigger together, so losses cluster; the average win is small relative to fees; a high win rate hides tail losses.",
+  "universe": [
+    "BTC/USD",
+    "ETH/USD",
+    "SOL/USD",
+    "DOGE/USD",
+    "AVAX/USD",
+    "LINK/USD",
+    "LTC/USD",
+    "DOT/USD",
+    "UNI/USD",
+    "AAVE/USD",
+    "XRP/USD"
+  ],
+  "bar_minutes": 1440,
+  "entry": {
+    "rsi_bars": 3,
+    "rsi_buy": 15,
+    "trend_ema_bars": 100,
+    "atr_bars": 14,
+    "stop_atr_mult": 2.0,
+    "min_initial_risk_pct": 0,
+    "max_initial_risk_pct": 25
+  },
+  "exit": {
+    "cooldown_minutes": 0,
+    "partial_profit_trigger_R": 0,
+    "partial_profit_fraction": 0,
+    "breakeven_trigger_R": 0,
+    "trail": "none",
+    "final_target_R": 0.5,
+    "time_stop_minutes": 7200,
+    "time_stop_min_r": 99
+  },
+  "risk": {
+    "max_risk_per_trade_pct": 1.0,
+    "max_position_size_pct_of_portfolio": 25,
+    "max_concurrent_positions": 4
+  }
+}

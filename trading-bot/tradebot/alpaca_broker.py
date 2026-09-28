@@ -65,6 +65,15 @@ def fname(symbol: str) -> str:
     return symbol.replace("/", "-")
 
 
+def alpaca_timeframe(minutes: int) -> str:
+    """Alpaca bar timeframe string: 15 -> 15Min, 60 -> 1Hour, 240 -> 4Hour, 1440 -> 1Day."""
+    if minutes % 1440 == 0:
+        return f"{minutes // 1440}Day"
+    if minutes % 60 == 0:
+        return f"{minutes // 60}Hour"
+    return f"{minutes}Min"
+
+
 class AlpacaCryptoData:
     """Crypto bars/quotes from Alpaca's v1beta3 crypto endpoints (24/7)."""
 
@@ -133,7 +142,7 @@ class AlpacaCryptoData:
     def intraday_bars(self, symbol: str, bar_minutes: int = 15, days: int = 5,
                       include_premarket: bool = False) -> list[Bar]:
         def fetch():
-            return self.bars(symbol, f"{bar_minutes}Min", clock.now_et() - timedelta(days=days + 1))
+            return self.bars(symbol, alpaca_timeframe(bar_minutes), clock.now_et() - timedelta(days=days + 1))
         return self._cached(("i", symbol, bar_minutes, days), self.cache_seconds, fetch)
 
     def last_price(self, symbol: str) -> float | None:
