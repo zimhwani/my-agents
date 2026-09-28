@@ -478,7 +478,7 @@ def cmd_news(args) -> None:
             print(f"Economic calendar unavailable: {exc}")
         for sym in args.symbols or []:
             try:
-                heads = fn.symbol_headlines(sym.upper())
+                heads = sorted(fn.symbol_headlines(sym.upper()), key=lambda h: h.time or now, reverse=True)
                 print(f"\n{sym.upper()}: {len(heads)} headline(s)")
                 for h in heads[: args.limit]:
                     print(f"  {h.time:%m-%d %H:%M}  " if h.time else "  ", end="")

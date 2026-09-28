@@ -289,6 +289,7 @@ class FreeNews:
                 continue
             try:
                 heads = [h for h in self.symbol_headlines(sym) if h.time is None or h.time >= cutoff]
+                heads.sort(key=lambda h: h.time or cutoff, reverse=True)  # the feed isn't in time order
             except Exception as exc:
                 log.debug("%s headlines: %s", sym, exc)
                 continue
