@@ -341,8 +341,12 @@ class AlpacaBroker:
             res = self.data._get("/v1beta3/crypto/us/latest/quotes", {"symbols": ",".join(norm(s) for s in symbols)})
             now = _time.time()
             for sym, q in (res.get("quotes") or {}).items():
-                bp = float(q.get("bp") or 0)
-                if bp > 0:
+                bp, ap = float(q.get("bp") or 0), float(q.get("ap") or 0)
+                if bp > 0 and ap >= bp:
+                    # trigger on the mid: Alpaca's own crypto book can be thin, and a stop that fires on
+                    # a momentarily wide bid would stop trades out on spread noise
+                    self._bids[norm(sym)] = ((bp + ap) / 2.0, now)
+                elif bp > 0:
                     self._bids[norm(sym)] = (bp, now)
         except Exception as exc:  # fall back to last trade
             log.debug("prefetch_bids: %s", exc)

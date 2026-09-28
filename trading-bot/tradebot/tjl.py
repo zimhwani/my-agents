@@ -173,10 +173,19 @@ class TrendJoinLong:
 
     def evaluate(self, symbol: str, intraday: list[Bar], daily: list[Bar],
                  now: datetime) -> Signal | None:
+        return self._eval(symbol, intraday, daily, now)[0]
+
+    def evaluate_explained(self, symbol: str, intraday: list[Bar], daily: list[Bar],
+                           now: datetime) -> tuple[Signal | None, str]:
+        """evaluate() plus the name of the rule that decided it (the live loop logs these per bar)."""
+        return self._eval(symbol, intraday, daily, now)
+
+    def _eval(self, symbol: str, intraday: list[Bar], daily: list[Bar],
+              now: datetime) -> tuple[Signal | None, str]:
         now = clock.to_et(now)
         r = self.r
         if not clock.in_window(now, self.window_start, self.window_end):
-            return None
+            return None, "window"
         # today's completed bars, taken from the (ascending) tail without scanning history
         width = timedelta(minutes=self.bar_minutes)
         today_all: list[Bar] = []
@@ -190,36 +199,36 @@ class TrendJoinLong:
         today_all.reverse()
         today = [b for b in today_all if clock.MARKET_OPEN <= b.time.time() < clock.MARKET_CLOSE]
         if len(today) < 2:
-            return None
+            return None, "few_bars"
         prior_daily = daily if (daily and daily[-1].time.date() < now.date()) \
             else [d for d in daily if d.time.date() < now.date()]
         if not prior_daily:
-            return None
+            return None, "no_daily"
         prior = prior_daily[-1]
         last, earlier = today[-1], today[:-1]
 
         # daily filters (cheap, checked first)
         if not self.day_ok(today[0].open, prior_daily):
-            return None
+            return None, "gap_or_sma"
         gap = (today[0].open - prior.close) / prior.close * 100.0
         if r.above_prior_day_high and last.close <= prior.high:
-            return None
+            return None, "below_prior_high"
 
         # intraday filters
         if r.above_premarket_high:
             pm_high = premarket_high(today_all)
             if pm_high is not None and last.close <= pm_high:
-                return None
+                return None, "below_premarket_high"
         hod_before = max(b.high for b in earlier)
         if r.above_today_hod and last.close <= hod_before:
-            return None
+            return None, "below_hod"
         # only now pay for the volume profile over the lookback history
         history = [b for b in intraday if b.time + width <= now]
         rvol = relative_volume(rth_bars(history), today, r.rvol_lookback_days, daily)
         if rvol is None or rvol < r.rvol_min:
-            return None
+            return None, "low_relvol"
         if last.close < r.min_price_usd:
-            return None
+            return None, "price"
 
         # risk geometry
         lod = min(b.low for b in today)
@@ -231,14 +240,14 @@ class TrendJoinLong:
                 if r.max_initial_risk_mode == "cap":
                     stop = cap_stop
                 else:
-                    return None
+                    return None, "risk_too_wide"
         risk = entry - stop
         if risk <= 0:
-            return None
+            return None, "no_risk"
         reason = (f"TJL gap {gap:+.1f}% new HOD > {hod_before:.2f}, prior high {prior.high:.2f}, "
                   f"relvol {rvol:.2f}, LOD {lod:.2f}")
         return Signal(symbol=symbol, side=LONG, entry=round(entry, 2), stop=stop,
-                      target=round(entry + 2 * risk, 2), atr=risk, time=now, reason=reason)
+                      target=round(entry + 2 * risk, 2), atr=risk, time=now, reason=reason), "signal"
 
 
 def load_tjl(path: str | Path = "rules.json") -> LoadedStrategy:

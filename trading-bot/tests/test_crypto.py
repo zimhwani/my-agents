@@ -322,7 +322,7 @@ def test_stops_trigger_on_prefetched_bid(settings, monkeypatch):
     b = AlpacaBroker(settings, data, transport=fake)
     b.connect()
     entry, stop = b.place_entry_with_stop("BTC/USD", LONG, 0.05, 95.0)
-    fake.bid = 94.0  # bid through the stop while the last trade (100) is still above it
+    fake.bid = 94.0  # quote through the stop (mid ~94.02) while the last trade (100) is still above it
     b.prefetch_bids(["BTC/USD"])
     ref = b.refresh(stop)
     assert ref.status == "Filled" and b.positions() == []
