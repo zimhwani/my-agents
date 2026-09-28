@@ -1,5 +1,5 @@
 import { sampleDates } from "./dates";
-import { returnDateFor } from "./params";
+import { legsFor, returnDateFor } from "./params";
 import { rankOffers, sortOffers } from "./rank";
 import type { DatePricePoint, FlightOffer, FlightProvider, ScanResult, SearchParams } from "./types";
 
@@ -14,7 +14,8 @@ interface CacheEntry {
 const cache = new Map<string, CacheEntry>();
 
 function cacheKey(provider: string, p: SearchParams, dep: string, ret?: string): string {
-  return JSON.stringify([provider, p.origin, p.destination, p.tripType, p.adults, p.children, p.infants, p.cabin, p.currency, p.maxStops, dep, ret ?? ""]);
+  const so = p.stopover ? `${p.stopover.airport}:${p.stopover.nights}:${p.stopover.leg}` : "";
+  return JSON.stringify([provider, p.origin, p.destination, p.tripType, p.adults, p.children, p.infants, p.cabin, p.currency, p.maxStops, dep, ret ?? "", so]);
 }
 
 export function clearSearchCache(): void {
@@ -45,9 +46,10 @@ export interface ScanOptions {
  */
 export async function runScan(params: SearchParams, provider: FlightProvider, opts: ScanOptions = {}): Promise<ScanResult> {
   // With a fixed return date, only departures before it make sense.
-  const dates = sampleDates(params.windowStart, params.windowEnd, params.stepDays).filter(
-    (d) => params.tripType !== "return" || !params.returnDate || returnDateFor(params, d),
-  );
+  const dates = sampleDates(params.windowStart, params.windowEnd, params.stepDays).filter((d) => {
+    if (params.tripType === "return" && params.returnDate && !returnDateFor(params, d)) return false;
+    return legsFor(params, d, returnDateFor(params, d)) !== null;
+  });
   const warnings: string[] = [];
   let done = 0;
 

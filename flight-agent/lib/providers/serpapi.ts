@@ -7,6 +7,7 @@
  * `inbound` is left undefined (the booking link opens the same search).
  */
 import { carrierName } from "../airports";
+import { legsFor } from "../params";
 import { buildItinerary } from "../rank";
 import type { FlightOffer, FlightProvider, SearchParams, Segment } from "../types";
 
@@ -77,6 +78,7 @@ export function mapSerpItinerary(it: SerpItinerary, params: SearchParams, depart
   });
   const outbound = buildItinerary(segments, it.total_duration);
   const validating = segments[0].carrier;
+  const legs = params.stopover ? legsFor(params, departureDate, returnDate) : null;
   return {
     id: `serpapi-${departureDate}-${index}-${segments.map((s) => s.flightNumber).join("-")}`,
     provider: "serpapi",
@@ -88,6 +90,7 @@ export function mapSerpItinerary(it: SerpItinerary, params: SearchParams, depart
     departureDate,
     returnDate: params.tripType === "return" ? returnDate : undefined,
     bookingUrl: googleUrl ?? googleFlightsLink(params, departureDate, returnDate),
+    ...(legs && params.stopover ? { stopover: params.stopover, laterLegs: legs.slice(1) } : {}),
   };
 }
 
@@ -105,6 +108,7 @@ export class SerpApiProvider implements FlightProvider {
   constructor(private readonly cfg: SerpApiConfig, private readonly fetchImpl: typeof fetch = fetch) {}
 
   buildQuery(params: SearchParams, departureDate: string, returnDate?: string): URLSearchParams {
+    const legs = params.stopover ? legsFor(params, departureDate, returnDate) : null;
     const q = new URLSearchParams({
       engine: "google_flights",
       departure_id: params.origin,
@@ -123,6 +127,12 @@ export class SerpApiProvider implements FlightProvider {
       api_key: this.cfg.apiKey,
     });
     if (params.tripType === "return" && returnDate) q.set("return_date", returnDate);
+    if (legs) {
+      // Multi-city: Google Flights prices the whole itinerary and lists options for the first leg.
+      q.set("type", "3");
+      q.set("multi_city_json", JSON.stringify(legs.map((l) => ({ departure_id: l.from, arrival_id: l.to, date: l.date }))));
+      for (const k of ["departure_id", "arrival_id", "outbound_date", "return_date"]) q.delete(k);
+    }
     return q;
   }
 

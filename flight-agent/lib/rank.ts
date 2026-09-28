@@ -29,6 +29,22 @@ export function computeLayovers(segments: Segment[]): Layover[] {
   return out;
 }
 
+/**
+ * Marks the layover at a stopover airport as a planned stopover and drops its
+ * time from the travel duration, so "fastest" compares time actually travelling.
+ */
+export function markStopover(it: Itinerary, airport: string): Itinerary {
+  let removed = 0;
+  const layovers = it.layovers.map((l) => {
+    if (l.airport === airport && l.minutes >= 12 * 60) {
+      removed += l.minutes;
+      return { ...l, stopover: true, overnight: false };
+    }
+    return l;
+  });
+  return { ...it, layovers, durationMin: it.durationMin - removed };
+}
+
 export function buildItinerary(segments: Segment[], durationMin?: number): Itinerary {
   const layovers = computeLayovers(segments);
   const total =
@@ -45,6 +61,7 @@ export interface Penalties {
 }
 
 function layoverPenalty(l: Layover): number {
+  if (l.stopover) return 0;
   if (l.sameFlight) return l.minutes > 180 ? 0.15 : 0; // you stay on board or in transit; no connection risk
   let p = 0;
   if (l.minutes < 60) p = 0.6;
@@ -59,7 +76,7 @@ function layoverPenalty(l: Layover): number {
 
 function describeLayover(l: Layover): string | null {
   const where = airportLabel(l.airport);
-  if (l.sameFlight) return null;
+  if (l.sameFlight || l.stopover) return null;
   if (l.minutes < 60) return `Tight connection in ${where} (${formatDuration(l.minutes)})`;
   if (l.minutes < 90) return `Short connection in ${where} (${formatDuration(l.minutes)})`;
   if (l.overnight) return `Overnight layover in ${where} (${formatDuration(l.minutes)})`;
@@ -126,7 +143,7 @@ export function totalDuration(offer: FlightOffer): number {
 
 /** Connections where you change aircraft (a same-flight-number stop does not count). */
 export function connectionCount(it: Itinerary): number {
-  return it.layovers.filter((l) => !l.sameFlight).length;
+  return it.layovers.filter((l) => !l.sameFlight && !l.stopover).length;
 }
 
 export function totalStops(offer: FlightOffer): number {
@@ -162,7 +179,7 @@ export function rankOffers(offers: FlightOffer[]): RankedOffer[] {
     const badges: string[] = [];
     const smoothConnections = [o.outbound, o.inbound]
       .filter((x): x is Itinerary => !!x)
-      .every((leg) => leg.layovers.every((l) => l.sameFlight || (l.minutes >= 90 && l.minutes <= 300 && !l.overnight)));
+      .every((leg) => leg.layovers.every((l) => l.sameFlight || l.stopover || (l.minutes >= 90 && l.minutes <= 300 && !l.overnight)));
     if (pen.timing === 0 && smoothConnections) badges.push("Family-friendly times");
     return {
       ...o,

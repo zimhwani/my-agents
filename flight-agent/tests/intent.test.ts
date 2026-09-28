@@ -42,7 +42,7 @@ describe("parseIntent", () => {
   });
   it("understands a return date alongside the departure window", () => {
     expect(parseIntent("I am looking for flights between middle to end of November returning early January next year", TODAY)).toEqual({
-      type: "set_dates", windowStart: "2026-11-11", windowEnd: "2026-11-30", returnDate: "2027-01-05",
+      type: "set_dates", windowStart: "2026-11-11", windowEnd: "2026-11-30", returnDate: "2027-01-05", returnInferred: true,
     });
     expect(parseIntent("leave on 3 december and come back on 8 january", TODAY)).toEqual({ type: "set_dates", windowStart: "2026-12-03", windowEnd: "2026-12-03", returnDate: "2027-01-08" });
     expect(parseIntent("coming back on 8 january", TODAY)).toEqual({ type: "set_dates", returnDate: "2027-01-08" });

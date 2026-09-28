@@ -7,7 +7,7 @@
  */
 import { carrierName } from "../airports";
 import { addDays, parseISODate } from "../dates";
-import { buildItinerary } from "../rank";
+import { buildItinerary, markStopover } from "../rank";
 import type { FlightOffer, FlightProvider, SearchParams, Segment } from "../types";
 
 interface LegTemplate {
@@ -207,29 +207,59 @@ function buildSegments(startDate: string, legs: LegTemplate[]): Segment[] {
   });
 }
 
+/**
+ * Builds a leg that breaks for `nights` at `hub`: the part up to the hub flies on
+ * `startDate`, the rest flies `nights` after landing there. Null when the routing
+ * does not pass through the hub.
+ */
+function legWithStopover(startDate: string, legs: LegTemplate[], hub: string, nights: number): Segment[] | null {
+  const k = legs.findIndex((l) => l.to === hub);
+  if (k < 0 || k === legs.length - 1) return null;
+  const first = buildSegments(startDate, legs.slice(0, k + 1));
+  const rest = legs.slice(k + 1);
+  const base = rest[0].dayOffset;
+  const onwardDate = addDays(first[first.length - 1].arrival.slice(0, 10), nights);
+  const second = buildSegments(onwardDate, rest.map((l) => ({ ...l, dayOffset: l.dayOffset - base })));
+  return [...first, ...second];
+}
+
 export class SampleProvider implements FlightProvider {
   readonly name = "sample" as const;
   readonly isSample = true;
 
   async search(params: SearchParams, departureDate: string, returnDate?: string): Promise<FlightOffer[]> {
     const offers: FlightOffer[] = [];
+    const so = params.stopover;
     for (const r of ROUTINGS) {
-      const outbound = buildItinerary(buildSegments(departureDate, r.outbound));
-      const inbound = params.tripType === "return" && returnDate ? buildItinerary(buildSegments(returnDate, r.inbound)) : undefined;
+      let outSegs = buildSegments(departureDate, r.outbound);
+      let inSegs = params.tripType === "return" && returnDate ? buildSegments(returnDate, r.inbound) : undefined;
+      if (so?.leg === "outbound") {
+        const split = legWithStopover(departureDate, r.outbound, so.airport, so.nights);
+        if (!split) continue;
+        outSegs = split;
+      } else if (so?.leg === "return") {
+        const split = returnDate ? legWithStopover(returnDate, r.inbound, so.airport, so.nights) : null;
+        if (!split) continue;
+        inSegs = split;
+      }
+      let outbound = buildItinerary(outSegs);
+      let inbound = inSegs ? buildItinerary(inSegs) : undefined;
+      if (so?.leg === "outbound") outbound = markStopover(outbound, so.airport);
+      if (so?.leg === "return" && inbound) inbound = markStopover(inbound, so.airport);
       if (outbound.segments.length - 1 > params.maxStops) continue;
       if (inbound && inbound.segments.length - 1 > params.maxStops) continue;
 
       const noise = 0.92 + (hash32(`${r.key}|${departureDate}|${returnDate ?? ""}`) % 1600) / 10_000; // 0.92 .. 1.08
       const season = returnDate ? seasonMultiplier(departureDate) * 0.6 + seasonMultiplier(returnDate) * 0.4 : seasonMultiplier(departureDate);
       const cabinMult = params.cabin === "BUSINESS" ? 3.6 : params.cabin === "PREMIUM_ECONOMY" ? 1.9 : 1;
-      const tripMult = inbound ? 1.75 : 1;
+      const tripMult = (inbound ? 1.75 : 1) * (so ? 1.06 : 1);
       const perAdult = Math.round((r.baseFare * tripMult * season * weekdayMultiplier(departureDate) * noise * cabinMult) / 5) * 5;
       const perChild = Math.round((perAdult * 0.75) / 5) * 5;
       const perInfant = Math.round((perAdult * 0.1) / 5) * 5;
       const total = perAdult * params.adults + perChild * params.children + perInfant * params.infants;
 
       offers.push({
-        id: `sample-${departureDate}-${r.key}`,
+        id: `sample-${departureDate}-${r.key}${so ? `-${so.airport}${so.nights}${so.leg[0]}` : ""}`,
         provider: "sample",
         price: { total, currency: params.currency, perAdult, perChild },
         validatingCarrier: r.validating,
@@ -239,6 +269,7 @@ export class SampleProvider implements FlightProvider {
         departureDate,
         returnDate: inbound ? returnDate : undefined,
         seatsLeft: 2 + (hash32(`seats|${r.key}|${departureDate}`) % 8),
+        ...(so ? { stopover: so } : {}),
       });
     }
     // A little latency so the UI's progress states are exercised in dev.

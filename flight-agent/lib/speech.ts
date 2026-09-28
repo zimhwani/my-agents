@@ -1,4 +1,5 @@
 /** Spoken replies for the rule-based path (no API key needed). Shared by the server and the static demo. */
+import { airportLabel } from "./airports";
 import { spokenDate } from "./dates";
 import { HELP_TEXT, parseIntent } from "./intent";
 import type { Intent, InterpretResponse, SearchParams } from "./types";
@@ -26,6 +27,11 @@ export function speechFor(intent: Intent): string {
       }
       return intent.returnDate ? `Returning ${spokenDate(intent.returnDate)}.` : "Updating the dates.";
     }
+    case "set_stopover":
+      return intent.airport
+        ? `Adding ${intent.nights ?? 3} nights in ${airportLabel(intent.airport)} on the way${intent.leg === "return" ? " home" : ""}.`
+        : "Removing the stopover.";
+    case "set_step": return `Checking a date every ${intent.stepDays === 1 ? "day" : `${intent.stepDays} days`}.`;
     case "set_passengers": return "Updating the travellers.";
     case "set_trip": return intent.tripType === "oneway" ? "Switching to one-way flights." : intent.stayNights ? `Return trip, ${intent.stayNights} nights away.` : "Switching to return flights.";
     case "set_cabin": return `Switching to ${intent.cabin.toLowerCase().replace("_", " ")} class.`;

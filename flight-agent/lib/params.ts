@@ -1,5 +1,6 @@
 import { addDays, endOfNextJanuary, humanDate, isValidISODate, todayISO, daysBetween } from "./dates";
-import type { Cabin, SearchParams, TripType } from "./types";
+import { airportLabel } from "./airports";
+import type { Cabin, SearchParams, Stopover, TripLeg, TripType } from "./types";
 
 const CABINS: Cabin[] = ["ECONOMY", "PREMIUM_ECONOMY", "BUSINESS"];
 
@@ -51,6 +52,16 @@ export function normalizeParams(input: unknown, now: Date = new Date()): SearchP
   // Keep scans bounded: at most a year out.
   if (daysBetween(windowStart, windowEnd) > 366) windowEnd = windowStart;
 
+  // Stopover (multi-city): a valid airport that is not the origin or destination.
+  const so = (o.stopover && typeof o.stopover === "object" ? o.stopover : null) as Record<string, unknown> | null;
+  const soAirport = so ? iata(so.airport, "") : "";
+  const origin = iata(o.origin, d.origin);
+  const destination = iata(o.destination, d.destination);
+  const stopover: Stopover | undefined =
+    soAirport && soAirport !== origin && soAirport !== destination
+      ? { airport: soAirport, nights: clampInt(so!.nights, 1, 14, 3), leg: so!.leg === "return" && tripType === "return" ? "return" : "outbound" }
+      : undefined;
+
   let returnDate = isValidISODate(o.returnDate) ? o.returnDate : undefined;
   if (returnDate && daysBetween(windowStart, returnDate) <= 0) returnDate = undefined;
 
@@ -59,13 +70,14 @@ export function normalizeParams(input: unknown, now: Date = new Date()): SearchP
   const infants = clampInt(o.infants, 0, adults, d.infants);
 
   return {
-    origin: iata(o.origin, d.origin),
-    destination: iata(o.destination, d.destination),
+    origin,
+    destination,
     tripType,
     windowStart,
     windowEnd,
     stayNights: clampInt(o.stayNights, 1, 90, d.stayNights),
     returnDate: tripType === "return" ? returnDate : undefined,
+    ...(stopover ? { stopover } : {}),
     stepDays: clampInt(o.stepDays, 1, 31, d.stepDays),
     adults,
     children,
@@ -74,6 +86,42 @@ export function normalizeParams(input: unknown, now: Date = new Date()): SearchP
     currency: typeof o.currency === "string" && /^[A-Z]{3}$/.test(o.currency) ? o.currency : d.currency,
     maxStops: clampInt(o.maxStops, 0, 3, d.maxStops),
   };
+}
+
+/**
+ * The flight legs to price for one departure date: two (or one) for a plain trip,
+ * three (or two) when a stopover makes it multi-city. Returns null when the
+ * stopover does not fit before the return date.
+ */
+export function legsFor(p: SearchParams, departureDate: string, returnDate?: string): TripLeg[] | null {
+  const s = p.stopover;
+  if (!s) {
+    const legs: TripLeg[] = [{ from: p.origin, to: p.destination, date: departureDate }];
+    if (returnDate) legs.push({ from: p.destination, to: p.origin, date: returnDate });
+    return legs;
+  }
+  if (s.leg === "outbound") {
+    // The first flight usually lands the next day; the onward flight is `nights` after that.
+    const onward = addDays(departureDate, s.nights + 1);
+    if (returnDate && daysBetween(onward, returnDate) <= 0) return null;
+    const legs: TripLeg[] = [
+      { from: p.origin, to: s.airport, date: departureDate },
+      { from: s.airport, to: p.destination, date: onward },
+    ];
+    if (returnDate) legs.push({ from: p.destination, to: p.origin, date: returnDate });
+    return legs;
+  }
+  if (!returnDate) return null;
+  return [
+    { from: p.origin, to: p.destination, date: departureDate },
+    { from: p.destination, to: s.airport, date: returnDate },
+    { from: s.airport, to: p.origin, date: addDays(returnDate, s.nights) },
+  ];
+}
+
+export function stopoverSummary(s: Stopover | undefined): string {
+  if (!s) return "";
+  return `${s.nights}-night stopover in ${airportLabel(s.airport)}${s.leg === "return" ? " on the way home" : ""}`;
 }
 
 /** Return date for a given departure, honouring a fixed return date when set. */

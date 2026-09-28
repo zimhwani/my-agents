@@ -2,6 +2,20 @@ export type TripType = "return" | "oneway";
 export type Cabin = "ECONOMY" | "PREMIUM_ECONOMY" | "BUSINESS";
 export type SortMode = "best" | "cheapest" | "fastest";
 
+/** A planned multi-day break in one direction (multi-city trip). */
+export interface Stopover {
+  airport: string;
+  nights: number;
+  leg: "outbound" | "return";
+}
+
+/** One flight leg of a (possibly multi-city) trip. */
+export interface TripLeg {
+  from: string;
+  to: string;
+  date: string;
+}
+
 export interface SearchParams {
   origin: string;
   destination: string;
@@ -14,6 +28,8 @@ export interface SearchParams {
   stayNights: number;
   /** Fixed return date for return trips, YYYY-MM-DD; overrides stayNights */
   returnDate?: string;
+  /** Optional stopover: turns the trip into a multi-city itinerary */
+  stopover?: Stopover;
   /** Days between sampled departure dates inside the window */
   stepDays: number;
   adults: number;
@@ -44,6 +60,8 @@ export interface Layover {
   overnight: boolean;
   /** Same flight number continues: a stop on the same aircraft, not a connection */
   sameFlight?: boolean;
+  /** A planned multi-night stopover, not a connection */
+  stopover?: boolean;
 }
 
 export interface Itinerary {
@@ -64,6 +82,10 @@ export interface FlightOffer {
   returnDate?: string;
   seatsLeft?: number;
   bookingUrl?: string;
+  /** Set for multi-city trips */
+  stopover?: Stopover;
+  /** Legs after the first that are chosen when booking (live multi-city fares) */
+  laterLegs?: TripLeg[];
 }
 
 export interface OfferScores {
@@ -108,7 +130,9 @@ export interface FlightProvider {
 /** Intents the voice agent understands (shared by the local parser and Claude). */
 export type Intent =
   | { type: "search" }
-  | { type: "set_dates"; windowStart?: string; windowEnd?: string; returnDate?: string }
+  | { type: "set_dates"; windowStart?: string; windowEnd?: string; returnDate?: string; returnInferred?: boolean }
+  | { type: "set_step"; stepDays: number }
+  | { type: "set_stopover"; airport: string | null; nights?: number; leg?: "outbound" | "return" }
   | { type: "set_passengers"; adults?: number; children?: number; infants?: number }
   | { type: "set_trip"; tripType?: TripType; stayNights?: number }
   | { type: "set_cabin"; cabin: Cabin }

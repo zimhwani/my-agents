@@ -2,6 +2,7 @@
  * Rule-based understanding of spoken commands. Runs in the browser as the
  * instant path and on the server as the fallback when no ANTHROPIC_API_KEY is set.
  */
+import { AIRPORTS } from "./airports";
 import { addDays, daysBetween, endOfNextJanuary, formatISODate, parseISODate, todayISO } from "./dates";
 import type { Cabin, Intent, SortMode } from "./types";
 
@@ -186,24 +187,53 @@ function parseCabin(t: string): Cabin | undefined {
 }
 
 /** Turn one utterance into an intent. Returns `unknown` rather than guessing wildly. */
+/** Cities a family might break the trip in (the origin and destination are excluded by the caller). */
+function findAirport(t: string): string | undefined {
+  for (const a of Object.values(AIRPORTS)) {
+    if (new RegExp(`\\b(${a.city.toLowerCase()}|${a.code.toLowerCase()})\\b`).test(t)) return a.code;
+  }
+  return undefined;
+}
+
+/** "stop over in Dubai for 3 nights", "multi city via Doha", "no stopover". */
+export function parseStopover(t: string): Intent | null {
+  if (/\b(no|without|remove|cancel|drop|skip)\b.*\b(stop ?over|multi ?city)\b/.test(t)) return { type: "set_stopover", airport: null };
+  if (!/\b(stop ?over|stop off|multi ?city|break (?:the|our) (?:trip|journey))\b/.test(t) && !/\b\d+\s+nights?\s+in\b/.test(t)) return null;
+  const airport = findAirport(t.replace(/\b(melbourne|harare|mel|hre)\b/g, " "));
+  if (!airport) return null;
+  const n = /(\d+|one|two|three|four|five|six|seven)\s+(nights?|days?)\b/.exec(t);
+  const nights = n ? num(n[1]) : undefined;
+  const leg = /\b(on the way (?:back|home)|coming (?:back|home)|way home|return(?:ing)? (?:leg|trip|journey)|on the return)\b/.test(t) ? "return" : "outbound";
+  return { type: "set_stopover", airport, ...(nights ? { nights } : {}), leg };
+}
+
 /** Splits "... returning early january" into the outbound text and a return date. */
-export function parseReturn(text: string, todayIso = todayISO()): { outbound: string; returnDate?: string } {
+export function parseReturn(text: string, todayIso = todayISO()): { outbound: string; returnDate?: string; returnInferred?: boolean } {
   const t = normalizeUtterance(text);
-  const m = /\b(?:returning|coming back|come back|fly(?:ing)? back|back home|and back|return(?:ing)?)\b(?:\s+(?:on|in|around|about|by|home))?\s+(.+)$/.exec(t);
+  const m = /\b(?:returning|coming back|come back|fly(?:ing)? back|back home|and back|return(?:ing)?|back)\b(?:\s+(?:on|in|around|about|by|home))?\s+(.+)$/.exec(t);
   if (!m) return { outbound: t };
   const w = parseDateWindow(m[1], todayIso);
   if (!w?.windowStart || !w.windowEnd) return { outbound: t };
   // A single day is exact; a span ("early january") picks its midpoint.
   const mid = addDays(w.windowStart, Math.floor(daysBetween(w.windowStart, w.windowEnd) / 2));
-  return { outbound: t.slice(0, m.index).trim(), returnDate: mid };
+  return { outbound: t.slice(0, m.index).trim(), returnDate: mid, ...(w.windowStart !== w.windowEnd ? { returnInferred: true } : {}) };
 }
 
 export function parseIntent(utterance: string, todayIso = todayISO()): Intent {
   const full = normalizeUtterance(utterance);
   if (!full) return { type: "unknown", utterance };
-  const { outbound, returnDate } = parseReturn(full, todayIso);
+  const { outbound, returnDate, returnInferred } = parseReturn(full, todayIso);
   const t = returnDate ? outbound : full;
 
+  // "check every 2 days", "check every day", "every other day"
+  const step = /\b(?:check|search|scan|look)\b.*\bevery\s+(\d+|one|two|three|four|five|six|seven|other)?\s*days?\b/.exec(t) ?? /\bevery\s+(\d+|two|three|four|five|six|seven|other)\s+days?\b/.exec(t);
+  if (step && !parseDateWindow(t, todayIso)) {
+    const n = step[1] === "other" ? 2 : step[1] ? num(step[1]) : 1;
+    if (n && n >= 1) return { type: "set_step", stepDays: Math.min(31, n) };
+  }
+
+  const stopover = parseStopover(full);
+  if (stopover) return stopover;
   if (/^(stop|be quiet|quiet|shut up|cancel|never ?mind|enough|silence)\b/.test(t) && !/tracking|track/.test(t)) return { type: "stop" };
   if (/\b(help|what can you do|what can i say|commands)\b/.test(t)) return { type: "help" };
 
@@ -260,7 +290,9 @@ export function parseIntent(utterance: string, todayIso = todayISO()): Intent {
   // Dates
   const window = parseDateWindow(t, todayIso);
   const isSearch = /\b(search|find|look|check|get|scan|fetch|run|refresh|update|again|any flights|flights)\b/.test(t);
-  if (window || returnDate) return { type: "set_dates", ...(window ?? {}), ...(returnDate ? { returnDate } : {}) }; // UI applies dates then searches
+  if (window || returnDate) {
+    return { type: "set_dates", ...(window ?? {}), ...(returnDate ? { returnDate } : {}), ...(returnInferred ? { returnInferred } : {}) }; // UI applies dates then searches
+  }
   if (sort && isSearch) return { type: "set_sort", sort };
   if (isSearch) return { type: "search" };
   if (sort) return { type: "set_sort", sort };
@@ -269,6 +301,7 @@ export function parseIntent(utterance: string, todayIso = todayISO()): Intent {
 }
 
 export const HELP_TEXT =
-  "You can say: search for flights; find the cheapest flights in December; search between 10 December and 20 January; " +
+  "You can say: mid to late November, back early January; search early December; check every 2 days; " +
+  "stop over in Dubai for 3 nights; no stopover; " +
   "show me the best options; what's the fastest; read me the top three; tell me about option two; " +
   "two adults and two children; one way; return staying three weeks; fly business; start tracking prices daily; or stop.";
