@@ -16,6 +16,8 @@ Long-only, one trade per symbol per day (enforced by the loop/backtester).
 
 from __future__ import annotations
 
+import logging
+
 import json
 from dataclasses import dataclass
 from datetime import datetime, time, timedelta
@@ -26,6 +28,8 @@ from .exits import ExitRules
 from .indicators import sma
 from .models import LONG, Bar, Signal
 from .strategy import LoadedStrategy, rth_bars
+
+log = logging.getLogger(__name__)
 
 
 @dataclass
@@ -158,18 +162,30 @@ class TrendJoinLong:
         self.window_end: time = clock.parse_hhmm(self.r.latest_entry)
         self.intraday_days = self.r.rvol_lookback_days + 4
         self.bar_minutes = 5
+        self._explained: set = set()
 
     def day_ok(self, open_price: float, prior_daily: list[Bar]) -> bool:
         """Cheap once-per-day check (gap + SMA); lets the backtester skip the rest."""
+        return self.day_check(open_price, prior_daily)[0] == "ok"
+
+    def day_check(self, open_price: float, prior_daily: list[Bar]) -> tuple[str, str]:
+        """(reason, detail): 'ok', 'sma_history' (fewer daily bars than the SMA needs),
+        'below_sma200', or 'gap_small'. The detail carries the numbers for the log."""
         if not prior_daily:
-            return False
+            return "no_daily", "no daily bars"
         prior = prior_daily[-1]
+        gap = (open_price - prior.close) / prior.close * 100.0 if prior.close else 0.0
+        detail = f"open {open_price:.2f} prior close {prior.close:.2f} ({prior.time:%m-%d}) gap {gap:+.1f}%"
         if self.r.prior_close_above_sma200:
             avg = sma([d.close for d in prior_daily], self.r.sma_days)
-            if avg is None or prior.close <= avg:
-                return False
-        gap = (open_price - prior.close) / prior.close * 100.0 if prior.close else 0.0
-        return gap >= self.r.min_gap_pct
+            if avg is None:
+                return "sma_history", f"{detail}; only {len(prior_daily)} daily bars, SMA{self.r.sma_days} needs {self.r.sma_days}"
+            detail += f" SMA{self.r.sma_days} {avg:.2f}"
+            if prior.close <= avg:
+                return "below_sma200", detail
+        if gap < self.r.min_gap_pct:
+            return "gap_small", detail
+        return "ok", detail
 
     def evaluate(self, symbol: str, intraday: list[Bar], daily: list[Bar],
                  now: datetime) -> Signal | None:
@@ -208,8 +224,13 @@ class TrendJoinLong:
         last, earlier = today[-1], today[:-1]
 
         # daily filters (cheap, checked first)
-        if not self.day_ok(today[0].open, prior_daily):
-            return None, "gap_or_sma"
+        why, detail = self.day_check(today[0].open, prior_daily)
+        if why != "ok":
+            key = (symbol, now.date())
+            if key not in self._explained:  # once per symbol per day: the numbers behind the rejection
+                self._explained.add(key)
+                log.info("%s daily filter: %s (%s)", symbol, why, detail)
+            return None, why
         gap = (today[0].open - prior.close) / prior.close * 100.0
         if r.above_prior_day_high and last.close <= prior.high:
             return None, "below_prior_high"

@@ -223,6 +223,38 @@ def cmd_telegram_test(args) -> None:
     print("sent" if ok else "not sent (check TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID)")
 
 
+def cmd_tjl_check(args) -> None:
+    """Pull the live data the equities bot uses and show each daily filter's numbers per symbol."""
+    s = _settings(args)
+    from .tjl import TJLRules, TrendJoinLong
+    from .indicators import sma
+    strat = TrendJoinLong(TJLRules.load(args.strategy or s.strategy_file))
+    data = _data(s)
+    print(f"data provider: {s.data_provider}")
+    for sym in args.symbols:
+        sym = sym.upper()
+        try:
+            daily = data.daily_bars(sym, 260)
+            intraday = data.intraday_bars(sym, 5, 2, True)
+        except Exception as exc:
+            print(f"{sym}: data error {exc}")
+            continue
+        if not daily:
+            print(f"{sym}: no daily bars")
+            continue
+        day = daily[-1].time.date()
+        rth = [b for b in intraday if b.time.date() > day and clock.MARKET_OPEN <= b.time.time() < clock.MARKET_CLOSE]
+        first = rth[0] if rth else None
+        avg = sma([d.close for d in daily], strat.r.sma_days)
+        print(f"{sym}: {len(daily)} daily bars {daily[0].time:%Y-%m-%d}..{daily[-1].time:%Y-%m-%d}, "
+              f"last close {daily[-1].close:.2f}, SMA{strat.r.sma_days} {avg if avg is None else round(avg, 2)}")
+        if first is None:
+            print(f"   no regular-hours 5-min bars after {day} yet")
+            continue
+        why, detail = strat.day_check(first.open, daily)
+        print(f"   first RTH bar {first.time:%m-%d %H:%M} open {first.open:.2f} -> {why}: {detail}")
+
+
 def cmd_notify(args) -> None:
     """Send one Telegram message (used by the auto-deploy script)."""
     s = _settings(args)
@@ -867,6 +899,9 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--days", type=int, default=3)
     p.add_argument("--symbols", nargs="*")
     p.add_argument("--strategy", help="rules file to replay instead of STRATEGY_FILE (e.g. crypto_15m.json)")
+    p = sub.add_parser("tjl-check", help="show the equities daily-filter numbers for symbols (live data)")
+    p.add_argument("symbols", nargs="+")
+    p.add_argument("--strategy")
     p = sub.add_parser("notify", help="send a Telegram message")
     p.add_argument("--text", required=True)
     p = sub.add_parser("news", help="World Monitor: macro calendar, headlines, earnings (or --raw JSON)")
@@ -945,7 +980,8 @@ def main(argv: list[str] | None = None) -> None:
      "analyze": cmd_analyze, "sweep": cmd_sweep, "dashboard": cmd_dashboard,
      "fetch-gappers": cmd_fetch_gappers, "fetch-crypto": cmd_fetch_crypto,
      "crypto-explain": cmd_crypto_explain, "arb-monitor": cmd_arb_monitor, "report": cmd_report,
-     "research": cmd_research, "news": cmd_news, "notify": cmd_notify}[args.cmd](args)
+     "research": cmd_research, "news": cmd_news, "notify": cmd_notify,
+     "tjl-check": cmd_tjl_check}[args.cmd](args)
 
 
 if __name__ == "__main__":
