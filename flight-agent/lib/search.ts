@@ -1,4 +1,5 @@
-import { addDays, sampleDates } from "./dates";
+import { sampleDates } from "./dates";
+import { returnDateFor } from "./params";
 import { rankOffers, sortOffers } from "./rank";
 import type { DatePricePoint, FlightOffer, FlightProvider, ScanResult, SearchParams } from "./types";
 
@@ -43,12 +44,15 @@ export interface ScanOptions {
  * combined set, and summarises the cheapest fare per date for the price calendar.
  */
 export async function runScan(params: SearchParams, provider: FlightProvider, opts: ScanOptions = {}): Promise<ScanResult> {
-  const dates = sampleDates(params.windowStart, params.windowEnd, params.stepDays);
+  // With a fixed return date, only departures before it make sense.
+  const dates = sampleDates(params.windowStart, params.windowEnd, params.stepDays).filter(
+    (d) => params.tripType !== "return" || !params.returnDate || returnDateFor(params, d),
+  );
   const warnings: string[] = [];
   let done = 0;
 
   const perDate = await mapLimit(dates, opts.concurrency ?? 3, async (date) => {
-    const ret = params.tripType === "return" ? addDays(date, params.stayNights) : undefined;
+    const ret = returnDateFor(params, date);
     const key = cacheKey(provider.name, params, date, ret);
     const hit = cache.get(key);
     let offers: FlightOffer[] = [];

@@ -13,7 +13,7 @@ export function spokenMoney(n: number, currency = "AUD"): string {
 }
 
 export function routeLabel(it: Itinerary): string {
-  const via = it.segments.slice(0, -1).map((s) => airportLabel(s.to));
+  const via = it.layovers.map((l) => `${airportLabel(l.airport)}${l.sameFlight ? " (stop)" : ""}`);
   return via.length ? `via ${via.join(" and ")}` : "nonstop";
 }
 
@@ -43,7 +43,9 @@ export function spokenOffer(o: RankedOffer, position: number): string {
 export function spokenScanSummary(result: ScanResult, sorted: RankedOffer[], mode: SortMode, count = 3): string {
   if (!sorted.length) return "I could not find any flights for those dates. Try widening the window or allowing more stops.";
   const cheapest = [...result.offers].sort((a, b) => a.price.total - b.price.total)[0];
-  const intro = `I scanned ${result.datesScanned} departure dates from ${spokenDate(result.params.windowStart)} to ${spokenDate(result.params.windowEnd)}. ` +
+  const p = result.params;
+  const trip = p.tripType !== "return" ? ", one way" : p.returnDate ? `, returning ${spokenDate(p.returnDate)}` : `, ${p.stayNights} nights away`;
+  const intro = `I scanned ${result.datesScanned} departure date${result.datesScanned === 1 ? "" : "s"} from ${spokenDate(p.windowStart)} to ${spokenDate(p.windowEnd)}${trip}. ` +
     `The cheapest fare is ${spokenMoney(cheapest.price.total, cheapest.price.currency)} on ${spokenDate(cheapest.departureDate)} with ${cheapest.validatingCarrierName}. `;
   const list = sorted.slice(0, count).map((o, i) => spokenOffer(o, i + 1)).join(" ");
   const sample = result.isSample ? " These are sample fares, not live prices." : "";

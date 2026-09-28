@@ -36,6 +36,12 @@ describe("sample provider", () => {
 });
 
 describe("scan", () => {
+  it("uses a fixed return date and skips departures on or after it", async () => {
+    const p = { ...defaultParams(NOW), windowStart: "2026-11-11", windowEnd: "2026-11-30", stepDays: 7, returnDate: "2026-11-26" };
+    const r = await runScan(p, new SampleProvider(), { concurrency: 2 });
+    expect(r.byDate.map((d) => d.date)).toEqual(["2026-11-11", "2026-11-18", "2026-11-25"]);
+    expect(r.offers.every((o) => o.returnDate === "2026-11-26")).toBe(true);
+  });
   it("scans every sampled date and ranks the pool", async () => {
     const p = { ...defaultParams(NOW), windowStart: "2026-11-01", windowEnd: "2026-11-15", stepDays: 7 };
     const r = await runScan(p, new SampleProvider(), { concurrency: 2 });

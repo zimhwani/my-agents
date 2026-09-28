@@ -167,7 +167,13 @@ export default function Page() {
         return r ? readTop(r, sortRef.current) : "The search failed. Please try again.";
       }
       case "set_dates": {
-        const next = normalizeParams({ ...current, windowStart: intent.windowStart ?? current.windowStart, windowEnd: intent.windowEnd ?? current.windowEnd });
+        const next = normalizeParams({
+          ...current,
+          windowStart: intent.windowStart ?? current.windowStart,
+          windowEnd: intent.windowEnd ?? current.windowEnd,
+          returnDate: intent.returnDate ?? (intent.windowStart ? undefined : current.returnDate),
+          tripType: intent.returnDate ? "return" : current.tripType,
+        });
         setParams(next);
         const r = await runSearch(next);
         return r ? `${spoken} ${readTop(r, sortRef.current)}` : "The search failed. Please try again.";

@@ -17,9 +17,15 @@ export function fallbackInterpretation(utterance: string, ctx: RulesContext): In
 export function speechFor(intent: Intent): string {
   switch (intent.type) {
     case "search": return "Searching for flights now.";
-    case "set_dates": return intent.windowStart && intent.windowEnd
-      ? (intent.windowStart === intent.windowEnd ? `Checking flights on ${spokenDate(intent.windowStart)}.` : `Checking flights between ${spokenDate(intent.windowStart)} and ${spokenDate(intent.windowEnd)}.`)
-      : "Updating the dates.";
+    case "set_dates": {
+      const back = intent.returnDate ? `, returning ${spokenDate(intent.returnDate)}` : "";
+      if (intent.windowStart && intent.windowEnd) {
+        return intent.windowStart === intent.windowEnd
+          ? `Checking flights on ${spokenDate(intent.windowStart)}${back}.`
+          : `Checking flights leaving between ${spokenDate(intent.windowStart)} and ${spokenDate(intent.windowEnd)}${back}.`;
+      }
+      return intent.returnDate ? `Returning ${spokenDate(intent.returnDate)}.` : "Updating the dates.";
+    }
     case "set_passengers": return "Updating the travellers.";
     case "set_trip": return intent.tripType === "oneway" ? "Switching to one-way flights." : intent.stayNights ? `Return trip, ${intent.stayNights} nights away.` : "Switching to return flights.";
     case "set_cabin": return `Switching to ${intent.cabin.toLowerCase().replace("_", " ")} class.`;

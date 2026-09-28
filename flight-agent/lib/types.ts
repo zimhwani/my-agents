@@ -10,8 +10,10 @@ export interface SearchParams {
   windowStart: string;
   /** Last departure date considered, YYYY-MM-DD */
   windowEnd: string;
-  /** Nights at destination for return trips */
+  /** Nights at destination for return trips (used when returnDate is not set) */
   stayNights: number;
+  /** Fixed return date for return trips, YYYY-MM-DD; overrides stayNights */
+  returnDate?: string;
   /** Days between sampled departure dates inside the window */
   stepDays: number;
   adults: number;
@@ -40,6 +42,8 @@ export interface Layover {
   airport: string;
   minutes: number;
   overnight: boolean;
+  /** Same flight number continues: a stop on the same aircraft, not a connection */
+  sameFlight?: boolean;
 }
 
 export interface Itinerary {
@@ -104,7 +108,7 @@ export interface FlightProvider {
 /** Intents the voice agent understands (shared by the local parser and Claude). */
 export type Intent =
   | { type: "search" }
-  | { type: "set_dates"; windowStart?: string; windowEnd?: string }
+  | { type: "set_dates"; windowStart?: string; windowEnd?: string; returnDate?: string }
   | { type: "set_passengers"; adults?: number; children?: number; infants?: number }
   | { type: "set_trip"; tripType?: TripType; stayNights?: number }
   | { type: "set_cabin"; cabin: Cabin }

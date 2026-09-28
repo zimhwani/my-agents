@@ -2,8 +2,9 @@ import { describe, expect, it } from "vitest";
 import { buildItinerary, cheapestByDate, computeLayovers, rankOffers, sortOffers, wallClockDiffMinutes } from "@/lib/rank";
 import type { FlightOffer, Segment } from "@/lib/types";
 
+let flightSeq = 0;
 function seg(p: Partial<Segment> & Pick<Segment, "from" | "to" | "departure" | "arrival" | "durationMin">): Segment {
-  return { carrier: "QR", carrierName: "Qatar Airways", flightNumber: "QR1", ...p };
+  return { carrier: "QR", carrierName: "Qatar Airways", flightNumber: `QR${++flightSeq}`, ...p };
 }
 
 function offer(id: string, total: number, outbound: Segment[], inbound?: Segment[]): FlightOffer {
@@ -35,6 +36,21 @@ describe("layovers", () => {
   });
   it("sums flying time and layovers when no total is given", () => {
     expect(buildItinerary(smooth).durationMin).toBe(860 + 150 + 530);
+  });
+});
+
+describe("same-aircraft stops", () => {
+  it("does not treat a stop on the same flight number as a connection", () => {
+    const viaLusaka = [
+      seg({ from: "MEL", to: "DOH", departure: "2026-11-20T23:40", arrival: "2026-11-21T06:20", durationMin: 880, flightNumber: "QR905" }),
+      seg({ from: "DOH", to: "LUN", departure: "2026-11-21T08:05", arrival: "2026-11-21T15:25", durationMin: 500, flightNumber: "QR1363" }),
+      seg({ from: "LUN", to: "HRE", departure: "2026-11-21T16:25", arrival: "2026-11-21T17:25", durationMin: 60, flightNumber: "QR1363" }),
+    ];
+    const it = buildItinerary(viaLusaka);
+    expect(it.layovers[1]).toMatchObject({ airport: "LUN", sameFlight: true });
+    const [r] = rankOffers([offer("x", 9994, viaLusaka)]);
+    expect(r.stops).toBe(1);
+    expect(r.warnings).toEqual([]);
   });
 });
 

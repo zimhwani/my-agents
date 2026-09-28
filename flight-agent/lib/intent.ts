@@ -2,7 +2,7 @@
  * Rule-based understanding of spoken commands. Runs in the browser as the
  * instant path and on the server as the fallback when no ANTHROPIC_API_KEY is set.
  */
-import { addDays, endOfNextJanuary, formatISODate, parseISODate, todayISO } from "./dates";
+import { addDays, daysBetween, endOfNextJanuary, formatISODate, parseISODate, todayISO } from "./dates";
 import type { Cabin, Intent, SortMode } from "./types";
 
 const MONTHS: Record<string, number> = {
@@ -35,18 +35,43 @@ function lastDayOfMonth(year: number, month: number): number {
   return new Date(year, month + 1, 0).getDate();
 }
 
+/** Words that pick out part of a month. */
+const PART_RE = "(early|start of|beginning of|first half of|middle of|middle|mid|late|end of|second half of|last week of)";
+type Part = "early" | "mid" | "late" | "first-half" | "second-half" | "last-week";
+
+function normalizePart(p: string | undefined): Part | undefined {
+  if (!p) return undefined;
+  if (/^(early|start of|beginning of)$/.test(p)) return "early";
+  if (/^(mid|middle|middle of)$/.test(p)) return "mid";
+  if (/^(late|end of)$/.test(p)) return "late";
+  if (p === "first half of") return "first-half";
+  if (p === "second half of") return "second-half";
+  if (p === "last week of") return "last-week";
+  return undefined;
+}
+
+/** Day span for a part of a month: early 1-10, mid 11-20, late 21-end. */
+function partSpan(part: Part | undefined, last: number): [number, number] {
+  switch (part) {
+    case "early": return [1, 10];
+    case "mid": return [11, 20];
+    case "late": return [21, last];
+    case "first-half": return [1, 15];
+    case "second-half": return [16, last];
+    case "last-week": return [last - 6, last];
+    default: return [1, last];
+  }
+}
+
 /** Resolve a month name to the next occurrence of that month on/after `today`. */
-function monthRange(monthName: string, todayIso: string, part?: string): { start: string; end: string } {
+function monthRange(monthName: string, todayIso: string, part?: string, partEnd?: string): { start: string; end: string } {
   const month = MONTHS[monthName];
   const today = parseISODate(todayIso);
   let year = today.getFullYear();
   if (month < today.getMonth()) year++;
   const last = lastDayOfMonth(year, month);
-  let s = 1;
-  let e = last;
-  if (part === "early") e = 10;
-  else if (part === "mid" || part === "middle of") { s = 10; e = 20; }
-  else if (part === "late" || part === "end of") s = 20;
+  const [s] = partSpan(normalizePart(part), last);
+  const [, e] = partSpan(normalizePart(partEnd ?? part), last);
   const mk = (d: number) => formatISODate(new Date(year, month, d));
   return { start: mk(s), end: mk(e) };
 }
@@ -85,10 +110,17 @@ export function parseDateWindow(text: string, todayIso = todayISO()): { windowSt
   }
 
   // "between now and end of january", "from now until late january", "anytime before christmas"
-  const nowUntil = new RegExp(`(?:between now and|from now (?:until|till|to)|until|till|before|by)\\s+(?:the\\s+)?(early|mid|late|end of|middle of)?\\s*${MONTH_RE}`).exec(t);
+  const nowUntil = new RegExp(`(?:between now and|from now (?:until|till|to)|until|till|before|by)\\s+(?:the\\s+)?${PART_RE}?\\s*${MONTH_RE}`).exec(t);
   if (nowUntil) {
-    const r = monthRange(nowUntil[2], todayIso, nowUntil[1] === "end of" ? "late" : nowUntil[1]);
+    const r = monthRange(nowUntil[2], todayIso, nowUntil[1]);
     return { windowStart: todayIso, windowEnd: r.end };
+  }
+
+  // "middle to end of november", "early to mid december", "from the middle to the end of november"
+  const partToPart = new RegExp(`(?:the\\s+)?${PART_RE}\\s*(?:to|until|till|through|-)\\s*(?:the\\s+)?${PART_RE}\\s*(?:of\\s+)?(?:the\\s+)?${MONTH_RE}`).exec(t);
+  if (partToPart) {
+    const r = monthRange(partToPart[3], todayIso, partToPart[1], partToPart[2]);
+    return { windowStart: r.start, windowEnd: r.end };
   }
 
   if (/\bchristmas\b/.test(t)) {
@@ -105,10 +137,10 @@ export function parseDateWindow(text: string, todayIso = todayISO()): { windowSt
   }
 
   // "between september and january" / "from october to december"
-  const monthToMonth = new RegExp(`(?:between|from)\\s+(early|mid|late)?\\s*${MONTH_RE}\\s+(?:and|to|until|till|through)\\s+(early|mid|late|end of)?\\s*${MONTH_RE}`).exec(t);
+  const monthToMonth = new RegExp(`(?:between|from)\\s+(?:the\\s+)?${PART_RE}?\\s*${MONTH_RE}\\s+(?:and|to|until|till|through)\\s+(?:the\\s+)?${PART_RE}?\\s*${MONTH_RE}`).exec(t);
   if (monthToMonth) {
     const a = monthRange(monthToMonth[2], todayIso, monthToMonth[1]);
-    const b = monthRange(monthToMonth[4], todayIso, monthToMonth[3] === "end of" ? "late" : monthToMonth[3]);
+    const b = monthRange(monthToMonth[4], todayIso, monthToMonth[3]);
     return { windowStart: a.start, windowEnd: b.end };
   }
 
@@ -119,8 +151,8 @@ export function parseDateWindow(text: string, todayIso = todayISO()): { windowSt
     if (d) return { windowStart: d, windowEnd: d };
   }
 
-  // "in early december", "in december", "december"
-  const inMonth = new RegExp(`\\b(?:in|during|for)?\\s*(early|mid|late|end of|middle of)?\\s*${MONTH_RE}\\b`).exec(t);
+  // "in early december", "the end of december", "december"
+  const inMonth = new RegExp(`\\b(?:in|during|for)?\\s*(?:the\\s+)?${PART_RE}?\\s*${MONTH_RE}\\b`).exec(t);
   if (inMonth) {
     const r = monthRange(inMonth[2], todayIso, inMonth[1]);
     return { windowStart: r.start, windowEnd: r.end };
@@ -154,9 +186,23 @@ function parseCabin(t: string): Cabin | undefined {
 }
 
 /** Turn one utterance into an intent. Returns `unknown` rather than guessing wildly. */
+/** Splits "... returning early january" into the outbound text and a return date. */
+export function parseReturn(text: string, todayIso = todayISO()): { outbound: string; returnDate?: string } {
+  const t = normalizeUtterance(text);
+  const m = /\b(?:returning|coming back|come back|fly(?:ing)? back|back home|and back|return(?:ing)?)\b(?:\s+(?:on|in|around|about|by|home))?\s+(.+)$/.exec(t);
+  if (!m) return { outbound: t };
+  const w = parseDateWindow(m[1], todayIso);
+  if (!w?.windowStart || !w.windowEnd) return { outbound: t };
+  // A single day is exact; a span ("early january") picks its midpoint.
+  const mid = addDays(w.windowStart, Math.floor(daysBetween(w.windowStart, w.windowEnd) / 2));
+  return { outbound: t.slice(0, m.index).trim(), returnDate: mid };
+}
+
 export function parseIntent(utterance: string, todayIso = todayISO()): Intent {
-  const t = normalizeUtterance(utterance);
-  if (!t) return { type: "unknown", utterance };
+  const full = normalizeUtterance(utterance);
+  if (!full) return { type: "unknown", utterance };
+  const { outbound, returnDate } = parseReturn(full, todayIso);
+  const t = returnDate ? outbound : full;
 
   if (/^(stop|be quiet|quiet|shut up|cancel|never ?mind|enough|silence)\b/.test(t) && !/tracking|track/.test(t)) return { type: "stop" };
   if (/\b(help|what can you do|what can i say|commands)\b/.test(t)) return { type: "help" };
@@ -214,8 +260,7 @@ export function parseIntent(utterance: string, todayIso = todayISO()): Intent {
   // Dates
   const window = parseDateWindow(t, todayIso);
   const isSearch = /\b(search|find|look|check|get|scan|fetch|run|refresh|update|again|any flights|flights)\b/.test(t);
-  if (window && !/\b(search|find|look|check|scan)\b/.test(t)) return { type: "set_dates", ...window };
-  if (window && isSearch) return { type: "set_dates", ...window }; // UI applies dates then searches
+  if (window || returnDate) return { type: "set_dates", ...(window ?? {}), ...(returnDate ? { returnDate } : {}) }; // UI applies dates then searches
   if (sort && isSearch) return { type: "set_sort", sort };
   if (isSearch) return { type: "search" };
   if (sort) return { type: "set_sort", sort };

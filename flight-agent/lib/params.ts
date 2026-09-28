@@ -1,4 +1,4 @@
-import { endOfNextJanuary, isValidISODate, todayISO, daysBetween } from "./dates";
+import { addDays, endOfNextJanuary, humanDate, isValidISODate, todayISO, daysBetween } from "./dates";
 import type { Cabin, SearchParams, TripType } from "./types";
 
 const CABINS: Cabin[] = ["ECONOMY", "PREMIUM_ECONOMY", "BUSINESS"];
@@ -51,6 +51,9 @@ export function normalizeParams(input: unknown, now: Date = new Date()): SearchP
   // Keep scans bounded: at most a year out.
   if (daysBetween(windowStart, windowEnd) > 366) windowEnd = windowStart;
 
+  let returnDate = isValidISODate(o.returnDate) ? o.returnDate : undefined;
+  if (returnDate && daysBetween(windowStart, returnDate) <= 0) returnDate = undefined;
+
   const adults = clampInt(o.adults, 1, 9, d.adults);
   const children = clampInt(o.children, 0, 8, d.children);
   const infants = clampInt(o.infants, 0, adults, d.infants);
@@ -62,6 +65,7 @@ export function normalizeParams(input: unknown, now: Date = new Date()): SearchP
     windowStart,
     windowEnd,
     stayNights: clampInt(o.stayNights, 1, 90, d.stayNights),
+    returnDate: tripType === "return" ? returnDate : undefined,
     stepDays: clampInt(o.stepDays, 1, 31, d.stepDays),
     adults,
     children,
@@ -70,6 +74,18 @@ export function normalizeParams(input: unknown, now: Date = new Date()): SearchP
     currency: typeof o.currency === "string" && /^[A-Z]{3}$/.test(o.currency) ? o.currency : d.currency,
     maxStops: clampInt(o.maxStops, 0, 3, d.maxStops),
   };
+}
+
+/** Return date for a given departure, honouring a fixed return date when set. */
+export function returnDateFor(p: SearchParams, departureDate: string): string | undefined {
+  if (p.tripType !== "return") return undefined;
+  if (p.returnDate) return daysBetween(departureDate, p.returnDate) > 0 ? p.returnDate : undefined;
+  return addDays(departureDate, p.stayNights);
+}
+
+export function tripSummary(p: SearchParams): string {
+  if (p.tripType !== "return") return "one way";
+  return p.returnDate ? `returning ${humanDate(p.returnDate)}` : `return, ${p.stayNights} nights away`;
 }
 
 export function passengerSummary(p: SearchParams): string {

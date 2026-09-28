@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseDateWindow, parseIntent } from "@/lib/intent";
+import { parseDateWindow, parseIntent, parseReturn } from "@/lib/intent";
 
 const TODAY = "2026-09-17";
 
@@ -7,7 +7,7 @@ describe("parseDateWindow", () => {
   it("handles month names and parts", () => {
     expect(parseDateWindow("flights in december", TODAY)).toEqual({ windowStart: "2026-12-01", windowEnd: "2026-12-31" });
     expect(parseDateWindow("early january", TODAY)).toEqual({ windowStart: "2027-01-01", windowEnd: "2027-01-10" });
-    expect(parseDateWindow("late december", TODAY)).toEqual({ windowStart: "2026-12-20", windowEnd: "2026-12-31" });
+    expect(parseDateWindow("late december", TODAY)).toEqual({ windowStart: "2026-12-21", windowEnd: "2026-12-31" });
   });
   it("handles explicit ranges", () => {
     expect(parseDateWindow("between 10 december and 20 january", TODAY)).toEqual({ windowStart: "2026-12-10", windowEnd: "2027-01-20" });
@@ -22,6 +22,13 @@ describe("parseDateWindow", () => {
     expect(parseDateWindow("on 3 december", TODAY)).toEqual({ windowStart: "2026-12-03", windowEnd: "2026-12-03" });
     expect(parseDateWindow("around christmas", TODAY)).toEqual({ windowStart: "2026-12-18", windowEnd: "2026-12-26" });
   });
+  it("handles parts of a month and ranges of parts", () => {
+    expect(parseDateWindow("middle to end of november", TODAY)).toEqual({ windowStart: "2026-11-11", windowEnd: "2026-11-30" });
+    expect(parseDateWindow("from the middle to the end of november", TODAY)).toEqual({ windowStart: "2026-11-11", windowEnd: "2026-11-30" });
+    expect(parseDateWindow("early to mid december", TODAY)).toEqual({ windowStart: "2026-12-01", windowEnd: "2026-12-20" });
+    expect(parseDateWindow("the end of december", TODAY)).toEqual({ windowStart: "2026-12-21", windowEnd: "2026-12-31" });
+    expect(parseDateWindow("second half of january", TODAY)).toEqual({ windowStart: "2027-01-16", windowEnd: "2027-01-31" });
+  });
   it("returns null when there is no date", () => {
     expect(parseDateWindow("show me the cheapest", TODAY)).toBeNull();
   });
@@ -32,6 +39,14 @@ describe("parseIntent", () => {
     expect(parseIntent("search for flights", TODAY)).toEqual({ type: "search" });
     expect(parseIntent("find me the cheapest flights in december", TODAY)).toEqual({ type: "set_dates", windowStart: "2026-12-01", windowEnd: "2026-12-31" });
     expect(parseIntent("search between 10 december and 20 january", TODAY)).toEqual({ type: "set_dates", windowStart: "2026-12-10", windowEnd: "2027-01-20" });
+  });
+  it("understands a return date alongside the departure window", () => {
+    expect(parseIntent("I am looking for flights between middle to end of November returning early January next year", TODAY)).toEqual({
+      type: "set_dates", windowStart: "2026-11-11", windowEnd: "2026-11-30", returnDate: "2027-01-05",
+    });
+    expect(parseIntent("leave on 3 december and come back on 8 january", TODAY)).toEqual({ type: "set_dates", windowStart: "2026-12-03", windowEnd: "2026-12-03", returnDate: "2027-01-08" });
+    expect(parseIntent("coming back on 8 january", TODAY)).toEqual({ type: "set_dates", returnDate: "2027-01-08" });
+    expect(parseReturn("return trip staying for three weeks", TODAY)).toEqual({ outbound: "return trip staying for three weeks" });
   });
   it("recognises sorting and reading", () => {
     expect(parseIntent("show me the cheapest options", TODAY)).toEqual({ type: "read_results", count: undefined, sort: "cheapest" });

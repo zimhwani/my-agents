@@ -23,7 +23,8 @@ export function computeLayovers(segments: Segment[]): Layover[] {
     // Treat a connection as "overnight" when it spans midnight and is long enough that
     // the family is effectively stuck in the terminal (or a hotel) for the night.
     const overnight = crossesMidnight && minutes >= 240;
-    out.push({ airport: next.from, minutes, overnight });
+    const sameFlight = !!prev.flightNumber && prev.flightNumber === next.flightNumber;
+    out.push({ airport: next.from, minutes, overnight, ...(sameFlight ? { sameFlight } : {}) });
   }
   return out;
 }
@@ -44,6 +45,7 @@ export interface Penalties {
 }
 
 function layoverPenalty(l: Layover): number {
+  if (l.sameFlight) return l.minutes > 180 ? 0.15 : 0; // you stay on board or in transit; no connection risk
   let p = 0;
   if (l.minutes < 60) p = 0.6;
   else if (l.minutes < 90) p = 0.25;
@@ -57,6 +59,7 @@ function layoverPenalty(l: Layover): number {
 
 function describeLayover(l: Layover): string | null {
   const where = airportLabel(l.airport);
+  if (l.sameFlight) return null;
   if (l.minutes < 60) return `Tight connection in ${where} (${formatDuration(l.minutes)})`;
   if (l.minutes < 90) return `Short connection in ${where} (${formatDuration(l.minutes)})`;
   if (l.overnight) return `Overnight layover in ${where} (${formatDuration(l.minutes)})`;
@@ -102,7 +105,7 @@ export function penaltiesFor(offer: FlightOffer): Penalties {
 
   let stops = 0;
   for (const leg of legs) {
-    const n = leg.segments.length - 1;
+    const n = connectionCount(leg);
     if (n >= 2) {
       stops += 0.3 * (n - 1);
       warnings.push(`${n} stops ${leg === offer.outbound ? "outbound" : "on the way home"}`);
@@ -121,8 +124,13 @@ export function totalDuration(offer: FlightOffer): number {
   return offer.outbound.durationMin + (offer.inbound?.durationMin ?? 0);
 }
 
+/** Connections where you change aircraft (a same-flight-number stop does not count). */
+export function connectionCount(it: Itinerary): number {
+  return it.layovers.filter((l) => !l.sameFlight).length;
+}
+
 export function totalStops(offer: FlightOffer): number {
-  return offer.outbound.segments.length - 1 + (offer.inbound ? offer.inbound.segments.length - 1 : 0);
+  return connectionCount(offer.outbound) + (offer.inbound ? connectionCount(offer.inbound) : 0);
 }
 
 const WEIGHTS = { price: 0.4, duration: 0.25, layover: 0.15, timing: 0.1, stops: 0.1 };
@@ -154,7 +162,7 @@ export function rankOffers(offers: FlightOffer[]): RankedOffer[] {
     const badges: string[] = [];
     const smoothConnections = [o.outbound, o.inbound]
       .filter((x): x is Itinerary => !!x)
-      .every((leg) => leg.layovers.every((l) => l.minutes >= 90 && l.minutes <= 300 && !l.overnight));
+      .every((leg) => leg.layovers.every((l) => l.sameFlight || (l.minutes >= 90 && l.minutes <= 300 && !l.overnight)));
     if (pen.timing === 0 && smoothConnections) badges.push("Family-friendly times");
     return {
       ...o,

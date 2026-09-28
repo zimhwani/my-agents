@@ -18,6 +18,7 @@ const IntentSchema = z.object({
   ]),
   windowStart: z.string().nullable().describe("YYYY-MM-DD, for set_dates"),
   windowEnd: z.string().nullable().describe("YYYY-MM-DD, for set_dates"),
+  returnDate: z.string().nullable().describe("YYYY-MM-DD fixed return date, for set_dates when the user says when they come back (a span like 'early January' -> its middle day)"),
   adults: z.number().int().nullable(),
   children: z.number().int().nullable(),
   infants: z.number().int().nullable(),
@@ -42,7 +43,7 @@ function toIntent(p: z.infer<typeof IntentSchema>, utterance: string): Intent {
   const or = <T>(v: T | null): T | undefined => (v === null ? undefined : v);
   switch (p.type) {
     case "search": return { type: "search" };
-    case "set_dates": return { type: "set_dates", windowStart: or(p.windowStart), windowEnd: or(p.windowEnd) };
+    case "set_dates": return { type: "set_dates", windowStart: or(p.windowStart), windowEnd: or(p.windowEnd), returnDate: or(p.returnDate) };
     case "set_passengers": return { type: "set_passengers", adults: or(p.adults), children: or(p.children), infants: or(p.infants) };
     case "set_trip": return { type: "set_trip", tripType: or(p.tripType), stayNights: or(p.stayNights) };
     case "set_cabin": return p.cabin ? { type: "set_cabin", cabin: p.cabin } : { type: "unknown", utterance };
@@ -59,7 +60,7 @@ function toIntent(p: z.infer<typeof IntentSchema>, utterance: string): Intent {
 const SYSTEM = `You are the voice of a flight travel agent app. The user speaks; you map each utterance to exactly one intent and write a short spoken reply.
 The app tracks flights from Melbourne (MEL) to Harare (HRE). Intents:
 - search: run the fare scan now.
-- set_dates: change the departure window (always resolve to concrete YYYY-MM-DD dates; "anytime" means today to the following 31 January).
+- set_dates: change the departure window (always resolve to concrete YYYY-MM-DD dates; "anytime" means today to the following 31 January; "middle to end of November" is the 11th to the last day). If the user says when they come back ("returning early January"), set returnDate too.
 - set_passengers / set_trip / set_cabin: change travellers, one-way vs return and nights away, or cabin.
 - set_sort: reorder results (best = balanced price, travel time, interchange quality and family-friendly timings; cheapest; fastest).
 - read_results: read the top N results aloud (default 3), optionally in a given sort.
@@ -78,7 +79,7 @@ export async function interpretWithClaude(utterance: string, ctx: InterpretConte
     today: ctx.today,
     currentSearch: {
       window: `${ctx.params.windowStart} to ${ctx.params.windowEnd}`,
-      trip: ctx.params.tripType === "return" ? `return, ${ctx.params.stayNights} nights away` : "one way",
+      trip: ctx.params.tripType === "return" ? (ctx.params.returnDate ? `return, coming back ${ctx.params.returnDate}` : `return, ${ctx.params.stayNights} nights away`) : "one way",
       passengers: passengerSummary(ctx.params),
       cabin: ctx.params.cabin,
     },

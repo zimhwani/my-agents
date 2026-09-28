@@ -1,5 +1,5 @@
 "use client";
-import { passengerSummary } from "@/lib/params";
+import { passengerSummary, tripSummary } from "@/lib/params";
 import { humanDate } from "@/lib/dates";
 import type { Cabin, SearchParams, TripType } from "@/lib/types";
 
@@ -15,7 +15,7 @@ export function SearchForm({ params, onChange, onSearch, loading, datesToScan }:
     <section className="panel">
       <h2>Search</h2>
       <div className="summary-line" style={{ marginBottom: 10 }}>
-        {p.origin} → {p.destination} · {p.tripType === "return" ? `return, ${p.stayNights} nights away` : "one way"} · {passengerSummary(p)} · departing {humanDate(p.windowStart)} to {humanDate(p.windowEnd)} · {datesToScan} dates to scan
+        {p.origin} → {p.destination} · {tripSummary(p)} · {passengerSummary(p)} · departing {humanDate(p.windowStart)} to {humanDate(p.windowEnd)} · {datesToScan} dates to scan
       </div>
       <form
         className="form"
@@ -36,8 +36,11 @@ export function SearchForm({ params, onChange, onSearch, loading, datesToScan }:
             <option value="oneway">One way</option>
           </select>
         </label>
-        <label className="field">Nights away
-          <input type="number" min={1} max={90} value={p.stayNights} disabled={p.tripType !== "return"} onChange={(e) => onChange({ stayNights: Number(e.target.value) })} />
+        <label className="field">Return on
+          <input type="date" value={p.returnDate ?? ""} disabled={p.tripType !== "return"} onChange={(e) => onChange({ returnDate: e.target.value || undefined })} />
+        </label>
+        <label className="field">…or nights away
+          <input type="number" min={1} max={90} value={p.stayNights} disabled={p.tripType !== "return" || !!p.returnDate} onChange={(e) => onChange({ stayNights: Number(e.target.value) })} />
         </label>
         <label className="field">Depart from
           <input type="date" value={p.windowStart} onChange={(e) => onChange({ windowStart: e.target.value })} />
