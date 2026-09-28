@@ -42,6 +42,9 @@ const html = `<!doctype html>
 </html>
 `;
 fs.writeFileSync(path.join(dist, "page.html"), html);
+// Also as separate assets for hosts that serve static files next to their own HTML shell.
+fs.writeFileSync(path.join(dist, "app.js"), js);
+fs.writeFileSync(path.join(dist, "app.css"), css);
 
 // 2. The server. npm packages stay external as Deno "npm:" specifiers.
 const pkg = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));

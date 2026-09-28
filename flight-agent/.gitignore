@@ -10,3 +10,5 @@ data/cache/
 demo/dist/
 edge/bundle/*
 !edge/bundle/page.html
+!edge/bundle/app.js
+!edge/bundle/app.css
