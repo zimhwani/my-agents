@@ -1,0 +1,11 @@
+[Unit]
+Description=Deploy new trading-bot commits (pull, test, restart)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/bin/sh /opt/my-agents/trading-bot/deploy/autodeploy.sh
+TimeoutStartSec=900

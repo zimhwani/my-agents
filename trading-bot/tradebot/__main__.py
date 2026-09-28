@@ -223,6 +223,13 @@ def cmd_telegram_test(args) -> None:
     print("sent" if ok else "not sent (check TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID)")
 
 
+def cmd_notify(args) -> None:
+    """Send one Telegram message (used by the auto-deploy script)."""
+    s = _settings(args)
+    ok = _notifier(s).send(esc(args.text))
+    print("sent" if ok else "not sent")
+
+
 def cmd_fetch_data(args) -> None:
     s = _settings(args)
     _logging(s)
@@ -860,6 +867,8 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--days", type=int, default=3)
     p.add_argument("--symbols", nargs="*")
     p.add_argument("--strategy", help="rules file to replay instead of STRATEGY_FILE (e.g. crypto_15m.json)")
+    p = sub.add_parser("notify", help="send a Telegram message")
+    p.add_argument("--text", required=True)
     p = sub.add_parser("news", help="World Monitor: macro calendar, headlines, earnings (or --raw JSON)")
     p.add_argument("--symbols", nargs="*")
     p.add_argument("--variant", default="finance")
@@ -936,7 +945,7 @@ def main(argv: list[str] | None = None) -> None:
      "analyze": cmd_analyze, "sweep": cmd_sweep, "dashboard": cmd_dashboard,
      "fetch-gappers": cmd_fetch_gappers, "fetch-crypto": cmd_fetch_crypto,
      "crypto-explain": cmd_crypto_explain, "arb-monitor": cmd_arb_monitor, "report": cmd_report,
-     "research": cmd_research, "news": cmd_news}[args.cmd](args)
+     "research": cmd_research, "news": cmd_news, "notify": cmd_notify}[args.cmd](args)
 
 
 if __name__ == "__main__":
