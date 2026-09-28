@@ -132,7 +132,7 @@ export type Intent =
   | { type: "search" }
   | { type: "set_dates"; windowStart?: string; windowEnd?: string; returnDate?: string; returnInferred?: boolean }
   | { type: "set_step"; stepDays: number }
-  | { type: "set_stopover"; airport: string | null; nights?: number; leg?: "outbound" | "return" }
+  | { type: "set_stopover"; airport: string | null; nights?: number; leg?: "outbound" | "return"; windowStart?: string; windowEnd?: string; returnDate?: string }
   | { type: "set_passengers"; adults?: number; children?: number; infants?: number }
   | { type: "set_trip"; tripType?: TripType; stayNights?: number }
   | { type: "set_cabin"; cabin: Cabin }

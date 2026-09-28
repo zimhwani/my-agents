@@ -29,7 +29,7 @@ export function speechFor(intent: Intent): string {
     }
     case "set_stopover":
       return intent.airport
-        ? `Adding ${intent.nights ?? 3} nights in ${airportLabel(intent.airport)} on the way${intent.leg === "return" ? " home" : ""}.`
+        ? `Adding ${intent.nights ?? 3} nights in ${airportLabel(intent.airport)} on the way${intent.leg === "return" ? " home" : ""}${intent.windowStart ? `, leaving ${spokenDate(intent.windowStart)}` : ""}.`
         : "Removing the stopover.";
     case "set_step": return `Checking a date every ${intent.stepDays === 1 ? "day" : `${intent.stepDays} days`}.`;
     case "set_passengers": return "Updating the travellers.";

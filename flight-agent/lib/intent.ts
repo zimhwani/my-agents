@@ -195,16 +195,33 @@ function findAirport(t: string): string | undefined {
   return undefined;
 }
 
-/** "stop over in Dubai for 3 nights", "multi city via Doha", "no stopover". */
-export function parseStopover(t: string): Intent | null {
-  if (/\b(no|without|remove|cancel|drop|skip)\b.*\b(stop ?over|multi ?city)\b/.test(t)) return { type: "set_stopover", airport: null };
-  if (!/\b(stop ?over|stop off|multi ?city|break (?:the|our) (?:trip|journey))\b/.test(t) && !/\b\d+\s+nights?\s+in\b/.test(t)) return null;
+const NUM_WORD = "(\\d+|one|two|three|four|five|six|seven|eight|nine|ten)";
+
+/**
+ * "stop over in Dubai for 3 nights", "stop in Cape Town for 3 nights from 2 December",
+ * "spend two nights in Doha on the way home", "multi city via Doha", "no stopover".
+ */
+export function parseStopover(t: string, todayIso = todayISO()): Intent | null {
+  if (/\b(no|without|remove|cancel|drop|skip)\b.*\b(stop ?over|stop|multi ?city)\b/.test(t) && /\b(stop ?over|multi ?city)\b/.test(t)) return { type: "set_stopover", airport: null };
+  const cues =
+    /\b(stop ?over|stop off|multi ?city|break (?:the|our) (?:trip|journey)|stop(?:ping)? (?:in|at|off in)|lay ?over (?:in|at) \w+ for)\b/.test(t) ||
+    new RegExp(`\\b${NUM_WORD}\\s+(?:nights?|days?)\\s+(?:in|at)\\b`).test(t) ||
+    /\b(?:spend|stay)\b.*\b(?:nights?|days?)\b.*\bon the way\b/.test(t);
+  if (!cues) return null;
   const airport = findAirport(t.replace(/\b(melbourne|harare|mel|hre)\b/g, " "));
   if (!airport) return null;
-  const n = /(\d+|one|two|three|four|five|six|seven)\s+(nights?|days?)\b/.exec(t);
+  const n = new RegExp(`${NUM_WORD}\\s+(nights?|days?)\\b`).exec(t);
   const nights = n ? num(n[1]) : undefined;
   const leg = /\b(on the way (?:back|home)|coming (?:back|home)|way home|return(?:ing)? (?:leg|trip|journey)|on the return)\b/.test(t) ? "return" : "outbound";
-  return { type: "set_stopover", airport, ...(nights ? { nights } : {}), leg };
+  // Dates in the same sentence ("from the 2nd of December", "back on 8 January").
+  const { outbound, returnDate } = parseReturn(t, todayIso);
+  const withoutNights = outbound.replace(new RegExp(`${NUM_WORD}\\s+(?:nights?|days?)`, "g"), " ");
+  const w = parseDateWindow(withoutNights, todayIso);
+  return {
+    type: "set_stopover", airport, ...(nights ? { nights } : {}), leg,
+    ...(w ? { windowStart: w.windowStart, windowEnd: w.windowEnd } : {}),
+    ...(returnDate ? { returnDate } : {}),
+  };
 }
 
 /** Splits "... returning early january" into the outbound text and a return date. */
@@ -232,7 +249,7 @@ export function parseIntent(utterance: string, todayIso = todayISO()): Intent {
     if (n && n >= 1) return { type: "set_step", stepDays: Math.min(31, n) };
   }
 
-  const stopover = parseStopover(full);
+  const stopover = parseStopover(full, todayIso);
   if (stopover) return stopover;
   if (/^(stop|be quiet|quiet|shut up|cancel|never ?mind|enough|silence)\b/.test(t) && !/tracking|track/.test(t)) return { type: "stop" };
   if (/\b(help|what can you do|what can i say|commands)\b/.test(t)) return { type: "help" };

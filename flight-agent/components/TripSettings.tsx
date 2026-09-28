@@ -6,7 +6,7 @@ import { passengerSummary } from "@/lib/params";
 import type { Cabin, SearchParams, TripType } from "@/lib/types";
 import type { EditField } from "./UnderstoodChips";
 
-const STOPOVER_HUBS = ["DXB", "DOH", "SIN", "JNB", "AUH", "ADD", "NBO"];
+const STOPOVER_HUBS = ["CPT", "JNB", "DUR", "VFA", "DXB", "DOH", "AUH", "SIN", "MRU", "ADD", "NBO", "KGL", "WDH"];
 
 function Stepper({ id, value, min, max, onChange, label }: { id: string; value: number; min: number; max: number; onChange: (n: number) => void; label: string }) {
   return (
@@ -81,7 +81,7 @@ export function TripSettings({ params: p, onChange, onSearch, loading, datesToSc
                 <label className="field">Return on
                   <input id="return-on" type="date" value={p.returnDate ?? ""} disabled={p.tripType !== "return"} onChange={(e) => onChange({ returnDate: e.target.value || undefined })} />
                 </label>
-                <label className="field">or stay for (nights)
+                <label className="field">or stay in Harare for (nights)
                   <input id="stay-nights" type="number" min={1} max={90} value={p.stayNights} disabled={p.tripType !== "return" || !!p.returnDate} onChange={(e) => onChange({ stayNights: Number(e.target.value) })} />
                 </label>
                 <label className="field">Check a date every

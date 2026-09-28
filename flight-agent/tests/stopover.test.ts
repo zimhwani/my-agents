@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { spokenBrief, spokenUnderstood } from "@/lib/format";
 import { parseIntent } from "@/lib/intent";
-import { defaultParams, legsFor, normalizeParams } from "@/lib/params";
+import { defaultParams, legsFor, normalizeParams, returnDateFor, whyNoDates } from "@/lib/params";
 import { SampleProvider } from "@/lib/providers/sample";
 import { SerpApiProvider } from "@/lib/providers/serpapi";
 import { runScan } from "@/lib/search";
@@ -96,5 +96,35 @@ describe("short reply", () => {
   it("mentions a stopover", () => {
     const p = normalizeParams({ windowStart: "2026-11-11", windowEnd: "2026-11-30", stopover: { airport: "DXB", nights: 3 } }, NOW);
     expect(spokenUnderstood(p)).toMatch(/with 3 nights in Dubai on the way/);
+  });
+});
+
+describe("stopover follow-ups from real use", () => {
+  it("understands 'stop in Cape Town for 3 nights from the 2nd of December on the way to Harare'", () => {
+    expect(parseIntent("i want to stop in cape town for 3 nights from the 2nd of December on the way to Harare", TODAY)).toEqual({
+      type: "set_stopover", airport: "CPT", nights: 3, leg: "outbound", windowStart: "2026-12-02", windowEnd: "2026-12-02",
+    });
+    expect(parseIntent("spend two nights in Victoria Falls on the way", TODAY)).toMatchObject({ type: "set_stopover", airport: "VFA", nights: 2 });
+    expect(parseIntent("3 nights in Johannesburg on the way home", TODAY)).toMatchObject({ type: "set_stopover", airport: "JNB", nights: 3, leg: "return" });
+  });
+  it("counts a stay as nights in Harare, after an outbound stopover", async () => {
+    // The state the app was in: stay 3 nights plus 3 nights in Johannesburg on the way.
+    const p = normalizeParams({ windowStart: "2026-11-11", windowEnd: "2026-11-30", stayNights: 3, stopover: { airport: "JNB", nights: 3 } }, NOW);
+    expect(returnDateFor(p, "2026-11-11")).toBe("2026-11-18");
+    const r = await runScan(p, new SampleProvider());
+    expect(r.datesScanned).toBeGreaterThan(0);
+    expect(r.offers.length).toBeGreaterThan(0);
+  });
+  it("finds sample stopovers in Cape Town", async () => {
+    const p = normalizeParams({ windowStart: "2026-12-02", windowEnd: "2026-12-02", stopover: { airport: "CPT", nights: 3 } }, NOW);
+    const r = await runScan(p, new SampleProvider());
+    expect(r.offers.length).toBeGreaterThan(0);
+    expect(r.offers[0].outbound.layovers.some((l) => l.airport === "CPT" && l.stopover)).toBe(true);
+  });
+  it("explains a stopover that does not fit before a fixed return date", async () => {
+    const p = normalizeParams({ windowStart: "2026-11-11", windowEnd: "2026-11-30", returnDate: "2026-11-12", stopover: { airport: "JNB", nights: 3 } }, NOW);
+    expect(whyNoDates(p)).toMatch(/3 nights in Johannesburg doesn’t fit before you fly home/);
+    const r = await runScan(p, new SampleProvider());
+    expect(spokenBrief(r)).toMatch(/doesn’t fit/);
   });
 });

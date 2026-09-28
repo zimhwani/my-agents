@@ -20,7 +20,7 @@ const IntentSchema = z.object({
   windowEnd: z.string().nullable().describe("YYYY-MM-DD, for set_dates"),
   returnDate: z.string().nullable().describe("YYYY-MM-DD fixed return date, for set_dates when the user says when they come back (a span like 'early January' -> its middle day)"),
   stepDays: z.number().int().nullable().describe("For set_step: check a departure date every N days"),
-  stopoverAirport: z.string().nullable().describe("For set_stopover: IATA code of the stopover city (e.g. DXB, DOH, SIN, JNB); null to remove the stopover"),
+  stopoverAirport: z.string().nullable().describe("For set_stopover: IATA code of the stopover city (e.g. DXB, DOH, SIN, JNB, CPT, VFA); null to remove the stopover. If the user also gives dates, fill windowStart/windowEnd/returnDate too."),
   stopoverNights: z.number().int().nullable().describe("For set_stopover: nights at the stopover"),
   stopoverLeg: z.enum(["outbound", "return"]).nullable().describe("For set_stopover: stop on the way there (outbound) or on the way home (return)"),
   adults: z.number().int().nullable(),
@@ -48,7 +48,7 @@ function toIntent(p: z.infer<typeof IntentSchema>, utterance: string): Intent {
   switch (p.type) {
     case "search": return { type: "search" };
     case "set_dates": return { type: "set_dates", windowStart: or(p.windowStart), windowEnd: or(p.windowEnd), returnDate: or(p.returnDate) };
-    case "set_stopover": return { type: "set_stopover", airport: p.stopoverAirport, nights: or(p.stopoverNights), leg: or(p.stopoverLeg) };
+    case "set_stopover": return { type: "set_stopover", airport: p.stopoverAirport, nights: or(p.stopoverNights), leg: or(p.stopoverLeg), windowStart: or(p.windowStart), windowEnd: or(p.windowEnd), returnDate: or(p.returnDate) };
     case "set_step": return p.stepDays ? { type: "set_step", stepDays: p.stepDays } : { type: "unknown", utterance };
     case "set_passengers": return { type: "set_passengers", adults: or(p.adults), children: or(p.children), infants: or(p.infants) };
     case "set_trip": return { type: "set_trip", tripType: or(p.tripType), stayNights: or(p.stayNights) };

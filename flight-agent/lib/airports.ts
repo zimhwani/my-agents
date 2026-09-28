@@ -23,6 +23,13 @@ export const AIRPORTS: Record<string, Airport> = {
   BKK: { code: "BKK", city: "Bangkok", name: "Suvarnabhumi", country: "Thailand", tz: "Asia/Bangkok" },
   HKG: { code: "HKG", city: "Hong Kong", name: "Hong Kong International", country: "China", tz: "Asia/Hong_Kong" },
   KUL: { code: "KUL", city: "Kuala Lumpur", name: "KLIA", country: "Malaysia", tz: "Asia/Kuala_Lumpur" },
+  CPT: { code: "CPT", city: "Cape Town", name: "Cape Town International", country: "South Africa", tz: "Africa/Johannesburg" },
+  DUR: { code: "DUR", city: "Durban", name: "King Shaka International", country: "South Africa", tz: "Africa/Johannesburg" },
+  VFA: { code: "VFA", city: "Victoria Falls", name: "Victoria Falls Airport", country: "Zimbabwe", tz: "Africa/Harare" },
+  BUQ: { code: "BUQ", city: "Bulawayo", name: "Joshua Mqabuko Nkomo International", country: "Zimbabwe", tz: "Africa/Harare" },
+  MRU: { code: "MRU", city: "Mauritius", name: "Sir Seewoosagur Ramgoolam International", country: "Mauritius", tz: "Indian/Mauritius" },
+  WDH: { code: "WDH", city: "Windhoek", name: "Hosea Kutako International", country: "Namibia", tz: "Africa/Windhoek" },
+  KGL: { code: "KGL", city: "Kigali", name: "Kigali International", country: "Rwanda", tz: "Africa/Kigali" },
 };
 
 export const CARRIERS: Record<string, string> = {
@@ -35,6 +42,8 @@ export const CARRIERS: Record<string, string> = {
   ET: "Ethiopian Airlines",
   KQ: "Kenya Airways",
   "4Z": "Airlink",
+  MK: "Air Mauritius",
+  WB: "RwandAir",
   FA: "FlySafair",
   UM: "Air Zimbabwe",
   MH: "Malaysia Airlines",

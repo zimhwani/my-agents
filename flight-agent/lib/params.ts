@@ -128,7 +128,34 @@ export function stopoverSummary(s: Stopover | undefined): string {
 export function returnDateFor(p: SearchParams, departureDate: string): string | undefined {
   if (p.tripType !== "return") return undefined;
   if (p.returnDate) return daysBetween(departureDate, p.returnDate) > 0 ? p.returnDate : undefined;
-  return addDays(departureDate, p.stayNights);
+  // "Stay N nights" means nights at the destination, so an outbound stopover pushes the return out.
+  const extra = p.stopover?.leg === "outbound" ? p.stopover.nights + 1 : 0;
+  return addDays(departureDate, p.stayNights + extra);
+}
+
+/** Why no departure date could be searched, in plain words (null when some can). */
+export function whyNoDates(p: SearchParams): string | null {
+  const dates = sampleDatesFor(p);
+  if (dates.length === 0) return "That date window is empty. Pick a later end date.";
+  const usable = dates.filter((d) => {
+    const ret = returnDateFor(p, d);
+    if (p.tripType === "return" && !ret) return false;
+    return legsFor(p, d, ret) !== null;
+  });
+  if (usable.length) return null;
+  if (p.stopover && p.returnDate) {
+    return `${p.stopover.nights} nights in ${airportLabel(p.stopover.airport)} doesn’t fit before you fly home on ${humanDate(p.returnDate)}. Choose a later return date or fewer nights.`;
+  }
+  if (p.returnDate) return `Your return date, ${humanDate(p.returnDate)}, is before every departure date. Choose a later return date.`;
+  return "None of those dates work. Try a wider window.";
+}
+
+function sampleDatesFor(p: SearchParams): string[] {
+  const out: string[] = [];
+  const step = Math.max(1, p.stepDays);
+  for (let d = p.windowStart; daysBetween(d, p.windowEnd) >= 0; d = addDays(d, step)) out.push(d);
+  if (out.length && out[out.length - 1] !== p.windowEnd) out.push(p.windowEnd);
+  return out;
 }
 
 export function tripSummary(p: SearchParams): string {

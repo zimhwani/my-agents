@@ -213,6 +213,9 @@ function buildSegments(startDate: string, legs: LegTemplate[]): Segment[] {
  * does not pass through the hub.
  */
 function legWithStopover(startDate: string, legs: LegTemplate[], hub: string, nights: number): Segment[] | null {
+  // No sample routing touches this city: pretend the Johannesburg routings connect there instead.
+  const passes = ROUTINGS.some((r) => [...r.outbound, ...r.inbound].some((l) => l.to === hub));
+  if (!passes) legs = legs.map((l) => ({ ...l, from: l.from === "JNB" ? hub : l.from, to: l.to === "JNB" ? hub : l.to }));
   const k = legs.findIndex((l) => l.to === hub);
   if (k < 0 || k === legs.length - 1) return null;
   const first = buildSegments(startDate, legs.slice(0, k + 1));

@@ -14,7 +14,7 @@ import { apiHeaders, apiUrl, loadKeys, saveKeys, type StoredKeys } from "@/lib/c
 import { sampleDates, spokenDate, todayISO } from "@/lib/dates";
 import { money, spokenBrief, spokenMoney, spokenOfferDetail, spokenScanSummary } from "@/lib/format";
 import { HELP_TEXT, parseIntent } from "@/lib/intent";
-import { defaultParams, legsFor, normalizeParams, returnDateFor } from "@/lib/params";
+import { defaultParams, legsFor, normalizeParams, returnDateFor, whyNoDates } from "@/lib/params";
 import { sortOffers } from "@/lib/rank";
 import type { Intent, InterpretResponse, ScanResult, SearchParams, SortMode } from "@/lib/types";
 
@@ -115,6 +115,7 @@ export default function Page() {
   }, [result, sort, dateFilter]);
 
   const datesCount = datesToSearch(params);
+  const clash = datesCount === 0 ? whyNoDates(params) : null;
   const isSample = status?.isSample ?? result?.isSample ?? true;
 
   /** Run the scan with the given params and record a tracking snapshot. */
@@ -198,9 +199,12 @@ export default function Page() {
       case "set_step":
         return searchWith(normalizeParams({ ...current, stepDays: intent.stepDays }));
       case "set_stopover":
+        if (intent.returnDate) setReturnInferred(false);
         return searchWith(normalizeParams({
           ...current,
           stopover: intent.airport ? { airport: intent.airport, nights: intent.nights ?? current.stopover?.nights ?? 3, leg: intent.leg ?? "outbound" } : undefined,
+          ...(intent.windowStart ? { windowStart: intent.windowStart, windowEnd: intent.windowEnd ?? intent.windowStart } : {}),
+          ...(intent.returnDate ? { returnDate: intent.returnDate, tripType: "return" as const } : {}),
         }));
       case "set_passengers":
         return searchWith(normalizeParams({ ...current, adults: intent.adults ?? current.adults, children: intent.children ?? current.children, infants: intent.infants ?? current.infants }));
@@ -328,6 +332,12 @@ export default function Page() {
       />
 
       {priceAlert && <div className="alert-good" role="status">{priceAlert}</div>}
+      {clash && (
+        <div className="inline-error" role="alert">
+          <span>{clash}</span>
+          <button className="chip" onClick={() => openEditor(params.stopover ? "stopover" : "when")}>Fix it</button>
+        </div>
+      )}
 
       <TripSettings
         params={params}

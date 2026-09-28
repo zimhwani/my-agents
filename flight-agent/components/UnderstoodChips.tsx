@@ -19,7 +19,7 @@ export function UnderstoodChips({ params: p, datesCount, returnInferred, onEdit 
   ];
   if (p.tripType === "oneway") chips.push({ k: "Trip", v: "One way", field: "when" });
   else if (p.returnDate) chips.push({ k: "Back", v: shortDay(p.returnDate), field: "when", inferred: returnInferred });
-  else chips.push({ k: "Stay", v: `${p.stayNights} nights`, field: "when" });
+  else chips.push({ k: `In ${airportLabel(p.destination)}`, v: `${p.stayNights} nights`, field: "when" });
   if (p.stopover) chips.push({ k: p.stopover.leg === "return" ? "Stopover home" : "Stopover", v: `${airportLabel(p.stopover.airport)} · ${p.stopover.nights} nights`, field: "stopover" });
   chips.push({ k: "Travellers", v: passengerSummary(p), field: "who" });
   chips.push({ k: "Cabin", v: p.cabin === "PREMIUM_ECONOMY" ? "Premium economy" : p.cabin === "BUSINESS" ? "Business" : "Economy", field: "options" });

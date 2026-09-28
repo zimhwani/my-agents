@@ -1,6 +1,7 @@
 import { airportLabel } from "./airports";
 import { daysBetween, formatDuration, formatTime, humanDate, parseISODate, spokenDate, spokenDuration } from "./dates";
 import { sortOffers } from "./rank";
+import { whyNoDates } from "./params";
 import type { Itinerary, RankedOffer, ScanResult, SearchParams, SortMode } from "./types";
 
 export function money(n: number, currency = "AUD"): string {
@@ -71,9 +72,16 @@ export function travellersSpoken(p: SearchParams): string {
 /** One sentence: what the agent understood. */
 export function spokenUnderstood(p: SearchParams): string {
   const when = p.windowStart === p.windowEnd ? spokenDate(p.windowStart) : dateRange(p.windowStart, p.windowEnd, true);
-  const back = p.tripType !== "return" ? ", one way" : p.returnDate ? `, back on ${spokenDate(p.returnDate)}` : `, staying ${p.stayNights} nights`;
-  const so = p.stopover ? `, with ${p.stopover.nights} night${p.stopover.nights === 1 ? "" : "s"} in ${airportLabel(p.stopover.airport)} on the way${p.stopover.leg === "return" ? " home" : ""}` : "";
-  return `Looking at ${when}${back}${so}, for ${travellersSpoken(p)}.`;
+  const nights = (n: number) => `${n} night${n === 1 ? "" : "s"}`;
+  const so = p.stopover ? `, with ${nights(p.stopover.nights)} in ${airportLabel(p.stopover.airport)} on the way${p.stopover.leg === "return" ? " home" : ""}` : "";
+  const back = p.tripType !== "return"
+    ? ", one way"
+    : p.returnDate
+      ? `, back on ${spokenDate(p.returnDate)}`
+      : p.stopover ? ` and ${nights(p.stayNights)} in ${airportLabel(p.destination)}` : `, staying ${nights(p.stayNights)}`;
+  return p.stopover && !p.returnDate && p.tripType === "return"
+    ? `Looking at ${when}${so}${back}, for ${travellersSpoken(p)}.`
+    : `Looking at ${when}${back}${so}, for ${travellersSpoken(p)}.`;
 }
 
 /**
@@ -84,6 +92,8 @@ export function spokenBrief(result: ScanResult): string {
   const p = result.params;
   const understood = spokenUnderstood(p);
   if (!result.offers.length) {
+    const why = result.datesScanned === 0 ? whyNoDates(p) : null;
+    if (why) return why;
     return `I found nothing for ${dateRange(p.windowStart, p.windowEnd, true)}. Try allowing more stops or a wider window.`;
   }
   const cheapest = sortOffers(result.offers, "cheapest")[0];
