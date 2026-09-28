@@ -87,10 +87,10 @@ describe("short reply", () => {
     const p = { ...defaultParams(NOW), windowStart: "2026-11-11", windowEnd: "2026-11-30", returnDate: "2027-01-05" };
     const r = await runScan(p, new SampleProvider());
     const text = spokenBrief(r);
-    expect(text).toMatch(/^Looking at departures from 11 to 30 November, back on Tuesday,? 5 January, for two adults and two children\./);
-    expect(text).toMatch(/read the top three/);
-    expect(text).toMatch(/sample fares/);
-    expect(text.split(/\s+/).length).toBeLessThan(60);
+    expect(text).toMatch(/^Looking at 11 to 30 November, back on Tuesday,? 5 January, for two adults and two children\./);
+    expect(text).toMatch(/Cheapest/);
+    expect(text).toMatch(/Sample fares/);
+    expect(text.split(/\s+/).length).toBeLessThan(45);
     expect(text).not.toMatch(/\d\d:\d\d/);
   });
   it("mentions a stopover", () => {

@@ -69,7 +69,7 @@ export function useSpeech(onFinal: (utterance: string) => void, opts: { lang?: s
   const start = useCallback(() => {
     const Ctor = getRecognition();
     if (!Ctor) {
-      setError("Voice input is not supported in this browser. Try Chrome, Edge or Safari.");
+      setError("Voice needs Chrome, Edge or Safari. You can still type everything.");
       return;
     }
     if (recRef.current) recRef.current.abort();
@@ -99,7 +99,7 @@ export function useSpeech(onFinal: (utterance: string) => void, opts: { lang?: s
     };
     rec.onerror = (ev) => {
       if (ev.error === "no-speech" || ev.error === "aborted") return;
-      setError(ev.error === "not-allowed" ? "Microphone access was blocked. Allow the microphone and try again." : `Voice error: ${ev.error}`);
+      setError(ev.error === "not-allowed" ? "I can’t hear you. Allow microphone access in your browser, then tap again." : `Voice error: ${ev.error}`);
       wantListening.current = false;
     };
     rec.onend = () => {

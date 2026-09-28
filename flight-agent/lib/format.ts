@@ -70,7 +70,7 @@ export function travellersSpoken(p: SearchParams): string {
 
 /** One sentence: what the agent understood. */
 export function spokenUnderstood(p: SearchParams): string {
-  const when = p.windowStart === p.windowEnd ? `departures on ${spokenDate(p.windowStart)}` : `departures from ${dateRange(p.windowStart, p.windowEnd, true)}`;
+  const when = p.windowStart === p.windowEnd ? spokenDate(p.windowStart) : dateRange(p.windowStart, p.windowEnd, true);
   const back = p.tripType !== "return" ? ", one way" : p.returnDate ? `, back on ${spokenDate(p.returnDate)}` : `, staying ${p.stayNights} nights`;
   const so = p.stopover ? `, with ${p.stopover.nights} night${p.stopover.nights === 1 ? "" : "s"} in ${airportLabel(p.stopover.airport)} on the way${p.stopover.leg === "return" ? " home" : ""}` : "";
   return `Looking at ${when}${back}${so}, for ${travellersSpoken(p)}.`;
@@ -91,10 +91,10 @@ export function spokenBrief(result: ScanResult): string {
   const fare = (o: RankedOffer) => `${money(o.price.total, o.price.currency)} with ${o.validatingCarrierName}`;
   const headline =
     cheapest.id === best.id
-      ? `The cheapest, ${fare(cheapest)} on ${spokenDate(cheapest.departureDate)}, is also my top pick.`
-      : `Cheapest is ${fare(cheapest)} on ${spokenDate(cheapest.departureDate)}; best overall is ${fare(best)}.`;
-  const sample = result.isSample ? " These are sample fares." : "";
-  return `${understood} ${headline} Say "read the top three" for details.${sample}`;
+      ? `Cheapest and best: ${fare(cheapest)}, leaving ${spokenDate(cheapest.departureDate)}.`
+      : `Cheapest is ${fare(cheapest)}, leaving ${spokenDate(cheapest.departureDate)}. Best overall is ${fare(best)}.`;
+  const sample = result.isSample ? " (Sample fares.)" : "";
+  return `${understood} ${headline}${sample}`;
 }
 
 /** One sentence per offer for "read me the top three". */

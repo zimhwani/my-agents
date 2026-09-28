@@ -37,7 +37,8 @@ Google Flights lists the round-trip fare against each outbound option, so for re
 - **Scans a date window, not a single date.** Default: today → 31 January, every 7 days (edit "check every" for finer coverage). Return trips use a configurable number of nights away; one-way is a toggle or a voice command.
 - **Ranks three ways.** *Cheapest*, *fastest*, and *best overall*, which scores each offer on price (40%), total travel time (25%), interchange quality (15%: tight < 60 min, long > 6 h and overnight layovers are penalised), timing (10%: departures before 06:00 and arrivals between 23:00–06:00 are penalised) and number of stops (10%). Badges and warnings ("Tight connection in Doha (45m)", "Overnight layover in Dubai", "Family-friendly times") explain each result.
 - **Price calendar.** Cheapest fare per departure date; click a date to filter.
-- **Voice.** Push-to-talk or "keep listening" mode, spoken summaries of the results, details of any option by number, and a typed fallback.
+- **Voice.** Push-to-talk or hands-free mode, a short spoken reply (what I understood, the headline fares), "what I understood" chips you can tap to correct, details of any option by number, and a typed fallback. On phones the mic lives in a bottom bar.
+- **Multi-city with a stopover.** Break the trip for a few nights in Dubai, Doha, Singapore, Johannesburg, Abu Dhabi, Addis Ababa or Nairobi, on the way there or home. Live fares are priced by Google Flights as one multi-city itinerary.
 - **Tracking.** "Start tracking prices every 6 hours" re-scans while the tab is open, keeps a history in the browser and announces price drops. For always-on tracking use the headless scan:
 
 ```bash
@@ -57,7 +58,9 @@ The repository also ships `.github/workflows/flight-agent-track.yml`, a daily Gi
 | "search early December" / "between 10 December and 20 January" / "around Christmas" | Sets the window and scans |
 | "show me the cheapest" / "what's the fastest" / "best options" | Re-sorts and reads the top three |
 | "read me the top five" | Reads N results |
-| "tell me about option two" | Opens and reads that option's legs and layovers |
+| "tell me about option two" | Opens that option's timeline and reads a short summary |
+| "stop over in Dubai for 3 nights" / "stopover in Singapore on the way home" / "no stopover" | Multi-city trip with a stopover |
+| "check every 2 days" | Checks more departure dates (more searches) |
 | "two adults and two children" / "just the two of us" | Changes travellers |
 | "one way" / "return staying three weeks" | Trip type and length |
 | "fly business" | Cabin |

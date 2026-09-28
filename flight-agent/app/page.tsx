@@ -1,37 +1,51 @@
 "use client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Conversation, VoiceBar } from "@/components/Conversation";
+import { PlaneIcon, SettingsIcon } from "@/components/Icons";
 import { PriceCalendar } from "@/components/PriceCalendar";
-import { Results } from "@/components/Results";
-import { SearchForm } from "@/components/SearchForm";
-import { Tracker, type Snapshot } from "@/components/Tracker";
-import { VoicePanel } from "@/components/VoicePanel";
-import { KeysPanel } from "@/components/KeysPanel";
+import { Results, ResultsSkeleton } from "@/components/Results";
+import { SettingsDrawer, type Theme } from "@/components/SettingsDrawer";
+import { SummaryStrip } from "@/components/SummaryStrip";
+import { ScanNotes, Tracker, type Snapshot } from "@/components/Tracker";
+import { TripSettings } from "@/components/TripSettings";
+import { UnderstoodChips, type EditField } from "@/components/UnderstoodChips";
 import { useSpeech } from "@/hooks/useSpeech";
-import { airportLabel } from "@/lib/airports";
 import { apiHeaders, apiUrl, loadKeys, saveKeys, type StoredKeys } from "@/lib/client";
-import { formatTime, sampleDates, spokenDate, spokenDuration, todayISO } from "@/lib/dates";
-import { routeLabel, spokenMoney, spokenOffer, spokenScanSummary } from "@/lib/format";
+import { sampleDates, spokenDate, todayISO } from "@/lib/dates";
+import { money, spokenBrief, spokenMoney, spokenOfferDetail, spokenScanSummary } from "@/lib/format";
 import { HELP_TEXT, parseIntent } from "@/lib/intent";
-import { defaultParams, normalizeParams } from "@/lib/params";
+import { defaultParams, legsFor, normalizeParams, returnDateFor } from "@/lib/params";
 import { sortOffers } from "@/lib/rank";
-import type { Intent, InterpretResponse, RankedOffer, ScanResult, SearchParams, SortMode } from "@/lib/types";
+import type { Intent, InterpretResponse, ScanResult, SearchParams, SortMode } from "@/lib/types";
 
 const HISTORY_KEY = "flight-agent:history";
 const PARAMS_KEY = "flight-agent:params";
 const TRACK_KEY = "flight-agent:tracking";
+const PREFS_KEY = "flight-agent:prefs";
 
 interface Status { provider: "serpapi" | "sample"; isSample: boolean; liveSource: string | null; claude: boolean }
+interface Prefs { theme: Theme; handsFree: boolean; speakReplies: boolean }
+
+const GREETING = "When would you like to fly to Harare? Try “mid to late November, back early January”.";
 
 function load<T>(key: string, fallback: T): T {
   try {
     const raw = localStorage.getItem(key);
-    return raw ? (JSON.parse(raw) as T) : fallback;
+    return raw ? { ...fallback, ...(JSON.parse(raw) as T) } : fallback;
   } catch {
     return fallback;
   }
 }
 function save(key: string, value: unknown) {
   try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* private mode etc. */ }
+}
+
+/** Departure dates that will actually be searched (stopovers and fixed returns can rule some out). */
+function datesToSearch(p: SearchParams): number {
+  return sampleDates(p.windowStart, p.windowEnd, p.stepDays).filter((d) => {
+    if (p.tripType === "return" && p.returnDate && !returnDateFor(p, d)) return false;
+    return legsFor(p, d, returnDateFor(p, d)) !== null;
+  }).length;
 }
 
 export default function Page() {
@@ -44,29 +58,37 @@ export default function Page() {
   const [dateFilter, setDateFilter] = useState<string | null>(null);
   const [status, setStatus] = useState<Status | null>(null);
   const [heard, setHeard] = useState("");
-  const [reply, setReply] = useState("Say “search for flights” to begin.");
+  const [reply, setReply] = useState(GREETING);
   const [busy, setBusy] = useState(false);
-  const [continuous, setContinuous] = useState(false);
   const [history, setHistory] = useState<Snapshot[]>([]);
   const [tracking, setTracking] = useState<{ enabled: boolean; intervalHours: number }>({ enabled: false, intervalHours: 6 });
   const [nextRunAt, setNextRunAt] = useState<number | null>(null);
   const [priceAlert, setPriceAlert] = useState<string | null>(null);
   const [keys, setKeys] = useState<StoredKeys>({ serpApiKey: "", anthropicKey: "" });
+  const [prefs, setPrefs] = useState<Prefs>({ theme: "system", handsFree: false, speakReplies: true });
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [editFocus, setEditFocus] = useState<EditField | null>(null);
+  const [returnInferred, setReturnInferred] = useState(false);
+  const [lastUtterance, setLastUtterance] = useState<string | null>(null);
+
   const keysRef = useRef(keys);
   keysRef.current = keys;
-
   const paramsRef = useRef(params);
   paramsRef.current = params;
   const resultRef = useRef(result);
   resultRef.current = result;
   const sortRef = useRef(sort);
   sortRef.current = sort;
+  const prefsRef = useRef(prefs);
+  prefsRef.current = prefs;
 
   // Restore per-browser state.
   useEffect(() => {
     setHistory(load<Snapshot[]>(HISTORY_KEY, []));
     setParams(normalizeParams(load(PARAMS_KEY, {})));
     setTracking(load(TRACK_KEY, { enabled: false, intervalHours: 6 }));
+    setPrefs(load(PREFS_KEY, { theme: "system", handsFree: false, speakReplies: true }));
     setKeys(loadKeys());
   }, []);
   useEffect(() => {
@@ -74,8 +96,15 @@ export default function Page() {
   }, [keys]);
   useEffect(() => save(PARAMS_KEY, params), [params]);
   useEffect(() => save(TRACK_KEY, tracking), [tracking]);
+  useEffect(() => {
+    save(PREFS_KEY, prefs);
+    const root = document.documentElement;
+    if (prefs.theme === "system") delete root.dataset.theme;
+    else root.dataset.theme = prefs.theme;
+  }, [prefs]);
 
   const updateParams = useCallback((patch: Partial<SearchParams>) => {
+    if ("returnDate" in patch) setReturnInferred(false);
     setParams((p) => normalizeParams({ ...p, ...patch }));
   }, []);
 
@@ -85,9 +114,10 @@ export default function Page() {
     return sortOffers(pool, sort);
   }, [result, sort, dateFilter]);
 
-  const datesToScan = sampleDates(params.windowStart, params.windowEnd, params.stepDays).length;
+  const datesCount = datesToSearch(params);
+  const isSample = status?.isSample ?? result?.isSample ?? true;
 
-  /** Run the scan with the given params and record a tracking snapshot. Returns the result. */
+  /** Run the scan with the given params and record a tracking snapshot. */
   const runSearch = useCallback(async (p: SearchParams = paramsRef.current): Promise<ScanResult | null> => {
     setLoading(true);
     setError(null);
@@ -105,13 +135,14 @@ export default function Page() {
         provider: json.provider,
         isSample: json.isSample,
         window: [p.windowStart, p.windowEnd],
+        key: JSON.stringify([p.origin, p.destination, p.windowStart, p.windowEnd, p.tripType, p.returnDate ?? p.stayNights, p.stopover ?? null, p.adults, p.children, p.infants, p.cabin, p.maxStops, p.stepDays]),
         cheapest: cheapest ? { total: cheapest.price.total, currency: cheapest.price.currency, date: cheapest.departureDate, carrier: cheapest.validatingCarrierName } : null,
         best: best ? { total: best.price.total, currency: best.price.currency, date: best.departureDate, carrier: best.validatingCarrierName } : null,
       };
       setHistory((h) => {
-        const prev = [...h].reverse().find((s) => s.window[0] === snap.window[0] && s.window[1] === snap.window[1] && s.cheapest);
+        const prev = [...h].reverse().find((s) => s.key === snap.key && s.cheapest && s.isSample === snap.isSample);
         if (prev?.cheapest && snap.cheapest && snap.cheapest.total < prev.cheapest.total) {
-          setPriceAlert(`Price drop: cheapest fare is now ${spokenMoney(snap.cheapest.total, snap.cheapest.currency)}, down from ${spokenMoney(prev.cheapest.total, prev.cheapest.currency)}.`);
+          setPriceAlert(`Good news: the cheapest fare dropped to ${money(snap.cheapest.total, snap.cheapest.currency)}, down from ${money(prev.cheapest.total, prev.cheapest.currency)}.`);
         } else setPriceAlert(null);
         const next = [...h, snap].slice(-200);
         save(HISTORY_KEY, next);
@@ -119,12 +150,14 @@ export default function Page() {
       });
       return json;
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(e instanceof Error ? `The search didn’t work: ${e.message}` : "The search didn’t work.");
       return null;
     } finally {
       setLoading(false);
     }
   }, []);
+
+  const speakRef = useRef<((t: string) => Promise<void>) | null>(null);
 
   // Tracking loop: re-run while the tab is open.
   useEffect(() => {
@@ -134,90 +167,74 @@ export default function Page() {
     const id = setInterval(() => {
       runSearch().then((r) => {
         setNextRunAt(Date.now() + ms);
-        if (r) {
-          const cheapest = sortOffers(r.offers, "cheapest")[0];
-          if (cheapest) speakRef.current?.(`Tracking update: cheapest fare is ${spokenMoney(cheapest.price.total, cheapest.price.currency)} on ${spokenDate(cheapest.departureDate)}.`);
-        }
+        const cheapest = r ? sortOffers(r.offers, "cheapest")[0] : undefined;
+        if (cheapest && prefsRef.current.speakReplies) speakRef.current?.(`Tracking update: cheapest fare is ${spokenMoney(cheapest.price.total, cheapest.price.currency)} on ${spokenDate(cheapest.departureDate)}.`);
       });
     }, ms);
     return () => clearInterval(id);
   }, [tracking, runSearch]);
 
-  const speakRef = useRef<((t: string) => Promise<void>) | null>(null);
-
-  const describeOffer = (o: RankedOffer, position: number): string => {
-    const out = o.outbound;
-    const segs = out.segments.map((s) => `${s.carrierName} ${s.flightNumber} from ${airportLabel(s.from)} at ${formatTime(s.departure)} to ${airportLabel(s.to)} at ${formatTime(s.arrival)}`).join(", then ");
-    const lay = out.layovers.map((l) => `${spokenDuration(l.minutes)} in ${airportLabel(l.airport)}${l.overnight ? ", overnight" : ""}`).join(" and ");
-    const back = o.inbound ? ` Coming home on ${spokenDate(o.returnDate!)} ${routeLabel(o.inbound)}, ${spokenDuration(o.inbound.durationMin)}.` : "";
-    return `${spokenOffer(o, position)} Outbound: ${segs}.${lay ? ` Layover ${lay}.` : ""}${back}${o.badges.length ? ` Tags: ${o.badges.join(", ")}.` : ""}`;
-  };
-
   /** Apply an intent to the app state and return what to say. */
   const applyIntent = useCallback(async (intent: Intent, spoken: string): Promise<string> => {
     const current = paramsRef.current;
-    const readTop = (r: ScanResult | null, mode: SortMode, count = 3) => {
-      if (!r) return "There are no results yet. Say search for flights first.";
-      const list = sortOffers(r.offers, mode);
-      return spokenScanSummary(r, list, mode, count);
+    const searchWith = async (next: SearchParams) => {
+      setParams(next);
+      const r = await runSearch(next);
+      return r ? spokenBrief(r) : "The search didn’t work. Say “try again” or check your connection.";
     };
     switch (intent.type) {
-      case "search": {
-        const r = await runSearch(current);
-        return r ? readTop(r, sortRef.current) : "The search failed. Please try again.";
-      }
+      case "search":
+        return searchWith(current);
       case "set_dates": {
-        const next = normalizeParams({
+        setReturnInferred(!!intent.returnInferred);
+        return searchWith(normalizeParams({
           ...current,
           windowStart: intent.windowStart ?? current.windowStart,
           windowEnd: intent.windowEnd ?? current.windowEnd,
           returnDate: intent.returnDate ?? (intent.windowStart ? undefined : current.returnDate),
           tripType: intent.returnDate ? "return" : current.tripType,
-        });
-        setParams(next);
-        const r = await runSearch(next);
-        return r ? `${spoken} ${readTop(r, sortRef.current)}` : "The search failed. Please try again.";
+        }));
       }
-      case "set_passengers": {
-        const next = normalizeParams({ ...current, adults: intent.adults ?? current.adults, children: intent.children ?? current.children, infants: intent.infants ?? current.infants });
-        setParams(next);
-        const r = await runSearch(next);
-        return r ? `Now searching for ${next.adults} adults and ${next.children} children. ${readTop(r, sortRef.current)}` : spoken;
-      }
-      case "set_trip": {
-        const next = normalizeParams({ ...current, tripType: intent.tripType ?? current.tripType, stayNights: intent.stayNights ?? current.stayNights });
-        setParams(next);
-        const r = await runSearch(next);
-        return r ? `${spoken} ${readTop(r, sortRef.current)}` : spoken;
-      }
-      case "set_cabin": {
-        const next = normalizeParams({ ...current, cabin: intent.cabin });
-        setParams(next);
-        const r = await runSearch(next);
-        return r ? `${spoken} ${readTop(r, sortRef.current)}` : spoken;
-      }
-      case "set_sort":
+      case "set_step":
+        return searchWith(normalizeParams({ ...current, stepDays: intent.stepDays }));
+      case "set_stopover":
+        return searchWith(normalizeParams({
+          ...current,
+          stopover: intent.airport ? { airport: intent.airport, nights: intent.nights ?? current.stopover?.nights ?? 3, leg: intent.leg ?? "outbound" } : undefined,
+        }));
+      case "set_passengers":
+        return searchWith(normalizeParams({ ...current, adults: intent.adults ?? current.adults, children: intent.children ?? current.children, infants: intent.infants ?? current.infants }));
+      case "set_trip":
+        return searchWith(normalizeParams({ ...current, tripType: intent.tripType ?? current.tripType, stayNights: intent.stayNights ?? current.stayNights, ...(intent.stayNights ? { returnDate: undefined } : {}) }));
+      case "set_cabin":
+        return searchWith(normalizeParams({ ...current, cabin: intent.cabin }));
+      case "set_sort": {
         setSort(intent.sort);
         setDateFilter(null);
-        return readTop(resultRef.current, intent.sort);
+        const r = resultRef.current;
+        return r ? spokenScanSummary(r, sortOffers(r.offers, intent.sort), intent.sort, 3) : "There are no results yet. Tell me when you’d like to fly.";
+      }
       case "read_results": {
         const mode = intent.sort ?? sortRef.current;
         if (intent.sort) setSort(intent.sort);
-        return readTop(resultRef.current, mode, intent.count ?? 3);
+        const r = resultRef.current;
+        return r ? spokenScanSummary(r, sortOffers(r.offers, mode), mode, intent.count ?? 3) : "There are no results yet. Tell me when you’d like to fly.";
       }
       case "select_offer": {
-        const list = resultRef.current ? sortOffers(dateFilter ? resultRef.current.offers.filter((o) => o.departureDate === dateFilter) : resultRef.current.offers, sortRef.current) : [];
+        const r = resultRef.current;
+        const list = r ? sortOffers(r.offers, sortRef.current) : [];
         const o = list[intent.index - 1];
         if (!o) return `There is no option ${intent.index}.`;
+        setDateFilter(null);
         setSelectedId(o.id);
-        setTimeout(() => document.getElementById(`offer-${intent.index}`)?.scrollIntoView({ behavior: "smooth", block: "center" }), 50);
-        return describeOffer(o, intent.index);
+        setTimeout(() => document.getElementById(`offer-${intent.index}`)?.scrollIntoView({ behavior: "smooth", block: "center" }), 60);
+        return spokenOfferDetail(o, intent.index);
       }
       case "track":
         setTracking((t) => ({ enabled: intent.enabled, intervalHours: intent.intervalHours ?? t.intervalHours }));
         if (intent.enabled && !resultRef.current) await runSearch(current);
         return intent.enabled
-          ? `Tracking prices every ${intent.intervalHours ?? tracking.intervalHours} hours while this page is open. I will tell you when the cheapest fare drops.`
+          ? `I’ll re-check every ${intent.intervalHours ?? tracking.intervalHours} hours while this page is open, and tell you when the cheapest fare drops.`
           : "Stopped tracking prices.";
       case "help":
         return HELP_TEXT;
@@ -226,10 +243,12 @@ export default function Page() {
       default:
         return spoken;
     }
-  }, [runSearch, dateFilter, tracking.intervalHours]);
+  }, [runSearch, tracking.intervalHours]);
 
   const handleUtterance = useCallback(async (text: string) => {
+    if (/^(try again|retry)$/i.test(text.trim()) && lastUtterance) text = lastUtterance;
     setHeard(text);
+    setLastUtterance(text);
     setBusy(true);
     if (typeof window !== "undefined" && "speechSynthesis" in window) window.speechSynthesis.cancel();
     try {
@@ -256,66 +275,147 @@ export default function Page() {
       }
       const say = await applyIntent(interp.intent, interp.speech);
       setReply(say || interp.speech || "Done.");
-      if (say) await speakRef.current?.(say);
+      if (say && prefsRef.current.speakReplies) await speakRef.current?.(say);
     } finally {
       setBusy(false);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [applyIntent]);
+  }, [applyIntent, lastUtterance]);
 
-  const speech = useSpeech(handleUtterance, { continuous });
+  const speech = useSpeech(handleUtterance, { continuous: prefs.handsFree });
   speakRef.current = speech.speak;
 
   useEffect(() => {
-    if (priceAlert) speech.speak(priceAlert);
+    if (priceAlert && prefsRef.current.speakReplies) speech.speak(priceAlert);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [priceAlert]);
 
+  const suggestions = result
+    ? ["Read the top three", "Tell me about option 1", params.stopover ? "No stopover" : "Stop over in Dubai for 3 nights", "Check every 2 days"]
+    : ["Mid to late November, back early January", "Search early December", "Stop over in Dubai for 3 nights", "Help"];
+
+  const notes = (result?.warnings ?? []).filter((w) => !w.startsWith("Showing sample"));
+  const openEditor = (field: EditField) => { setEditFocus(field); setEditorOpen(true); };
+
   return (
     <main className="app">
-      <header className="topbar">
-        <h1>✈️ Harare Flight Agent <span>· Melbourne → Harare</span></h1>
-        <div className="pills">
-          {status && (
-            <span className={`pill ${status.isSample ? "warn" : "ok"}`}>
-              {status.isSample ? "sample fares" : "live fares · Google Flights"}
-            </span>
-          )}
-          {status && <span className={`pill ${status.claude ? "ok" : ""}`}>{status.claude ? "voice: Claude" : "voice: built-in parser"}</span>}
-          {tracking.enabled && <span className="pill ok">tracking every {tracking.intervalHours}h</span>}
+      <header className="header">
+        <div className="brand">
+          <PlaneIcon />
+          <h1>Harare <span className="long">Flight Agent</span><span className="short">Flights</span></h1>
+          <span className="route-code">{params.origin} → {params.destination}</span>
+        </div>
+        <div className="header-right">
+          <button className={`pill ${isSample ? "sample" : "live"}`} onClick={() => setSettingsOpen(true)} title="Fare source">
+            {isSample ? "Sample fares" : "Live · Google Flights"}
+          </button>
+          {tracking.enabled && <span className="pill track">Tracking every {tracking.intervalHours}h</span>}
+          <button className="icon-btn" onClick={() => setSettingsOpen(true)} aria-label="Settings"><SettingsIcon /></button>
         </div>
       </header>
 
-      <VoicePanel speech={speech} heard={heard} reply={reply} busy={busy} continuous={continuous} onContinuous={setContinuous} onCommand={handleUtterance} />
-
-      {priceAlert && <div className="notice">{priceAlert}</div>}
-      {error && <div className="notice error">{error}</div>}
-      {result?.warnings.filter((w) => !w.startsWith("Showing sample")).slice(0, 3).map((w) => (
-        <div key={w} className="notice">{w}</div>
-      ))}
-
-      <KeysPanel keys={keys} status={status} onSave={(k) => { setKeys(k); saveKeys(k); setResult(null); }} />
-
-      <SearchForm params={params} onChange={updateParams} onSearch={() => runSearch()} loading={loading} datesToScan={datesToScan} />
-
-      {result && <PriceCalendar byDate={result.byDate} currency={params.currency} active={dateFilter} onPick={setDateFilter} />}
-
-      <Results offers={sorted} sort={sort} onSort={setSort} selectedId={selectedId} onSelect={setSelectedId} dateFilter={dateFilter} onClearDate={() => setDateFilter(null)} />
-
-      <Tracker
-        enabled={tracking.enabled}
-        intervalHours={tracking.intervalHours}
-        nextRunAt={nextRunAt}
-        history={history}
-        onToggle={(on) => setTracking((t) => ({ ...t, enabled: on }))}
-        onInterval={(h) => setTracking((t) => ({ ...t, intervalHours: h }))}
-        onClear={() => { setHistory([]); save(HISTORY_KEY, []); }}
+      <Conversation
+        speech={speech}
+        heard={heard}
+        reply={reply}
+        busy={busy || loading}
+        busyText={loading ? `Checking ${datesCount} date${datesCount === 1 ? "" : "s"}…` : "One moment…"}
+        error={error}
+        onRetry={() => (lastUtterance ? handleUtterance(lastUtterance) : runSearch())}
+        suggestions={suggestions}
+        onCommand={handleUtterance}
+        handsFree={prefs.handsFree}
+        understood={(result || heard) ? <UnderstoodChips params={params} datesCount={datesCount} returnInferred={returnInferred} onEdit={openEditor} /> : null}
       />
 
+      {priceAlert && <div className="alert-good" role="status">{priceAlert}</div>}
+
+      <TripSettings
+        params={params}
+        onChange={updateParams}
+        onSearch={async () => { const r = await runSearch(); if (r) setReply(spokenBrief(r)); }}
+        loading={loading}
+        datesToScan={datesCount}
+        open={editorOpen}
+        onOpenChange={(o) => { setEditorOpen(o); if (!o) setEditFocus(null); }}
+        focus={editFocus}
+        showLine={!(result || heard)}
+      />
+
+      {isSample && (
+        <div className="banner">
+          <span>These are sample fares, modelled on real routes. Connect Google Flights for real prices.</span>
+          <button className="btn small" onClick={() => setSettingsOpen(true)}>Connect live fares</button>
+        </div>
+      )}
+
+      {loading && !result ? (
+        <ResultsSkeleton />
+      ) : result ? (
+        <>
+          <SummaryStrip
+            offers={result.offers}
+            sort={sort}
+            isSample={result.isSample}
+            onPick={(m) => { setSort(m); setDateFilter(null); document.getElementById("results")?.scrollIntoView({ behavior: "smooth", block: "start" }); }}
+          />
+          <div className="only-phone">
+            <PriceCalendar byDate={result.byDate} currency={params.currency} active={dateFilter} onPick={setDateFilter} stepDays={result.params.stepDays} />
+          </div>
+        </>
+      ) : null}
+
+      <div className="results-layout">
+        <Results
+          offers={sorted}
+          sort={sort}
+          onSort={setSort}
+          selectedId={selectedId}
+          onSelect={setSelectedId}
+          dateFilter={dateFilter}
+          onClearDate={() => setDateFilter(null)}
+          isSample={result?.isSample ?? isSample}
+          hasSearched={!!result}
+        />
+        <aside className="rail">
+          {result && (
+            <div className="only-desktop">
+              <PriceCalendar byDate={result.byDate} currency={params.currency} active={dateFilter} onPick={setDateFilter} stepDays={result.params.stepDays} />
+            </div>
+          )}
+          <Tracker
+            enabled={tracking.enabled}
+            intervalHours={tracking.intervalHours}
+            nextRunAt={nextRunAt}
+            history={history}
+            onToggle={(on) => setTracking((t) => ({ ...t, enabled: on }))}
+            onInterval={(h) => setTracking((t) => ({ ...t, intervalHours: h }))}
+            onClear={() => { setHistory([]); save(HISTORY_KEY, []); }}
+          />
+          <ScanNotes notes={notes} />
+        </aside>
+      </div>
+
       <footer className="foot">
-        {result?.isSample ? "Sample fares are modelled on real MEL–HRE routings and seasonal pricing, not live quotes. " : "Live fares come from Google Flights; for return trips the price shown is the round-trip fare and the return leg is chosen when booking. "}
-        Prices are for the whole party in {params.currency}. “Best” balances price, total travel time, interchange quality and family-friendly timings.
+        Prices are for the whole family in {params.currency}. “Best overall” balances price, travel time, connections and family-friendly timings.
+        {result && !result.isSample ? " Live fares come from Google Flights; for return and multi-city trips the price covers every flight, and the later flights are picked when you book." : ""}
       </footer>
+
+      <VoiceBar speech={speech} busy={busy || loading} onCommand={handleUtterance} />
+
+      <SettingsDrawer
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        keys={keys}
+        onSaveKeys={(k) => { setKeys(k); saveKeys(k); setResult(null); }}
+        isSample={isSample}
+        claude={status?.claude ?? false}
+        theme={prefs.theme}
+        onTheme={(theme) => setPrefs((p) => ({ ...p, theme }))}
+        handsFree={prefs.handsFree}
+        onHandsFree={(handsFree) => setPrefs((p) => ({ ...p, handsFree }))}
+        speakReplies={prefs.speakReplies}
+        onSpeakReplies={(speakReplies) => setPrefs((p) => ({ ...p, speakReplies }))}
+      />
     </main>
   );
 }
