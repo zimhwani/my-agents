@@ -10,6 +10,8 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const pageUrlArg = process.argv.find((a) => a.startsWith("--page-url="))?.slice("--page-url=".length);
 const branch = pageUrlArg ? null : (process.env.PAGE_BRANCH ?? "main");
 const DEFAULT_PAGE_URL = pageUrlArg ?? `https://raw.githubusercontent.com/zimhwani/my-agents/${branch}/flight-agent/edge/bundle/page.html`;
+// Where the page calls the API when it is served from a static host.
+const API_BASE = process.env.API_BASE ?? "https://yohqeunmgrxyakviofua.supabase.co/functions/v1/flight-agent/api";
 const root = path.join(here, "..");
 const dist = path.join(here, "bundle");
 fs.mkdirSync(dist, { recursive: true });
@@ -19,7 +21,7 @@ const page = await esbuild.build({
   entryPoints: [path.join(here, "page.tsx")],
   bundle: true, minify: true, format: "iife", platform: "browser", target: ["es2020"], jsx: "automatic",
   tsconfig: path.join(root, "tsconfig.json"),
-  define: { "process.env.NODE_ENV": '"production"' },
+  define: { "process.env.NODE_ENV": '"production"', API_BASE: JSON.stringify(API_BASE) },
   write: false, outdir: dist, loader: { ".css": "css" },
 });
 const js = page.outputFiles.find((f) => f.path.endsWith(".js"))?.text ?? "";
@@ -61,7 +63,7 @@ const denoNpm = {
 const stubPage = {
   name: "stub-page",
   setup(build) {
-    build.onResolve({ filter: /dist\/page\.html$/ }, (args) => ({ path: args.path, namespace: "stub" }));
+    build.onResolve({ filter: /bundle\/page\.html$/ }, (args) => ({ path: args.path, namespace: "stub" }));
     build.onLoad({ filter: /.*/, namespace: "stub" }, () => ({ contents: 'export default "";', loader: "js" }));
   },
 };

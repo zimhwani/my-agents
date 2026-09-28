@@ -5,9 +5,8 @@ name: Flight agent price tracking
 # price movements are logged without anyone keeping a browser open.
 #
 # One-time setup (Settings -> Secrets and variables -> Actions):
-#   AMADEUS_CLIENT_ID / AMADEUS_CLIENT_SECRET  - from developers.amadeus.com
-#   AMADEUS_ENV (variable, optional)           - "test" (default) or "production"
-# Until the secrets are set the workflow no-ops.
+#   SERPAPI_KEY - from serpapi.com (Google Flights prices)
+# Until the secret is set the workflow no-ops.
 
 on:
   schedule:
@@ -21,29 +20,27 @@ jobs:
   scan:
     runs-on: ubuntu-latest
     env:
-      AMADEUS_CLIENT_ID: ${{ secrets.AMADEUS_CLIENT_ID }}
-      AMADEUS_CLIENT_SECRET: ${{ secrets.AMADEUS_CLIENT_SECRET }}
-      AMADEUS_ENV: ${{ vars.AMADEUS_ENV || 'test' }}
+      SERPAPI_KEY: ${{ secrets.SERPAPI_KEY }}
     steps:
       - uses: actions/checkout@v4
 
-      - if: env.AMADEUS_CLIENT_ID == ''
-        run: echo "AMADEUS_CLIENT_ID secret not set - skipping scan. See flight-agent/README.md."
+      - if: env.SERPAPI_KEY == ''
+        run: echo "SERPAPI_KEY secret not set - skipping scan. See flight-agent/README.md."
 
-      - if: env.AMADEUS_CLIENT_ID != ''
+      - if: env.SERPAPI_KEY != ''
         uses: actions/setup-node@v4
         with:
           node-version: "22"
 
-      - if: env.AMADEUS_CLIENT_ID != ''
+      - if: env.SERPAPI_KEY != ''
         working-directory: flight-agent
         run: npm install
 
-      - if: env.AMADEUS_CLIENT_ID != ''
+      - if: env.SERPAPI_KEY != ''
         working-directory: flight-agent
         run: npm run scan -- --step 3 | tee -a "$GITHUB_STEP_SUMMARY"
 
-      - if: env.AMADEUS_CLIENT_ID != ''
+      - if: env.SERPAPI_KEY != ''
         name: Commit price history
         run: |
           git config user.name "flight-agent-bot"

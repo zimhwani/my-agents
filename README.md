@@ -326,7 +326,7 @@ Each agent is designed with:
 
 Beyond the agent personas, the repo ships a few working apps that put them to use:
 
-- **[`flight-agent/`](flight-agent/)** – A voice-controlled flight travel agent. Tracks Melbourne → Harare fares for a family (two adults, two children) across a whole date window, ranks them by price, travel time, interchange quality and family-friendly timings, reads the results aloud, and logs price movements daily. Runs on sample fares out of the box; add Amadeus keys for live prices and an Anthropic key for conversational voice.
+- **[`flight-agent/`](flight-agent/)** – A voice-controlled flight travel agent. Tracks Melbourne → Harare fares for a family (two adults, two children) across a whole date window, ranks them by price, travel time, interchange quality and family-friendly timings, reads the results aloud, and logs price movements daily. Runs on sample fares out of the box; add a SerpApi key for live Google Flights prices and an Anthropic key for conversational voice.
 - **[`geo-engine/`](geo-engine/)** – Generative Engine Optimisation scanner and reporting pipeline.
 - **[`marketing/thriving-through-menopause/`](marketing/thriving-through-menopause/)** – Campaign asset generator.
 

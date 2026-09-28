@@ -15,14 +15,22 @@ npm run dev                  # http://localhost:3000
 
 It works immediately with **sample fares** (clearly labelled) so you can try the voice flow before adding keys. Voice input uses the browser's Web Speech API, so open it in Chrome, Edge or Safari and allow the microphone.
 
+## Hosted version
+
+The app is deployed as a single Supabase Edge Function that serves the page and its API:
+
+**https://yohqeunmgrxyakviofua.supabase.co/functions/v1/flight-agent**
+
+It starts on sample fares. Open **Live fares → Add keys** on the page, paste a SerpApi key (free at [serpapi.com](https://serpapi.com)) and the next search uses real Google Flights prices. The keys stay in your browser and are sent only with your own searches. Redeploy after changes with `npm run build:edge` and upload `edge/bundle/index-remote.js` as the function (it fetches the committed `edge/bundle/page.html` from GitHub, so pushing a rebuilt page updates the UI without redeploying the function).
+
 ## Keys
 
 | Key | What it unlocks | Without it |
 | --- | --- | --- |
-| `AMADEUS_CLIENT_ID` / `AMADEUS_CLIENT_SECRET` | Live fares from the [Amadeus Self-Service API](https://developers.amadeus.com) (free tier). `AMADEUS_ENV=test` is the free sandbox; `production` is live GDS content. | Deterministic sample fares modelled on the real MEL–HRE routings (Qatar via Doha, Emirates via Dubai, Singapore Airlines + Airlink via Johannesburg, Qantas + Airlink via Sydney/Johannesburg) with seasonal pricing. |
-| `ANTHROPIC_API_KEY` | Claude (`claude-opus-5`) understands free-form speech and writes the spoken replies. Server-side refusal fallbacks are enabled by default. | A built-in rule-based parser handles the common commands (dates, months, passengers, sorting, selecting an option, tracking). |
+| `SERPAPI_KEY` | Live fares from Google Flights via [SerpApi](https://serpapi.com/google-flights-api). Free plan covers roughly 100–250 searches a month; each scanned date is one search. Can also be pasted into the app instead of set on the server. | Deterministic sample fares modelled on the real MEL–HRE routings (Qatar via Doha, Emirates via Dubai, Singapore Airlines + Airlink via Johannesburg, Qantas + Airlink via Sydney/Johannesburg) with seasonal pricing. |
+| `ANTHROPIC_API_KEY` | Claude (`claude-opus-5`) understands free-form speech and writes the spoken replies. Server-side refusal fallbacks are enabled by default. Can also be pasted into the app. | A built-in rule-based parser handles the common commands (dates, months, passengers, sorting, selecting an option, tracking). |
 
-Amadeus self-service does not sell tickets; each result links to Google Flights for the same dates so you can check and book.
+Google Flights lists the round-trip fare against each outbound option, so for return trips the price shown is the full round trip and the return leg is chosen when booking; each result links to Google Flights for the same dates. (The Amadeus self-service API this app first used was shut down in July 2026.)
 
 ## What it does
 
@@ -38,7 +46,7 @@ npm run scan -- --window-start 2026-12-01 --window-end 2027-01-31 --step 3
 npm run scan -- --oneway --adults 2 --children 2 --cabin PREMIUM_ECONOMY
 ```
 
-The repository also ships `.github/workflows/flight-agent-track.yml`, a daily GitHub Action that runs the scan with the Amadeus secrets and commits the history so you get a price log without keeping a laptop open. It no-ops until the secrets are set.
+The repository also ships `.github/workflows/flight-agent-track.yml`, a daily GitHub Action that runs the scan with a `SERPAPI_KEY` secret and commits the history so you get a price log without keeping a laptop open. It no-ops until the secret is set.
 
 ## Voice commands
 
@@ -60,16 +68,18 @@ The repository also ships `.github/workflows/flight-agent-track.yml`, a daily Gi
 
 ```
 app/            Next.js App Router pages and API routes (/api/search, /api/interpret, /api/status)
-components/     Voice panel, search form, results, price calendar, tracker
+components/     Voice panel, key settings, search form, results, price calendar, tracker
 hooks/          useSpeech: SpeechRecognition + speechSynthesis wrapper
-lib/            Providers (amadeus, sample), ranking, date-window sampling, intent parser, Claude interpreter
+lib/            Providers (serpapi, sample), ranking, date-window sampling, intent parser, Claude interpreter, shared API handlers
+edge/           Supabase Edge Function build (page + API in one Deno server)
+demo/           Single-file offline demo build
 scripts/scan.ts Headless scan for cron / CI
 tests/          Vitest unit tests (npm test)
 ```
 
 ## Static demo (no server)
 
-`npm run demo` bundles the whole page into `demo/dist/index.html`, a single file that runs on the sample fares and the built-in voice parser with no server at all. Handy for sharing a link or trying the voice flow before adding keys; live Amadeus fares and Claude understanding need the Next.js server.
+`npm run demo` bundles the whole page into `demo/dist/index.html`, a single file that runs on the sample fares and the built-in voice parser with no server at all. Handy for sharing a link or trying the voice flow before adding keys; live Google Flights fares and Claude understanding need the hosted version or the Next.js server.
 
 ## Scripts
 
@@ -80,4 +90,5 @@ npm test           # unit tests
 npm run typecheck  # tsc --noEmit
 npm run scan       # headless fare scan
 npm run demo       # single-file static demo -> demo/dist/index.html
+npm run build:edge # hosted build -> edge/bundle/{page.html,index-remote.js}
 ```
