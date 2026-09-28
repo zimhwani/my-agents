@@ -138,12 +138,24 @@ CRYPTO_PULLBACK_GRID: dict[str, list] = {
 }
 
 
+CRYPTO_FADE_GRID: dict[str, list] = {
+    "breakout_bars": [12, 24, 48],
+    "min_initial_risk_pct": [0.8, 1.5, 3.0],
+    "partial_r": [0, 1.0],
+    "breakeven_r": [1.0, 2.0],
+    "trail": ["atr_2.5", "atr_5.0"],
+}
+
+
 def default_grid(params) -> dict[str, list]:
     name = params.__class__.__name__
     if name == "TJLRules":
         return TJL_GRID
     if name == "CryptoRules":
-        return CRYPTO_PULLBACK_GRID if getattr(params, "mode", "") == "pullback" else CRYPTO_BREAKOUT_GRID
+        mode = getattr(params, "mode", "")
+        if mode == "fade":
+            return CRYPTO_FADE_GRID
+        return CRYPTO_PULLBACK_GRID if mode == "pullback" else CRYPTO_BREAKOUT_GRID
     return DEFAULT_GRID
 
 
@@ -164,12 +176,12 @@ def sweep(settings, params, bars, grid: dict[str, list] | None = None, equity: f
         if kind == "TJLRules":
             from .tjl import loaded_from_rules
             loaded = loaded_from_rules(p)
-            loaded.apply(settings)
+            loaded.apply(settings, validate=False)
             p = loaded
         elif kind == "CryptoRules":
             from .crypto import loaded_from_rules as crypto_loaded
             loaded = crypto_loaded(p)
-            loaded.apply(settings)
+            loaded.apply(settings, validate=False)
             p = loaded
         if progress:
             progress(i, len(combos), dict(zip(keys, combo)))

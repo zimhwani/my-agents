@@ -23,7 +23,7 @@ from pathlib import Path
 from . import clock
 from .exits import ExitRules
 from .indicators import atr as atr_of, ema, rsi
-from .models import LONG, Bar, Signal
+from .models import LONG, SHORT, Bar, Signal
 from .strategy import LoadedStrategy
 
 DEFAULT_UNIVERSE = ["BTC/USD", "ETH/USD", "SOL/USD", "DOGE/USD", "AVAX/USD", "LINK/USD", "LTC/USD", "DOT/USD"]
@@ -34,7 +34,8 @@ class CryptoRules:
     name: str = "Crypto Momentum Breakout"
     universe: list[str] = field(default_factory=lambda: list(DEFAULT_UNIVERSE))
     bar_minutes: int = 15
-    mode: str = "breakout"          # breakout = first close above the N-bar high; pullback = RSI dip in an uptrend
+    mode: str = "breakout"          # breakout = first close above the N-bar high; pullback = RSI dip in an uptrend;
+                                    # fade = the breakout signal traded SHORT (backtest only: Alpaca spot can't short)
     rsi_bars: int = 14
     rsi_buy: float = 30.0           # pullback: previous bar's RSI must be below this
     breakout_bars: int = 20
@@ -156,14 +157,16 @@ class CryptoMomentum:
         if not a or a <= 0:
             return None, "no_atr"
         entry = last.close
-        stop = entry - r.stop_atr_mult * a
+        dist = r.stop_atr_mult * a
         if r.min_initial_risk_pct > 0:
-            stop = min(stop, entry * (1 - r.min_initial_risk_pct / 100.0))
-        risk = entry - stop
-        if risk <= 0 or risk / entry * 100.0 > r.max_initial_risk_pct:
+            dist = max(dist, entry * r.min_initial_risk_pct / 100.0)
+        if dist <= 0 or dist / entry * 100.0 > r.max_initial_risk_pct:
             return None, "stop_too_wide"
         reason = f"breakout > {hh:.4g} ({r.breakout_bars} bars), EMA{r.trend_ema_bars} {trend:.4g}, relvol {rel:.2f}, ATR {a:.4g}"
-        return Signal(symbol=symbol, side=LONG, entry=entry, stop=stop, target=entry + 3 * risk,
+        if r.mode == "fade":  # same trigger, opposite side: short the breakout, stop the same distance above
+            return Signal(symbol=symbol, side=SHORT, entry=entry, stop=entry + dist, target=entry - 3 * dist,
+                          atr=a, time=now, reason="fade " + reason), "signal"
+        return Signal(symbol=symbol, side=LONG, entry=entry, stop=entry - dist, target=entry + 3 * dist,
                       atr=a, time=now, reason=reason), "signal"
 
 
@@ -207,7 +210,7 @@ def loaded_from_rules(rules: CryptoRules) -> LoadedStrategy:
         include_premarket=True, scan_kind="static", scan_at=time(0, 0), force_close=None,
         risk_overrides={"risk_per_trade_pct": rules.max_risk_per_trade_pct,
                         "max_position_pct": rules.max_position_pct, "max_positions": rules.max_positions,
-                        "allow_shorts": False},
+                        "allow_shorts": rules.mode == "fade"},
         continuous=True, fractional=True, cooldown_minutes=rules.cooldown_minutes, universe=list(rules.universe),
     )
 

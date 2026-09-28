@@ -326,3 +326,36 @@ def test_stops_trigger_on_prefetched_bid(settings, monkeypatch):
     b.prefetch_bids(["BTC/USD"])
     ref = b.refresh(stop)
     assert ref.status == "Filled" and b.positions() == []
+
+
+def test_fade_mode_shorts_the_breakout_and_backtests_both_ways(settings):
+    from tradebot.backtest import Backtester
+    from tradebot.models import SHORT
+    now = clock.at(DAY, clock.parse_hhmm("00:00"))
+    bars = bars_24h(breakout_at=259)
+    long_s = CryptoMomentum(CryptoRules(breakout_bars=20, trend_ema_bars=100, min_rel_volume=1.5))
+    fade_s = CryptoMomentum(CryptoRules(breakout_bars=20, trend_ema_bars=100, min_rel_volume=1.5, mode="fade"))
+    a, b = long_s.evaluate("BTC/USD", bars, [], now), fade_s.evaluate("BTC/USD", bars, [], now)
+    assert a.side == LONG and b.side == SHORT and a.entry == b.entry
+    assert b.stop - b.entry == pytest.approx(a.entry - a.stop) and b.target < b.entry
+    # full backtest on synthetic data: shorts open, close, and P&L has the right sign
+    ls = load_strategy("crypto_fade.json")
+    assert ls.risk_overrides["allow_shorts"] is True
+    ls.apply(settings, validate=False)
+    settings.max_risk_per_trade_usd = 1e9
+    data = {s: synthetic_continuous(s, 20, 5, seed=i + 3, start_price=100 * (i + 1),
+                                    end=clock.at(DAY, clock.parse_hhmm("00:00")))
+            for i, s in enumerate(["BTC/USD", "ETH/USD"])}
+    res = Backtester(settings, ls, data, fee_bps=25.0).run()
+    assert res.trades and all(t.side == SHORT and t.status == "CLOSED" for t in res.trades)
+    for t in res.trades:
+        gross = (t.entry_price - t.exit_price_avg) * t.qty_initial
+        assert t.realized_pnl == pytest.approx(gross, rel=1e-6, abs=1e-6)
+
+
+def test_fade_rules_refuse_to_run_live(tmp_path, monkeypatch):
+    import subprocess, sys
+    env = dict(__import__("os").environ, DATA_DIR=str(tmp_path), BROKER="alpaca", ALPACA_API_KEY="x",
+               ALPACA_API_SECRET="y", STRATEGY_FILE="crypto_fade.json")
+    r = subprocess.run([sys.executable, "-m", "tradebot", "run"], env=env, capture_output=True, text=True, timeout=60)
+    assert r.returncode != 0 and "backtest-only" in (r.stderr + r.stdout)

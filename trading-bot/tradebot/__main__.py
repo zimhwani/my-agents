@@ -177,6 +177,8 @@ def cmd_run(args) -> None:
     _logging(s)
     from .loop import TradingLoop
     loaded = load_strategy(s.strategy_file, s.allow_shorts)
+    if (loaded.risk_overrides or {}).get("allow_shorts") and s.broker in ("alpaca", "t212"):
+        raise SystemExit(f"{loaded.name} trades short; {s.broker} is long-only here. It is a backtest-only rule set.")
     loaded.apply(s)
     loop = TradingLoop(s, _broker(s, connect=False), loaded, _notifier(s))
     try:
@@ -487,7 +489,7 @@ def cmd_report(args) -> None:
     def kind(reason: str) -> str:  # which rule set opened the trade, from its signal text
         m = _re.search(r"\((\d+) bars\)", reason or "")
         if m:
-            return f"breakout {m.group(1)} bars"
+            return f"{'fade' if (reason or '').startswith('fade') else 'breakout'} {m.group(1)} bars"
         return (reason or "?").split(" ")[0]
     print("entry rule sets seen:", dict(Counter(kind(t.reason) for t in trades)))
 
@@ -501,7 +503,7 @@ def cmd_backtest(args) -> None:
     from .journal import Journal
     strategy_file = Path(args.strategy) if args.strategy else s.strategy_file
     loaded = load_strategy(strategy_file, s.allow_shorts)
-    loaded.apply(s)
+    loaded.apply(s, validate=False)  # a simulation isn't bound by the broker's rules
     daily = None
     if args.demo and loaded.continuous:
         from .data import synthetic_continuous

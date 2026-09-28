@@ -233,8 +233,9 @@ class LoadedStrategy:
     cooldown_minutes: int = 0     # wait this long after closing a symbol before re-entering it
     universe: list[str] | None = None  # strategy-defined universe (overrides settings)
 
-    def apply(self, settings) -> None:
-        """Let the strategy file override risk/time settings it specifies."""
+    def apply(self, settings, validate: bool = True) -> None:
+        """Let the strategy file override risk/time settings it specifies. Backtests pass
+        validate=False: broker constraints (e.g. long-only) don't bind a simulation."""
         for k, v in (self.risk_overrides or {}).items():
             setattr(settings, k, v)
         if self.force_close is not None:
@@ -242,7 +243,8 @@ class LoadedStrategy:
         settings.continuous = self.continuous
         if self.universe:
             settings.universe = list(self.universe)
-        settings.validate()
+        if validate:
+            settings.validate()
 
 
 def build_strategy(params: StrategyParams, allow_shorts: bool = False):
