@@ -17,11 +17,11 @@ It works immediately with **sample fares** (clearly labelled) so you can try the
 
 ## Hosted version
 
-The app is deployed as a single Supabase Edge Function that serves the page and its API:
+**Open the app: https://zimhwani.github.io/my-agents/**
 
-**https://yohqeunmgrxyakviofua.supabase.co/functions/v1/flight-agent**
+The page is published to GitHub Pages from the `gh-pages` branch by `.github/workflows/flight-agent-pages.yml` whenever the built page changes. Its API (fare scans and voice interpretation) runs as a Supabase Edge Function at `https://yohqeunmgrxyakviofua.supabase.co/functions/v1/flight-agent/api/*`, deployed from `edge/bundle/index-remote.js` (`npm run build:edge`). Supabase serves HTML from that domain as plain text, which is why the page and the API live at different addresses; CORS is enabled on the API.
 
-It starts on sample fares. Open **Live fares → Add keys** on the page, paste a SerpApi key (free at [serpapi.com](https://serpapi.com)) and the next search uses real Google Flights prices. The keys stay in your browser and are sent only with your own searches. Redeploy after changes with `npm run build:edge` and upload `edge/bundle/index-remote.js` as the function (it fetches the committed `edge/bundle/page.html` from GitHub, so pushing a rebuilt page updates the UI without redeploying the function).
+It starts on sample fares. Open **Live fares → Add keys** on the page, paste a SerpApi key (free at [serpapi.com](https://serpapi.com)) and the next search uses real Google Flights prices. Keys stay in your browser and are sent only with your own searches; setting `SERPAPI_KEY` / `ANTHROPIC_API_KEY` as function secrets in Supabase makes them apply for everyone without pasting.
 
 ## Keys
 
