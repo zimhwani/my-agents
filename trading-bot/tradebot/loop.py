@@ -67,6 +67,11 @@ class TradingLoop:
                                          StateStore(settings.state_file), dry_run=settings.dry_run)
         self.exits = ExitManager(loaded.exits, None if loaded.continuous else settings.force_close_time)
         self.gate = RiskGate(settings)
+        self.news = None
+        self._news_at: datetime | None = None
+        if getattr(settings, "worldmonitor_enabled", False):
+            from .worldmonitor import WorldMonitor
+            self.news = WorldMonitor(settings.worldmonitor_api_key)
         if loaded.scan_kind == "static":
             self.scanner = StaticScanner(broker, settings, loaded.universe or settings.universe)
         elif loaded.scan_kind == "gap":
@@ -197,8 +202,9 @@ class TradingLoop:
             else:
                 names = "\n".join(c.line() for c in self.watchlist)
             names = esc(names) or "(nothing passed the filters)"
+            notes = self._news_notes([c.symbol for c in self.watchlist])
             self.notify.send(f"📋 <b>Watchlist {now:%a %b %d}</b> · {esc(self.loaded.name)} · "
-                             f"equity ${equity:,.0f}\n<pre>{names}</pre>")
+                             f"equity ${equity:,.0f}\n<pre>{names}</pre>" + (f"\n📰 {esc(notes)}" if notes else ""))
             log.info("Watchlist: %s", [c.symbol for c in self.watchlist])
 
     def _log_gates(self, now: datetime, gates: dict[str, int]) -> None:
@@ -214,6 +220,35 @@ class TradingLoop:
         parts = " · ".join(f"{k} {v}" for k, v in sorted(gates.items(), key=lambda kv: -kv[1]))
         stale = f" · stale bars: {', '.join(sorted(self._stale))}" if self._stale else ""
         log.info("bar %s gates: %s%s", boundary.strftime("%H:%M"), parts, stale)
+
+    def _refresh_news(self, now: datetime) -> None:
+        """Hourly: pull the economic calendar into the risk gate (macro blackout). Never raises."""
+        if self.news is None or (self._news_at and now - self._news_at < timedelta(hours=1)):
+            return
+        self._news_at = now
+        try:
+            events = self.news.economic_events()
+            self.gate.macro_events = events
+            upcoming = [e for e in events if e.time and e.high_impact and e.us and now <= e.time <= now + timedelta(hours=24)]
+            if upcoming:
+                log.info("Macro events next 24h: %s", "; ".join(f"{e.name} {e.time:%a %H:%M} ET" for e in upcoming))
+        except Exception as exc:  # news is optional; trading continues without it
+            log.warning("World Monitor calendar unavailable: %s", exc)
+
+    def _news_notes(self, symbols: list[str]) -> str:
+        if self.news is None or not symbols:
+            return ""
+        try:
+            from .worldmonitor import watchlist_notes
+            heads = self.news.headlines()
+            try:
+                earn = self.news.earnings()
+            except Exception:
+                earn = {}
+            return watchlist_notes(symbols, heads, earn)
+        except Exception as exc:
+            log.warning("World Monitor headlines unavailable: %s", exc)
+            return ""
 
     def _update_day_stats(self) -> None:
         assert self.day is not None
@@ -258,6 +293,7 @@ class TradingLoop:
             return
 
         # 3. entries
+        self._refresh_news(now)
         equity = self.b.net_liquidation()
         blockers = self.gate.blockers(self.exec.open_trades, self.day, equity, now)
         if not blockers and self.scanned and clock.in_window(now, self.strategy.window_start, self.strategy.window_end):

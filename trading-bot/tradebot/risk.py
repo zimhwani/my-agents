@@ -42,6 +42,7 @@ class RiskGate:
     def __init__(self, settings: Settings, honour_kill_switch: bool = True):
         self.s = settings
         self.honour_kill_switch = honour_kill_switch  # backtests turn this off: the KILL file is for the live bot
+        self.macro_events: list = []  # World Monitor calendar, set by the live loop (never in backtests)
 
     def kill_switch_on(self) -> bool:
         return self.honour_kill_switch and Path(self.s.kill_switch_file).exists()
@@ -52,6 +53,12 @@ class RiskGate:
         out: list[str] = []
         if self.kill_switch_on():
             out.append(f"kill switch file present ({self.s.kill_switch_file})")
+        if self.macro_events:
+            from .worldmonitor import blackout
+            ev = blackout(self.macro_events, now, getattr(self.s, "macro_blackout_before_min", 15),
+                          getattr(self.s, "macro_blackout_after_min", 30))
+            if ev is not None:
+                out.append(f"macro blackout: {ev.name} at {ev.time:%H:%M} ET")
         if len(open_trades) >= self.s.max_positions:
             out.append(f"max positions ({self.s.max_positions}) reached")
         if day.realized_r <= self.s.max_daily_loss_r:

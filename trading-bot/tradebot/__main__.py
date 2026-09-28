@@ -448,6 +448,55 @@ def cmd_arb_monitor(args) -> None:
                             report_every=args.report_every, duration=args.minutes * 60 if args.minutes else None))
 
 
+def cmd_news(args) -> None:
+    """World Monitor: upcoming macro events, earnings for symbols, finance headlines (or raw JSON)."""
+    s = _settings(args)
+    import json as _json
+    from datetime import timedelta
+    from .worldmonitor import PATHS, WorldMonitor, blackout, mentions
+    wm = WorldMonitor(s.worldmonitor_api_key, variant=args.variant)
+    if args.raw:
+        for name in PATHS:
+            try:
+                data = wm.get(name, {"variant": args.variant} if name == "feed_digest" else None)
+                print(f"=== {name} {PATHS[name]}\n{_json.dumps(data, indent=1, default=str)[: args.raw_chars]}\n")
+            except Exception as exc:
+                print(f"=== {name} {PATHS[name]}\nERROR {exc}\n")
+        return
+    now = clock.now_et()
+    try:
+        events = wm.economic_events()
+        soon = [e for e in events if e.time and now - timedelta(hours=1) <= e.time <= now + timedelta(days=args.days)]
+        print(f"Economic calendar: {len(events)} events, {len(soon)} in the next {args.days} days")
+        for e in sorted(soon, key=lambda e: e.time):
+            flag = "HIGH" if e.high_impact and e.us else "    "
+            print(f"  {flag} {e.time:%a %m-%d %H:%M} ET  {e.country:<4} {e.name}  {e.impact}")
+        ev = blackout(events, now, s.macro_blackout_before_min, s.macro_blackout_after_min)
+        print(f"Blackout now: {ev.name + ' at ' + format(ev.time, '%H:%M') if ev else 'no'}")
+    except Exception as exc:
+        print(f"Economic calendar unavailable: {exc}")
+    try:
+        heads = wm.headlines()
+        print(f"\nHeadlines ({args.variant}): {len(heads)}")
+        for h in heads[: args.limit]:
+            print(f"  {h.time:%m-%d %H:%M} " if h.time else "  ", end="")
+            print(f"{h.title[:120]}  [{h.source}]")
+        for sym in args.symbols or []:
+            hits = mentions(sym.upper(), heads)
+            print(f"\n{sym.upper()}: {len(hits)} headline(s)")
+            for h in hits[:5]:
+                print(f"  {h.title[:120]}  [{h.source}]")
+    except Exception as exc:
+        print(f"Headlines unavailable: {exc}")
+    if args.symbols:
+        try:
+            earn = wm.earnings()
+            for sym in args.symbols:
+                print(f"earnings {sym.upper()}: {earn.get(sym.upper(), 'none listed')}")
+        except Exception as exc:
+            print(f"Earnings calendar unavailable: {exc}")
+
+
 def cmd_research(args) -> None:
     """Systematic research: in/out-of-sample backtests, benchmark, sensitivity, ranked report."""
     s = _settings(args)
@@ -779,6 +828,13 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--days", type=int, default=3)
     p.add_argument("--symbols", nargs="*")
     p.add_argument("--strategy", help="rules file to replay instead of STRATEGY_FILE (e.g. crypto_15m.json)")
+    p = sub.add_parser("news", help="World Monitor: macro calendar, headlines, earnings (or --raw JSON)")
+    p.add_argument("--symbols", nargs="*")
+    p.add_argument("--variant", default="finance")
+    p.add_argument("--days", type=int, default=3)
+    p.add_argument("--limit", type=int, default=15)
+    p.add_argument("--raw", action="store_true", help="print raw API responses (to check the data format)")
+    p.add_argument("--raw-chars", type=int, default=2500)
     p = sub.add_parser("research", help="rank strategies: in/out-of-sample, benchmark, sensitivity, report")
     p.add_argument("--strategies", nargs="+", default=["strategies/*.json", "crypto_swing.json"],
                    help="rules files or globs to evaluate")
@@ -847,7 +903,7 @@ def main(argv: list[str] | None = None) -> None:
      "analyze": cmd_analyze, "sweep": cmd_sweep, "dashboard": cmd_dashboard,
      "fetch-gappers": cmd_fetch_gappers, "fetch-crypto": cmd_fetch_crypto,
      "crypto-explain": cmd_crypto_explain, "arb-monitor": cmd_arb_monitor, "report": cmd_report,
-     "research": cmd_research}[args.cmd](args)
+     "research": cmd_research, "news": cmd_news}[args.cmd](args)
 
 
 if __name__ == "__main__":

@@ -133,6 +133,11 @@ class Settings:
     vercel_blob_prefix: str = "tradebot"
     dashboard_data_url: str = ""
     dashboard_sources: str = ""  # "Equities=https://.../tradebot,Crypto=https://.../crypto" for a multi-bot page
+    # World Monitor news/calendar (https://www.worldmonitor.app): macro blackout + alert context
+    worldmonitor_enabled: bool = False
+    worldmonitor_api_key: str = ""
+    macro_blackout_before_min: int = 15
+    macro_blackout_after_min: int = 30
     # paths
     data_dir: Path = Path("data")
     strategy_file: Path = Path("rules.json")
@@ -259,6 +264,10 @@ class Settings:
             vercel_blob_prefix=_env("VERCEL_BLOB_PREFIX", "tradebot"),
             dashboard_data_url=_env("DASHBOARD_DATA_URL"),
             dashboard_sources=_env("DASHBOARD_SOURCES"),
+            worldmonitor_enabled=_bool("WORLDMONITOR_ENABLED", False),
+            worldmonitor_api_key=_env("WORLDMONITOR_API_KEY"),
+            macro_blackout_before_min=_int("MACRO_BLACKOUT_BEFORE_MIN", 15),
+            macro_blackout_after_min=_int("MACRO_BLACKOUT_AFTER_MIN", 30),
             data_dir=Path(_env("DATA_DIR", "data")),
             strategy_file=Path(_env("STRATEGY_FILE", "rules.json")),
             universe_file=universe_file,
