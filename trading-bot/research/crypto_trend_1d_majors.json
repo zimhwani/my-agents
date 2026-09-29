@@ -1,0 +1,37 @@
+{
+  "strategy_name": "Daily Donchian Trend (BTC+ETH)",
+  "market": "crypto",
+  "direction": "long_only",
+  "mode": "breakout",
+  "thesis": "Same untouched daily Donchian rules, restricted to the two most liquid coins. The first research run showed the rules cut the crash drawdown from 67% to 18% on an 11-coin basket that fell 57%; momentum is documented to be strongest in the most liquid coins and the altcoins were the drag.",
+  "risks": "Only two correlated assets, so few trades and lumpy results; still long-only, so it earns nothing in a bear market beyond not losing; chosen after seeing one result, so treat a pass as a lead, not proof.",
+  "universe": [
+    "BTC/USD",
+    "ETH/USD"
+  ],
+  "bar_minutes": 1440,
+  "entry": {
+    "breakout_bars": 20,
+    "trend_ema_bars": 50,
+    "min_rel_volume": 0,
+    "atr_bars": 14,
+    "stop_atr_mult": 2.5,
+    "min_initial_risk_pct": 0,
+    "max_initial_risk_pct": 25
+  },
+  "exit": {
+    "cooldown_minutes": 0,
+    "partial_profit_trigger_R": 0,
+    "partial_profit_fraction": 0,
+    "breakeven_trigger_R": 0,
+    "trail": "atr_3.0",
+    "trail_from_entry": true,
+    "time_stop_minutes": 0,
+    "time_stop_min_r": 0
+  },
+  "risk": {
+    "max_risk_per_trade_pct": 1.0,
+    "max_position_size_pct_of_portfolio": 25,
+    "max_concurrent_positions": 2
+  }
+}
