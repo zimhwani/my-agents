@@ -39,6 +39,7 @@ class ExitRules:
     time_stop_minutes: int = 120      # 0 = none
     time_stop_min_r: float = 0.5
     fractional: bool = False          # crypto: partial quantities are fractional
+    flat_at_utc: str = ""             # 24h markets: close anything opened before this UTC time each day ("" = off)
 
 
 @dataclass
@@ -93,6 +94,14 @@ class ExitManager:
         # 1. forced flat before the close (not for 24/7 markets)
         if self.force_close_time is not None and now.time() >= self.force_close_time:
             return [ExitAction(CLOSE, trade.qty_open, price, "eod")]
+        # 1b. day-trading a 24h market: flat by a fixed UTC time, never held overnight
+        if self.r.flat_at_utc:
+            from datetime import datetime as _dt, timezone as _tz
+            from .clock import parse_hhmm
+            now_u = now.astimezone(_tz.utc)
+            cut = _dt.combine(now_u.date(), parse_hhmm(self.r.flat_at_utc), tzinfo=_tz.utc)
+            if now_u >= cut and trade.entry_time.astimezone(_tz.utc) < cut:
+                return [ExitAction(CLOSE, trade.qty_open, price, "eod")]
 
         r = trade.unrealized_r(price)
         rules = self.r

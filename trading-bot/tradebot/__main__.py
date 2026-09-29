@@ -613,6 +613,32 @@ def cmd_research(args) -> None:
                     job = (sym, minutes * 60, now_epoch - days * 86400, now_epoch)
                     if (not out.exists() or args.refetch) and job not in jobs:
                         jobs.append(job)
+            done: set[str] = set()
+            if args.source in ("auto", "dukascopy"):  # years of minute data for gold/silver/FX
+                from .dukascopy import INSTRUMENTS, download as duka_download, timeframes
+                for sym in sorted({j[0] for j in jobs if j[0] in INSTRUMENTS}):
+                    mins = sorted({int(getattr(loaded[f].strategy, "bar_minutes", 60)) for f in cfd
+                                   if sym in (loaded[f].universe or [])})
+                    try:
+                        b5 = duka_download(sym, args.fetch_days)
+                        if not b5:
+                            raise ValueError("no bars returned")
+                        for m, bars in timeframes(b5, mins).items():
+                            save_csv(bars, data / f"{fname(sym)}_{m}min.csv")
+                            print(f"fetched {sym} {m}-min from Dukascopy: {len(bars)} bars over "
+                                  f"{args.fetch_days} days", flush=True)
+                        done.add(sym)
+                        del b5
+                    except Exception as exc:
+                        print(f"Dukascopy {sym} unavailable ({str(exc)[:200]}); trying the next source", flush=True)
+            jobs = [j for j in jobs if j[0] not in done]
+            if jobs and args.source == "yahoo":
+                from .deriv import yahoo_bars
+                for sym, gran, start_e, end_e in jobs:
+                    bars, covered = yahoo_bars(sym, gran // 60, (end_e - start_e) // 86400)
+                    save_csv(bars, data / f"{fname(sym)}_{gran // 60}min.csv")
+                    print(f"fetched {sym} {gran // 60}-min from Yahoo: {len(bars)} bars over {covered} days", flush=True)
+                jobs = []
             if jobs:
                 try:
                     got = download(jobs, os.environ.get("DERIV_APP_ID", "1089"))
@@ -967,6 +993,8 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--data", default="data/research", help="bar CSVs, one file per symbol per timeframe")
     p.add_argument("--fetch-days", type=int, default=0, help="download this many days of crypto bars first")
     p.add_argument("--refetch", action="store_true", help="re-download even if the CSV exists")
+    p.add_argument("--source", choices=["auto", "dukascopy", "deriv", "yahoo"], default="auto",
+                   help="CFD history source (auto: Dukascopy, then Deriv, then Yahoo)")
     p.add_argument("--max-intraday-days", type=int, default=180,
                    help="cap history for sub-hourly bars (memory on small servers)")
     p.add_argument("--equity", type=float, default=3560)

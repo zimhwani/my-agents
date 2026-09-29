@@ -53,6 +53,9 @@ class CryptoRules:
     session_start_utc: str = "00:00"  # session mode: the range is built from these bars (UTC) ...
     session_end_utc: str = "07:00"    # ... e.g. the Asian session before London opens
     entry_end_utc: str = "12:00"      # session mode: last bar close that may trigger an entry (UTC)
+    trade_start_utc: str = ""         # any mode: only take entries whose bar closes in [start, end) UTC
+    trade_end_utc: str = ""
+    flat_at_utc: str = ""             # day trading: close every position at this UTC time
     fee_bps: float | None = None          # per-side cost for this market (None = backtester default)
     stop_slippage_bps: float | None = None
     stop_fill_lambda: float | None = None
@@ -94,6 +97,8 @@ class CryptoRules:
             session_start_utc=str(e.get("session_start_utc", "00:00")),
             session_end_utc=str(e.get("session_end_utc", "07:00")),
             entry_end_utc=str(e.get("entry_end_utc", "12:00")),
+            trade_start_utc=str(e.get("trade_start_utc", "")), trade_end_utc=str(e.get("trade_end_utc", "")),
+            flat_at_utc=str(x.get("flat_at_utc", "")),
             fee_bps=(lambda c: None if c.get("fee_bps_per_side") is None else float(c["fee_bps_per_side"]))(raw.get("costs", {})),
             stop_slippage_bps=(lambda c: None if c.get("stop_slippage_bps") is None else float(c["stop_slippage_bps"]))(raw.get("costs", {})),
             stop_fill_lambda=(lambda c: None if c.get("stop_fill_lambda") is None else float(c["stop_fill_lambda"]))(raw.get("costs", {})),
@@ -127,7 +132,7 @@ class CryptoRules:
                          trail_after_breakeven_only=not self.trail_from_entry, trail_min_r=1.0,
                          final_target_r=self.final_target_r,
                          time_stop_minutes=self.time_stop_minutes, time_stop_min_r=self.time_stop_min_r,
-                         fractional=True)
+                         fractional=True, flat_at_utc=self.flat_at_utc)
 
 
 class CryptoMomentum:
@@ -170,6 +175,11 @@ class CryptoMomentum:
         need = r.trend_ema_bars + self._pattern_bars() + 2
         if len(bars) < need:
             return None, "history"
+        if r.trade_start_utc and r.trade_end_utc and r.mode != "session":
+            from datetime import timezone as _tz
+            close_t = (bars[-1].time.astimezone(_tz.utc) + width).time()
+            if not (clock.parse_hhmm(r.trade_start_utc) <= close_t < clock.parse_hhmm(r.trade_end_utc)):
+                return None, "outside_window"
         if r.mode == "pullback":
             return self._eval_pullback(symbol, bars, now)
         if r.mode == "squeeze":
@@ -221,6 +231,30 @@ class CryptoMomentum:
         return Signal(symbol=symbol, side=LONG, entry=entry, stop=entry - dist, target=entry + 3 * dist,
                       atr=a, time=now, reason=reason), "signal"
 
+
+    def _eval_pullback_short(self, symbol: str, bars: list[Bar], now: datetime, trend: float
+                             ) -> tuple[Signal | None, str]:
+        """Mirror of the pullback: in a downtrend, an RSI spike above 100-rsi_buy then the first red bar."""
+        r = self.r
+        last, prev = bars[-1], bars[-2]
+        rsi_prev = rsi([b.close for b in bars[-(r.rsi_bars * 6) - 1:-1]], r.rsi_bars)
+        if rsi_prev is None or rsi_prev <= 100 - r.rsi_buy:
+            return None, "no_dip"
+        if last.close >= last.open or last.close >= prev.close:
+            return None, "no_turn"
+        a = atr_of(bars[-(r.atr_bars * 4):], r.atr_bars)
+        if not a or a <= 0:
+            return None, "no_atr"
+        entry = last.close
+        stop = max(entry + r.stop_atr_mult * a, max(b.high for b in bars[-4:]))
+        if r.min_initial_risk_pct > 0:
+            stop = max(stop, entry * (1 + r.min_initial_risk_pct / 100.0))
+        risk = stop - entry
+        if risk <= 0 or risk / entry * 100.0 > r.max_initial_risk_pct:
+            return None, "stop_too_wide"
+        reason = f"rally-fade RSI{r.rsi_bars} {rsi_prev:.0f} > {100 - r.rsi_buy:.0f}, EMA{r.trend_ema_bars} {trend:.4g}"
+        return Signal(symbol=symbol, side=SHORT, entry=entry, stop=stop, target=entry - 3 * risk,
+                      atr=a, time=now, reason=reason), "signal"
 
     def _pattern_bars(self) -> int:
         """Bars of history the entry pattern needs on top of the trend EMA."""
@@ -338,7 +372,9 @@ class CryptoMomentum:
         last, prev = bars[-1], bars[-2]
         closes = [b.close for b in bars[-(r.trend_ema_bars * 4):]]
         trend = ema(closes, r.trend_ema_bars)
-        if trend is None or last.close <= trend:
+        if trend is not None and last.close < trend and r.direction in ("both", "short_only"):
+            return self._eval_pullback_short(symbol, bars, now, trend)
+        if trend is None or last.close <= trend or r.direction == "short_only":
             return None, "below_ema"
         rsi_prev = rsi([b.close for b in bars[-(r.rsi_bars * 6) - 1:-1]], r.rsi_bars)
         if rsi_prev is None or rsi_prev >= r.rsi_buy:
