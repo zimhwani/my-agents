@@ -6,5 +6,9 @@ window.DATA_SOURCES = [
   {
     "name": "Crypto",
     "base": "https://adnybjtzetdigdeq.public.blob.vercel-storage.com/crypto"
+  },
+  {
+    "name": "Gold",
+    "base": "https://adnybjtzetdigdeq.public.blob.vercel-storage.com/gold"
   }
 ];

@@ -111,7 +111,7 @@ class Executor:
         self.notify.send(
             f"🟢 <b>ENTRY {esc(t.side)} {esc(t.symbol)}</b> x{t.qty_initial} @ {px(t.entry_price)}\n"
             f"stop {px(t.stop)} (risk ${t.initial_risk_usd:.0f}) · target {px(t.target)}\n"
-            f"<i>{esc(t.reason)}</i>")
+            f"<i>{esc(t.reason)}</i>" + self._mirror("entry", t))
         return t
 
     # -- exits -----------------------------------------------------------------
@@ -125,8 +125,21 @@ class Executor:
             self.notify.send(
                 f"{icon} <b>CLOSED {esc(t.symbol)}</b> {t.r_multiple:+.2f}R  (${t.realized_pnl:+.0f})\n"
                 f"entry {px(t.entry_price)} → avg exit {px(t.exit_price_avg)} · "
-                f"{esc(', '.join(f'{f.reason} x{f.qty}@{px(f.price)}' for f in t.exits))}")
+                f"{esc(', '.join(f'{f.reason} x{f.qty}@{px(f.price)}' for f in t.exits))}"
+                + self._mirror("close", t, qty=t.qty_initial))
         self.persist()
+
+    def _mirror(self, event: str, t: TradeRecord, qty: float | None = None, stop: float | None = None) -> str:
+        """Manual-copy instructions from brokers that offer them (paper CFD -> MT5)."""
+        fn = getattr(self.b, "mirror_note", None)
+        if fn is None:
+            return ""
+        try:
+            return "\n📋 " + esc(fn(event, t.symbol, t.side, qty if qty is not None else t.qty_initial,
+                                    t.entry_price, stop if stop is not None else t.stop))
+        except Exception as exc:  # never let an alert helper break trading
+            log.debug("mirror note: %s", exc)
+            return ""
 
     def apply(self, t: TradeRecord, actions: list[ExitAction], now: datetime | None = None) -> None:
         now = now or now_et()
@@ -146,7 +159,9 @@ class Executor:
                     self._stops[t.id] = self.b.modify_stop(self._stops[t.id], price=a.price)
                 t.stop = a.price
                 log.info("%s stop -> %s (%s)", t.symbol, px(a.price), a.reason)
-                self.notify.send(f"🔒 {esc(t.symbol)} stop → {px(a.price)} ({esc(a.reason)})", silent=True)
+                note = self._mirror("stop", t, qty=t.qty_open, stop=a.price)
+                # a stop move you must copy by hand shouldn't arrive silently
+                self.notify.send(f"🔒 {esc(t.symbol)} stop → {px(a.price)} ({esc(a.reason)})" + note, silent=not note)
             elif a.kind == CLOSE:
                 if t.id in self._stops:
                     self.b.cancel(self._stops[t.id])

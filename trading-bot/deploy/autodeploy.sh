@@ -34,5 +34,6 @@ fi
 
 systemctl restart tradebot-crypto
 if systemctl is-active --quiet tradebot; then systemctl restart tradebot; fi
+if systemctl is-enabled --quiet tradebot-gold 2>/dev/null; then systemctl restart tradebot-gold; fi
 echo "deployed $OLD -> $NEW: $SUBJECT"
 "$PY" -m tradebot --env .env.crypto notify --text "🚀 Deployed ${NEW%${NEW#???????}}: $SUBJECT" || true

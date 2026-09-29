@@ -67,6 +67,14 @@ def _data(s: Settings):
 
 def _broker(s: Settings, connect: bool = True):
     """Build the configured broker (Trading 212 by default, IB with BROKER=ib, Alpaca crypto with BROKER=alpaca)."""
+    if s.broker == "paper":
+        from .paper import PaperBroker, YahooCFDData, parse_symbol_map
+        b = PaperBroker(s, YahooCFDData(), s.data_dir / "paper_account.json", fee_bps=s.paper_fee_bps,
+                        stop_slippage_bps=s.paper_stop_slippage_bps, contract_size=s.paper_contract_size,
+                        lot_step=s.paper_lot_step, mt5_symbols=parse_symbol_map(s.mt5_symbols))
+        if connect:
+            b.connect()
+        return b
     if s.broker == "alpaca":
         from .alpaca import AlpacaError
         from .alpaca_broker import AlpacaBroker, AlpacaCryptoData

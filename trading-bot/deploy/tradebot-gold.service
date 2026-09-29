@@ -1,0 +1,17 @@
+[Unit]
+Description=Gold paper-trading bot (Gold 4h Trend, virtual CFD account + MT5 mirror alerts)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=tradebot
+WorkingDirectory=/opt/my-agents/trading-bot
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/opt/my-agents/trading-bot/.venv/bin/python -m tradebot --env .env.gold run
+Restart=always
+RestartSec=30
+TimeoutStopSec=90
+
+[Install]
+WantedBy=multi-user.target

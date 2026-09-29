@@ -76,7 +76,7 @@ class UnsafeConfig(RuntimeError):
     pass
 
 
-BROKERS = {"t212", "ib", "alpaca"}
+BROKERS = {"t212", "ib", "alpaca", "paper"}
 
 
 @dataclass
@@ -94,6 +94,13 @@ class Settings:
     alpaca_api_secret: str = ""
     alpaca_feed: str = "iex"
     alpaca_env: str = "paper"  # paper | live (BROKER=alpaca)
+    # BROKER=paper: virtual CFD account on live Yahoo prices (+ MT5 mirror instructions in alerts)
+    paper_equity: float = 10_000.0
+    paper_fee_bps: float = 1.5
+    paper_stop_slippage_bps: float = 3.0
+    paper_contract_size: float = 100.0
+    paper_lot_step: float = 0.01
+    mt5_symbols: str = "XAU/USD=XAUUSD"
     continuous: bool = False   # set by a 24/7 strategy (crypto)
     telegram_prefix: str = ""
     # interactive brokers
@@ -151,6 +158,8 @@ class Settings:
             return self.t212_env == "demo"
         if self.broker == "alpaca":
             return self.alpaca_env == "paper"
+        if self.broker == "paper":
+            return True
         return self.ib_port in PAPER_PORTS
 
     @property
@@ -223,6 +232,12 @@ class Settings:
             universe = load_universe_file(universe_file)
         s = cls(
             broker=_env("BROKER", "t212").lower(),
+            paper_equity=_float("PAPER_EQUITY", 10_000.0),
+            paper_fee_bps=_float("PAPER_FEE_BPS", 1.5),
+            paper_stop_slippage_bps=_float("PAPER_STOP_SLIPPAGE_BPS", 3.0),
+            paper_contract_size=_float("PAPER_CONTRACT_SIZE", 100.0),
+            paper_lot_step=_float("PAPER_LOT_STEP", 0.01),
+            mt5_symbols=_env("MT5_SYMBOLS", "XAU/USD=XAUUSD"),
             trading_currency=_env("TRADING_CURRENCY", "USD").upper(),
             t212_api_key=_env("T212_API_KEY"),
             t212_api_secret=_env("T212_API_SECRET"),
@@ -284,6 +299,9 @@ class Settings:
             where = f"Trading 212 {self.t212_env} (data: {self.data_provider}, stops: {self.t212_stop_mode})"
         elif self.broker == "alpaca":
             where = f"Alpaca {self.alpaca_env} (24/7 crypto, software stops)"
+        elif self.broker == "paper":
+            where = (f"virtual CFD account on Yahoo prices ({self.paper_fee_bps} bps/side, "
+                     f"MT5 mirror {self.mt5_symbols})")
         else:
             where = f"IB {self.ib_host}:{self.ib_port} client={self.ib_client_id}"
         return (

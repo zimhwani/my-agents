@@ -58,4 +58,5 @@ can lose money.
 | `dashboard.py` | self-contained HTML dashboard |
 | `research.py` | in/out-of-sample research, benchmark, sensitivity, ranked report (`research`) |
 | `deriv.py` | gold / forex / index CFD candle history from Deriv's public API (research only) |
+| `paper.py` | virtual CFD broker on live Yahoo prices + MT5 copy instructions (`BROKER=paper`, gold bot) |
 | `worldmonitor.py` | news: macro-event blackout + watchlist headlines (World Monitor or free sources) |
