@@ -47,6 +47,19 @@ def _as_loaded(params_or_loaded, settings: Settings) -> LoadedStrategy:
                           exits=p.to_exit_rules(), risk_overrides={})
 
 
+def default_costs(loaded) -> tuple[float, float, float]:
+    """(fee_bps per side, stop_fill_lambda, stop_slippage_bps) for a strategy: the rules file's own
+    "costs" block if it has one, else 25/0.5/20 for 24h markets (crypto) and zero for equities."""
+    r = getattr(getattr(loaded, "strategy", None), "r", None)
+    crypto = getattr(loaded, "continuous", False)
+    fee = getattr(r, "fee_bps", None)
+    lam = getattr(r, "stop_fill_lambda", None)
+    slip = getattr(r, "stop_slippage_bps", None)
+    return (fee if fee is not None else (25.0 if crypto else 0.0),
+            lam if lam is not None else (0.5 if crypto else 0.0),
+            slip if slip is not None else (20.0 if crypto else 0.0))
+
+
 class Backtester:
     def __init__(self, settings: Settings, params, intraday: dict[str, list[Bar]],
                  daily: dict[str, list[Bar]] | None = None, equity: float = 100_000.0,

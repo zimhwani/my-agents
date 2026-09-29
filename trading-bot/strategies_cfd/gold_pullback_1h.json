@@ -1,0 +1,41 @@
+{
+  "strategy_name": "Gold 1h Pullback (long)",
+  "market": "cfd",
+  "direction": "long_only",
+  "mode": "pullback",
+  "thesis": "In gold's uptrend (above the 200-hour average), a 3-hour RSI under 10 is a liquidity flush that tends to retrace within a day. Buy the first up-bar, 1R target, out within 24 hours.",
+  "risks": "Fails when the trend is turning; high win rate hides the occasional full stop; long-only.",
+  "universe": [
+    "XAU/USD"
+  ],
+  "bar_minutes": 60,
+  "costs": {
+    "fee_bps_per_side": 1.5,
+    "stop_slippage_bps": 3.0,
+    "stop_fill_lambda": 0.5
+  },
+  "entry": {
+    "rsi_bars": 3,
+    "rsi_buy": 10,
+    "trend_ema_bars": 200,
+    "atr_bars": 14,
+    "stop_atr_mult": 2.0,
+    "min_initial_risk_pct": 0.4,
+    "max_initial_risk_pct": 4
+  },
+  "exit": {
+    "cooldown_minutes": 0,
+    "partial_profit_trigger_R": 0,
+    "partial_profit_fraction": 0,
+    "breakeven_trigger_R": 0,
+    "trail": "none",
+    "final_target_R": 1.0,
+    "time_stop_minutes": 1440,
+    "time_stop_min_r": 99
+  },
+  "risk": {
+    "max_risk_per_trade_pct": 1.0,
+    "max_position_size_pct_of_portfolio": 300,
+    "max_concurrent_positions": 1
+  }
+}

@@ -184,11 +184,11 @@ def _timeframe(minutes: int) -> str:
 
 
 def _costs(loaded, opts: Options) -> tuple[float, float, float]:
-    crypto = loaded.continuous
-    fee = opts.fee_bps if opts.fee_bps is not None else (25.0 if crypto else 0.0)
-    lam = opts.stop_fill_lambda if opts.stop_fill_lambda is not None else (0.5 if crypto else 0.0)
-    slip = opts.stop_slippage_bps if opts.stop_slippage_bps is not None else (20.0 if crypto else 0.0)
-    return fee, lam, slip
+    from .backtest import default_costs
+    fee, lam, slip = default_costs(loaded)
+    return (opts.fee_bps if opts.fee_bps is not None else fee,
+            opts.stop_fill_lambda if opts.stop_fill_lambda is not None else lam,
+            opts.stop_slippage_bps if opts.stop_slippage_bps is not None else slip)
 
 
 def _backtest(settings, loaded, bars, opts: Options, start: date, end: date) -> BacktestResult:
@@ -394,7 +394,8 @@ def render(reports: list[StrategyReport], opts: Options, notes: str = "") -> str
                                             .get(r.verdict, 3), -r.score, -r.oos.sharpe))
     L = ["# Strategy research report", ""]
     fee = "25 bps/side" if opts.fee_bps is None else f"{opts.fee_bps:.0f} bps/side"
-    L += [f"Costs: fees {fee} (crypto default), stops filled halfway to the bar's extreme plus 20 bps, "
+    L += [f"Costs: fees {fee} (crypto default; a rules file's own \"costs\" block overrides it, e.g. gold/forex), "
+          "stops filled halfway to the bar's extreme plus slippage, "
           f"entries at the signal bar close plus fees. Starting equity ${opts.equity:,.0f}. "
           f"Equity is marked to market daily. Out-of-sample = last {opts.oos_frac:.0%} of each window. "
           "Parameters are the ones in each rules file; nothing was tuned on the out-of-sample data "

@@ -46,6 +46,13 @@ class CryptoRules:
     trail_from_entry: bool = False  # True: trail from the first bar (chandelier); False: only after breakeven
     thesis: str = ""                # why the edge might exist (shown in the research report)
     risks: str = ""                 # what would break it (shown in the research report)
+    direction: str = "long_only"    # long_only | both | short_only (shorts need a venue that allows them: CFDs)
+    session_start_utc: str = "00:00"  # session mode: the range is built from these bars (UTC) ...
+    session_end_utc: str = "07:00"    # ... e.g. the Asian session before London opens
+    entry_end_utc: str = "12:00"      # session mode: last bar close that may trigger an entry (UTC)
+    fee_bps: float | None = None          # per-side cost for this market (None = backtester default)
+    stop_slippage_bps: float | None = None
+    stop_fill_lambda: float | None = None
     breakout_bars: int = 20
     trend_ema_bars: int = 200
     min_rel_volume: float = 1.5
@@ -78,6 +85,13 @@ class CryptoRules:
             final_target_r=float(x.get("final_target_R", 0.0)),
             trail_from_entry=bool(x.get("trail_from_entry", False)),
             thesis=str(raw.get("thesis", "")), risks=str(raw.get("risks", "")),
+            direction=str(raw.get("direction", "long_only")).lower(),
+            session_start_utc=str(e.get("session_start_utc", "00:00")),
+            session_end_utc=str(e.get("session_end_utc", "07:00")),
+            entry_end_utc=str(e.get("entry_end_utc", "12:00")),
+            fee_bps=(lambda c: None if c.get("fee_bps_per_side") is None else float(c["fee_bps_per_side"]))(raw.get("costs", {})),
+            stop_slippage_bps=(lambda c: None if c.get("stop_slippage_bps") is None else float(c["stop_slippage_bps"]))(raw.get("costs", {})),
+            stop_fill_lambda=(lambda c: None if c.get("stop_fill_lambda") is None else float(c["stop_fill_lambda"]))(raw.get("costs", {})),
             breakout_bars=int(e.get("breakout_bars", 20)), trend_ema_bars=int(e.get("trend_ema_bars", 200)),
             min_rel_volume=float(e.get("min_rel_volume", 1.5)), atr_bars=int(e.get("atr_bars", 14)),
             stop_atr_mult=float(e.get("stop_atr_mult", 2.0)),
@@ -126,7 +140,7 @@ class CryptoMomentum:
 
     # gates, in the order they are checked; explain() reports the first one that fails
     GATES = ("history", "no_breakout", "not_first_bar", "below_ema", "low_relvol", "no_dip", "no_turn",
-             "no_squeeze", "no_atr", "stop_too_wide", "signal")
+             "no_squeeze", "outside_window", "no_range", "no_atr", "stop_too_wide", "signal")
 
     def evaluate(self, symbol: str, intraday: list[Bar], daily: list[Bar], now: datetime) -> Signal | None:
         return self._eval(symbol, intraday, now)[0]
@@ -152,17 +166,27 @@ class CryptoMomentum:
             return self._eval_pullback(symbol, bars, now)
         if r.mode == "squeeze":
             return self._eval_squeeze(symbol, bars, now)
+        if r.mode == "session":
+            return self._eval_session(symbol, bars, now)
         last, prev = bars[-1], bars[-2]
         window = bars[-(r.breakout_bars + 1):-1]
-        hh = max(b.high for b in window)
-        if last.close <= hh:
-            return None, "no_breakout"
         prev_window = bars[-(r.breakout_bars + 2):-2]
-        if prev.close > max(b.high for b in prev_window):
-            return None, "not_first_bar"  # already broke out on the previous bar; take the first bar only
+        hh, ll = max(b.high for b in window), min(b.low for b in window)
+        can_long = r.direction != "short_only" or r.mode == "fade"
+        can_short = r.direction in ("both", "short_only") and r.mode != "fade"
+        if can_long and last.close > hh:
+            short = False
+            if prev.close > max(b.high for b in prev_window):
+                return None, "not_first_bar"  # already broke out on the previous bar; take the first bar only
+        elif can_short and last.close < ll:
+            short = True
+            if prev.close < min(b.low for b in prev_window):
+                return None, "not_first_bar"
+        else:
+            return None, "no_breakout"
         closes = [b.close for b in bars[-(r.trend_ema_bars * 4):]]  # 4x warm-up is plenty; keeps replays fast
         trend = ema(closes, r.trend_ema_bars)
-        if trend is None or last.close <= trend:
+        if trend is None or (last.close >= trend if short else last.close <= trend):
             return None, "below_ema"
         vols = [b.volume for b in window]
         avg_vol = sum(vols) / len(vols) if vols else 0.0
@@ -178,6 +202,10 @@ class CryptoMomentum:
             dist = max(dist, entry * r.min_initial_risk_pct / 100.0)
         if dist <= 0 or dist / entry * 100.0 > r.max_initial_risk_pct:
             return None, "stop_too_wide"
+        if short:
+            reason = f"breakdown < {ll:.4g} ({r.breakout_bars} bars), EMA{r.trend_ema_bars} {trend:.4g}, ATR {a:.4g}"
+            return Signal(symbol=symbol, side=SHORT, entry=entry, stop=entry + dist, target=entry - 3 * dist,
+                          atr=a, time=now, reason=reason), "signal"
         reason = f"breakout > {hh:.4g} ({r.breakout_bars} bars), EMA{r.trend_ema_bars} {trend:.4g}, relvol {rel:.2f}, ATR {a:.4g}"
         if r.mode == "fade":  # same trigger, opposite side: short the breakout, stop the same distance above
             return Signal(symbol=symbol, side=SHORT, entry=entry, stop=entry + dist, target=entry - 3 * dist,
@@ -193,7 +221,57 @@ class CryptoMomentum:
             return r.squeeze_lookback + r.squeeze_bars + r.box_bars
         if r.mode == "pullback":
             return r.rsi_bars * 6
+        if r.mode == "session":
+            return max(r.atr_bars * 4, int(1440 / max(1, r.bar_minutes)) + 2)
         return r.breakout_bars
+
+    def _eval_session(self, symbol: str, bars: list[Bar], now: datetime) -> tuple[Signal | None, str]:
+        """Opening-range breakout of a session: the high/low of session_start..session_end (UTC, e.g. the
+        Asian range) is broken by a bar that closes before entry_end. First break of the day only, each
+        side. Stop on the far side of the range (at least stop_atr_mult ATRs / min_initial_risk_pct)."""
+        from datetime import timezone as _tz
+        r = self.r
+        width = timedelta(minutes=self.bar_minutes)
+        last = bars[-1]
+        utc = lambda b: b.time.astimezone(_tz.utc)  # noqa: E731
+        day = utc(last).date()
+        t_close = (utc(last) + width).time()
+        s0, s1, e1 = (clock.parse_hhmm(x) for x in (r.session_start_utc, r.session_end_utc, r.entry_end_utc))
+        if not (s1 < t_close <= e1):
+            return None, "outside_window"
+        rng = [b for b in bars if utc(b).date() == day and s0 <= utc(b).time() and (utc(b) + width).time() <= s1]
+        if len(rng) < 3:
+            return None, "no_range"
+        hi, lo = max(b.high for b in rng), min(b.low for b in rng)
+        earlier = [b for b in bars[:-1] if utc(b).date() == day and (utc(b) + width).time() > s1]
+        allow_short = r.direction in ("both", "short_only")
+        if r.direction != "short_only" and last.close > hi:
+            short = False
+            if any(b.close > hi for b in earlier):
+                return None, "not_first_bar"
+        elif allow_short and last.close < lo:
+            short = True
+            if any(b.close < lo for b in earlier):
+                return None, "not_first_bar"
+        else:
+            return None, "no_breakout"
+        if r.trend_ema_bars > 0:
+            trend = ema([b.close for b in bars[-(r.trend_ema_bars * 4):]], r.trend_ema_bars)
+            if trend is None or (last.close >= trend if short else last.close <= trend):
+                return None, "below_ema"
+        a = atr_of(bars[-(r.atr_bars * 4):], r.atr_bars) or 0.0
+        entry = last.close
+        dist = (entry - lo) if not short else (hi - entry)
+        dist = max(dist, r.stop_atr_mult * a, entry * r.min_initial_risk_pct / 100.0)
+        if dist <= 0 or dist / entry * 100.0 > r.max_initial_risk_pct:
+            return None, "stop_too_wide"
+        reason = (f"session {'breakdown' if short else 'breakout'} of {r.session_start_utc}-{r.session_end_utc} UTC "
+                  f"range {lo:.5g}-{hi:.5g}, ATR {a:.4g}")
+        if short:
+            return Signal(symbol=symbol, side=SHORT, entry=entry, stop=entry + dist, target=entry - 2 * dist,
+                          atr=a, time=now, reason=reason), "signal"
+        return Signal(symbol=symbol, side=LONG, entry=entry, stop=entry - dist, target=entry + 2 * dist,
+                      atr=a, time=now, reason=reason), "signal"
 
     @staticmethod
     def _bandwidth(closes: list[float]) -> float:
@@ -285,7 +363,7 @@ def loaded_from_rules(rules: CryptoRules) -> LoadedStrategy:
         include_premarket=True, scan_kind="static", scan_at=time(0, 0), force_close=None,
         risk_overrides={"risk_per_trade_pct": rules.max_risk_per_trade_pct,
                         "max_position_pct": rules.max_position_pct, "max_positions": rules.max_positions,
-                        "allow_shorts": rules.mode == "fade"},
+                        "allow_shorts": rules.mode == "fade" or rules.direction != "long_only"},
         continuous=True, fractional=True, cooldown_minutes=rules.cooldown_minutes, universe=list(rules.universe),
     )
 

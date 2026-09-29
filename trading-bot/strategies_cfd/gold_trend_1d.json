@@ -1,0 +1,41 @@
+{
+  "strategy_name": "Gold Daily Donchian (long/short)",
+  "market": "cfd",
+  "direction": "both",
+  "mode": "breakout",
+  "thesis": "Time-series momentum in commodities (Moskowitz, Ooi & Pedersen 2012): gold's multi-week trends, driven by real rates, central-bank buying and the dollar, persist. 20-day breakout both ways with a 3-ATR chandelier.",
+  "risks": "Few trades on one instrument, so results are lumpy; overnight financing on CFDs is not modelled; long sideways years whipsaw it.",
+  "universe": [
+    "XAU/USD"
+  ],
+  "bar_minutes": 1440,
+  "costs": {
+    "fee_bps_per_side": 1.5,
+    "stop_slippage_bps": 3.0,
+    "stop_fill_lambda": 0.5
+  },
+  "entry": {
+    "breakout_bars": 20,
+    "trend_ema_bars": 50,
+    "min_rel_volume": 0,
+    "atr_bars": 14,
+    "stop_atr_mult": 2.5,
+    "min_initial_risk_pct": 0,
+    "max_initial_risk_pct": 15
+  },
+  "exit": {
+    "cooldown_minutes": 0,
+    "partial_profit_trigger_R": 0,
+    "partial_profit_fraction": 0,
+    "breakeven_trigger_R": 0,
+    "trail": "atr_3.0",
+    "trail_from_entry": true,
+    "time_stop_minutes": 0,
+    "time_stop_min_r": 0
+  },
+  "risk": {
+    "max_risk_per_trade_pct": 1.0,
+    "max_position_size_pct_of_portfolio": 300,
+    "max_concurrent_positions": 1
+  }
+}

@@ -255,7 +255,7 @@ def load_strategy(path: str | Path, allow_shorts: bool = False) -> LoadedStrateg
     """``rules.json`` (Trend Join Long) or ``strategy.json`` (ORB), by content."""
     p = Path(path)
     raw = json.loads(p.read_text()) if p.exists() else {}
-    if raw.get("market") == "crypto":
+    if raw.get("market") in ("crypto", "cfd", "fx"):  # 24h markets share the rules engine
         from .crypto import load_crypto
         return load_crypto(p)
     if "strategy_name" in raw or "daily_filters" in raw:

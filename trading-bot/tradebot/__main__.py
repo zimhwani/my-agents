@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
 import sys
 from pathlib import Path
 
@@ -590,8 +591,30 @@ def cmd_research(args) -> None:
 
     if args.fetch_days:
         from .alpaca_broker import AlpacaCryptoData, alpaca_timeframe, fname
+        markets = {f: _json.loads(Path(f).read_text()).get("market", "") for f in files}
+        cfd = {f for f, m in markets.items() if m in ("cfd", "fx")}
+        if cfd:  # gold / forex / index CFDs: Deriv's public candle history
+            from .deriv import download
+            now_epoch = int(clock.now_et().timestamp())
+            jobs = []
+            for f in sorted(cfd):
+                minutes = int(getattr(loaded[f].strategy, "bar_minutes", 60))
+                days = args.fetch_days if minutes >= 60 else min(args.fetch_days, args.max_intraday_days)
+                for sym in loaded[f].universe or []:
+                    out = data / f"{fname(sym)}_{minutes}min.csv"
+                    job = (sym, minutes * 60, now_epoch - days * 86400, now_epoch)
+                    if (not out.exists() or args.refetch) and job not in jobs:
+                        jobs.append(job)
+            if jobs:
+                got = download(jobs, os.environ.get("DERIV_APP_ID", "1089"))
+                for (sym, gran), bars in got.items():
+                    save_csv(bars, data / f"{fname(sym)}_{gran // 60}min.csv")
+                    print(f"fetched {sym} {gran // 60}-min from Deriv: {len(bars)} bars", flush=True)
         d = AlpacaCryptoData(s.alpaca_api_key, s.alpaca_api_secret)
         for minutes, fs in sorted(by_tf.items()):
+            fs = [f for f in fs if f not in cfd]
+            if not fs:
+                continue
             if not all(loaded[f].continuous for f in fs):
                 print(f"skipping fetch for {minutes}-min equities strategies; supply their CSVs in {data}")
                 continue
@@ -717,9 +740,11 @@ def cmd_backtest(args) -> None:
         if loaded.scan_kind == "gap" and not daily:
             print("Note: no *_1d.csv daily files found; the 200-day SMA filter needs them. "
                   "Re-run `fetch-data` to download daily history.")
-    fee_bps = args.fee_bps if args.fee_bps is not None else (25.0 if loaded.continuous else 0.0)
-    lam = args.stop_fill_lambda if args.stop_fill_lambda is not None else (0.5 if loaded.continuous else 0.0)
-    sslip = args.stop_slippage_bps if args.stop_slippage_bps is not None else (20.0 if loaded.continuous else 0.0)
+    from .backtest import default_costs
+    d_fee, d_lam, d_slip = default_costs(loaded)
+    fee_bps = args.fee_bps if args.fee_bps is not None else d_fee
+    lam = args.stop_fill_lambda if args.stop_fill_lambda is not None else d_lam
+    sslip = args.stop_slippage_bps if args.stop_slippage_bps is not None else d_slip
     bt = Backtester(s, loaded, bars, daily=daily, equity=args.equity, fee_bps=fee_bps, stop_fill_lambda=lam,
                     stop_slippage_bps=sslip)
     from datetime import date as _date
@@ -761,7 +786,7 @@ def cmd_sweep(args) -> None:
     import logging as _logging
     strategy_file = Path(args.strategy) if args.strategy else s.strategy_file
     raw = _json.loads(strategy_file.read_text()) if strategy_file.exists() else {}
-    crypto = raw.get("market") == "crypto"
+    crypto = raw.get("market") in ("crypto", "cfd", "fx")
     if crypto:
         from .crypto import CryptoRules
         params = CryptoRules.load(strategy_file)
@@ -786,14 +811,17 @@ def cmd_sweep(args) -> None:
         print(f"No *{suffix} files in {args.data}. Run `fetch-data`/`fetch-crypto` first.")
         sys.exit(1)
     grid = _json.loads(args.grid) if args.grid else default_grid(params)
-    fee_bps = args.fee_bps if args.fee_bps is not None else (25.0 if crypto else 0.0)
+    costs = raw.get("costs", {}) if crypto else {}
+    fee_bps = args.fee_bps if args.fee_bps is not None else float(costs.get("fee_bps_per_side", 25.0 if crypto else 0.0))
     n = 1
     for v in grid.values():
         n *= len(v)
     print(f"Sweeping {n} combinations over {len(bars)} symbols (base: {strategy_file}, fees {fee_bps:.0f} bps/side)...")
     _logging.getLogger("tradebot").setLevel(_logging.WARNING)  # the sim's per-fill INFO lines would drown the table
-    lam = args.stop_fill_lambda if args.stop_fill_lambda is not None else (0.5 if crypto else 0.0)
-    sslip = args.stop_slippage_bps if args.stop_slippage_bps is not None else (20.0 if crypto else 0.0)
+    lam = args.stop_fill_lambda if args.stop_fill_lambda is not None else \
+        float(costs.get("stop_fill_lambda", 0.5 if crypto else 0.0))
+    sslip = args.stop_slippage_bps if args.stop_slippage_bps is not None else \
+        float(costs.get("stop_slippage_bps", 20.0 if crypto else 0.0))
     rows = sweep(s, params, bars, grid, equity=args.equity, daily=daily, fee_bps=fee_bps,
                  stop_fill_lambda=lam, stop_slippage_bps=sslip,
                  progress=lambda i, n, combo: print(f"  [{i}/{n}] {combo}", flush=True))

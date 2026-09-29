@@ -56,3 +56,6 @@ can lose money.
 | `journal.py` | trade JSONL + R-multiple stats |
 | `telegram.py` | alerts |
 | `dashboard.py` | self-contained HTML dashboard |
+| `research.py` | in/out-of-sample research, benchmark, sensitivity, ranked report (`research`) |
+| `deriv.py` | gold / forex / index CFD candle history from Deriv's public API (research only) |
+| `worldmonitor.py` | news: macro-event blackout + watchlist headlines (World Monitor or free sources) |
