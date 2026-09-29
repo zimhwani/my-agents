@@ -6,6 +6,10 @@ import type { Itinerary, RankedOffer } from "@/lib/types";
 import { ClockIcon, ExternalIcon } from "./Icons";
 import { Price } from "./SummaryStrip";
 
+function carriersOf(it: Itinerary): string {
+  return [...new Set(it.segments.map((s) => s.carrierName))].join(" + ");
+}
+
 function RouteLine({ it }: { it: Itinerary }) {
   const first = it.segments[0];
   const last = it.segments[it.segments.length - 1];
@@ -80,11 +84,20 @@ export function OfferCard({ offer: o, position, selected, onSelect, isSample }: 
         </div>
       </div>
 
-      <div className="leg-row">
-        <div className="leg-label"><b>{shortDay(o.departureDate)}</b><span>{o.validatingCarrierName}</span></div>
-        <RouteLine it={o.outbound} />
-      </div>
-      {o.laterLegs?.length ? (
+      {o.legs && o.legs.length > 1 ? (
+        o.legs.map((it, i) => (
+          <div className="leg-row" key={i}>
+            <div className="leg-label"><b>{shortDay(it.segments[0].departure.slice(0, 10))}</b><span>Flight {i + 1} · {carriersOf(it)}</span></div>
+            <RouteLine it={it} />
+          </div>
+        ))
+      ) : (
+        <div className="leg-row">
+          <div className="leg-label"><b>{shortDay(o.departureDate)}</b><span>{o.validatingCarrierName}</span></div>
+          <RouteLine it={o.outbound} />
+        </div>
+      )}
+      {o.legs && o.legs.length > 1 ? null : o.laterLegs?.length ? (
         <div className="later">
           Then {o.laterLegs.map((l) => `${airportLabel(l.from)} → ${airportLabel(l.to)} on ${shortDay(l.date)}`).join(", then ")}. Those flights are picked when you book.
         </div>
@@ -106,8 +119,10 @@ export function OfferCard({ offer: o, position, selected, onSelect, isSample }: 
 
       {selected && (
         <div className="timeline">
-          <Timeline it={o.outbound} title={`To ${airportLabel(o.outbound.segments.at(-1)!.to)}`} />
-          {o.inbound && <Timeline it={o.inbound} title={`Home to ${airportLabel(o.inbound.segments.at(-1)!.to)}`} />}
+          {o.legs && o.legs.length > 1
+            ? o.legs.map((it, i) => <Timeline key={i} it={it} title={`Flight ${i + 1}: ${airportLabel(it.segments[0].from)} to ${airportLabel(it.segments.at(-1)!.to)}, ${shortDay(it.segments[0].departure.slice(0, 10))}`} />)
+            : <Timeline it={o.outbound} title={`To ${airportLabel(o.outbound.segments.at(-1)!.to)}`} />}
+          {!o.legs && o.inbound && <Timeline it={o.inbound} title={`Home to ${airportLabel(o.inbound.segments.at(-1)!.to)}`} />}
           {o.warnings.length > 2 && <div className="headsup">{o.warnings.slice(2).map((w) => <span key={w}><ClockIcon /> {w}</span>)}</div>}
           <div className="why">Why it ranks here: overall {o.scores.best} · price {o.scores.cheapest} · speed {o.scores.fastest}</div>
         </div>

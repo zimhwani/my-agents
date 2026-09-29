@@ -2,7 +2,7 @@
  * Rule-based understanding of spoken commands. Runs in the browser as the
  * instant path and on the server as the fallback when no ANTHROPIC_API_KEY is set.
  */
-import { AIRPORTS } from "./airports";
+import { AIRPORTS, CITY_ALIASES } from "./airports";
 import { addDays, daysBetween, endOfNextJanuary, formatISODate, parseISODate, todayISO } from "./dates";
 import type { Cabin, Intent, SortMode } from "./types";
 
@@ -224,6 +224,95 @@ export function parseStopover(t: string, todayIso = todayISO()): Intent | null {
   };
 }
 
+// Airport codes that are safe to hear as words ("add", "per" and "sin" are not).
+const SPOKEN_CODES = ["mel", "hre", "jnb", "cpt", "dxb", "doh", "auh", "syd", "vfa", "lun", "nbo", "kgl", "mru", "wdh", "buq", "bkk", "hkg", "kul", "dur"];
+const CITY_NAMES: [string, string][] = [
+  ...Object.values(AIRPORTS).map((a) => [a.city.toLowerCase(), a.code] as [string, string]),
+  ...Object.entries(CITY_ALIASES),
+  ...SPOKEN_CODES.map((c) => [c, c.toUpperCase()] as [string, string]),
+].sort((a, b) => b[0].length - a[0].length);
+const CITY_ALT = CITY_NAMES.map(([n]) => n.replace(/\s+/g, "\\s+")).join("|");
+
+/** Every city mentioned, in the order spoken. "home" means back to where the trip started. */
+function citiesInOrder(t: string): string[] {
+  const re = new RegExp(`\\b(${CITY_ALT}|home)\\b`, "g");
+  const out: string[] = [];
+  for (let m; (m = re.exec(t)); ) {
+    const said = m[1].replace(/\s+/g, " ");
+    out.push(said === "home" ? "HOME" : CITY_NAMES.find(([n]) => n === said)![1]);
+  }
+  return out;
+}
+
+function midpoint(w: { windowStart?: string; windowEnd?: string }): string | undefined {
+  if (!w.windowStart || !w.windowEnd) return undefined;
+  return addDays(w.windowStart, Math.floor(daysBetween(w.windowStart, w.windowEnd) / 2));
+}
+
+/**
+ * Multi-city trips: "Melbourne to Joburg on 2 December, then Cape Town the next day,
+ * Cape Town to Harare on the 7th and back home on 5 January". Needs three or more flights,
+ * or two with "multi city". Missing first departure city is left for the caller (the origin);
+ * "HOME" means the first flight's departure city.
+ */
+export function parseRoute(utterance: string, todayIso = todayISO()): Intent | null {
+  const raw = utterance.toLowerCase().replace(/[’']/g, "");
+  const multi = /\bmulti[\s-]?cit(?:y|ies)\b/.test(raw);
+  const splitter = new RegExp(`[,;.]|\\b(?:and\\s+)?(?:then|after that|afterwards|followed by)\\b|\\band\\s+(?=(?:(?:fly|go|head)\\s+)?(?:from\\s+|back\\s+|to\\s+)?(?:${CITY_ALT}|home)\\b)`);
+  const chunks = raw.split(splitter).map((c) => normalizeUtterance(c ?? "")).filter(Boolean);
+  const legs: { from?: string; to: string; date?: string }[] = [];
+  let firstWindow: { windowStart?: string; windowEnd?: string } | null = null;
+  let gap: number | undefined;
+  for (const c of chunks) {
+    const cities = citiesInOrder(c);
+    const prev = legs.at(-1);
+    let date: string | undefined;
+    const nightsFor = new RegExp(`\\b(?:for|stay|spend)\\s+(?:for\\s+)?${NUM_WORD}\\s+(nights?|days?|weeks?)\\b`).exec(c);
+    const later = new RegExp(`\\b${NUM_WORD}\\s+(days?|nights?|weeks?)\\s+later\\b`).exec(c);
+    const dateText = c.replace(new RegExp(`${NUM_WORD}\\s+(?:nights?|days?|weeks?)`, "g"), " ");
+    const w = parseDateWindow(dateText, todayIso);
+    const dayOnly = /\b(?:on\s+)?the\s+(\d{1,2})(?:st|nd|rd|th)\b/.exec(c);
+    if (w?.windowStart) date = midpoint(w);
+    else if (later && prev?.date) date = addDays(prev.date, (num(later[1]) ?? 1) * (later[2].startsWith("week") ? 7 : 1));
+    else if (/\b(?:the\s+)?(?:next day|day after|following day)\b/.test(c) && prev?.date) date = addDays(prev.date, 1);
+    else if (dayOnly && prev?.date) {
+      const p = parseISODate(prev.date);
+      const d = new Date(p.getFullYear(), p.getMonth(), Number(dayOnly[1]));
+      if (d < p) d.setMonth(d.getMonth() + 1);
+      date = formatISODate(d);
+    } else if (gap !== undefined && prev?.date) date = addDays(prev.date, gap);
+    gap = nightsFor ? (num(nightsFor[1]) ?? 1) * (nightsFor[2].startsWith("week") ? 7 : 1) : undefined;
+    if (cities.length === 0) {
+      if (date && prev && !prev.date) prev.date = date;
+      continue;
+    }
+    // "Melbourne to Joburg to Cape Town": consecutive pairs; one city means "on to there".
+    const stops = cities.length === 1 ? [prev?.to, cities[0]] : cities;
+    for (let i = 1; i < stops.length; i++) {
+      if (stops[i] === stops[i - 1]) continue;
+      legs.push({ ...(stops[i - 1] ? { from: stops[i - 1] } : {}), to: stops[i]!, ...(i === 1 && date ? { date } : {}) });
+      if (legs.length === 1 && w?.windowStart) firstWindow = w;
+    }
+  }
+  const home = legs[0]?.from;
+  for (const l of legs) {
+    if (l.to === "HOME" && home) l.to = home;
+    if (l.from === "HOME" && home) l.from = home;
+  }
+  const valid = legs.filter((l) => l.from !== l.to);
+  if (valid.length < 2 || (valid.length < 3 && !multi)) return null;
+  // Keep dates moving forward (e.g. "5 January" after December flights).
+  for (let i = 1; i < valid.length; i++) {
+    const a = valid[i - 1].date;
+    const b = valid[i].date;
+    if (a && b && b < a) valid[i].date = addDays(b, 365);
+  }
+  return {
+    type: "set_route", legs: valid.slice(0, 6),
+    ...(firstWindow && firstWindow.windowStart !== firstWindow.windowEnd ? { windowStart: firstWindow.windowStart, windowEnd: firstWindow.windowEnd } : {}),
+  };
+}
+
 /** Splits "... returning early january" into the outbound text and a return date. */
 export function parseReturn(text: string, todayIso = todayISO()): { outbound: string; returnDate?: string; returnInferred?: boolean } {
   const t = normalizeUtterance(text);
@@ -249,6 +338,8 @@ export function parseIntent(utterance: string, todayIso = todayISO()): Intent {
     if (n && n >= 1) return { type: "set_step", stepDays: Math.min(31, n) };
   }
 
+  const route = parseRoute(utterance, todayIso);
+  if (route) return route;
   const stopover = parseStopover(full, todayIso);
   if (stopover) return stopover;
   if (/^(stop|be quiet|quiet|shut up|cancel|never ?mind|enough|silence)\b/.test(t) && !/tracking|track/.test(t)) return { type: "stop" };
@@ -320,5 +411,6 @@ export function parseIntent(utterance: string, todayIso = todayISO()): Intent {
 export const HELP_TEXT =
   "You can say: mid to late November, back early January; search early December; check every 2 days; " +
   "stop over in Dubai for 3 nights; no stopover; " +
+  "multi city: Melbourne to Joburg on 2 December, then Cape Town the next day, Harare on the 7th, home on 5 January; " +
   "show me the best options; what's the fastest; read me the top three; tell me about option two; " +
   "two adults and two children; one way; return staying three weeks; fly business; start tracking prices daily; or stop.";

@@ -13,20 +13,25 @@ export { fallbackInterpretation, speechFor } from "./speech";
 
 const IntentSchema = z.object({
   type: z.enum([
-    "search", "set_dates", "set_step", "set_stopover", "set_passengers", "set_trip", "set_cabin", "set_sort",
+    "search", "set_dates", "set_step", "set_route", "set_stopover", "set_passengers", "set_trip", "set_cabin", "set_sort",
     "read_results", "select_offer", "track", "help", "stop", "unknown",
   ]),
   windowStart: z.string().nullable().describe("YYYY-MM-DD, for set_dates"),
   windowEnd: z.string().nullable().describe("YYYY-MM-DD, for set_dates"),
   returnDate: z.string().nullable().describe("YYYY-MM-DD fixed return date, for set_dates when the user says when they come back (a span like 'early January' -> its middle day)"),
   stepDays: z.number().int().nullable().describe("For set_step: check a departure date every N days"),
+  routeLegs: z.array(z.object({
+    from: z.string().nullable().describe("IATA code; null for the first flight means the trip's usual origin"),
+    to: z.string().describe("IATA code"),
+    date: z.string().nullable().describe("YYYY-MM-DD, or null if not said"),
+  })).nullable().describe("For set_route: every flight of a multi-city trip in order (2-6 flights)"),
   stopoverAirport: z.string().nullable().describe("For set_stopover: IATA code of the stopover city (e.g. DXB, DOH, SIN, JNB, CPT, VFA); null to remove the stopover. If the user also gives dates, fill windowStart/windowEnd/returnDate too."),
   stopoverNights: z.number().int().nullable().describe("For set_stopover: nights at the stopover"),
   stopoverLeg: z.enum(["outbound", "return"]).nullable().describe("For set_stopover: stop on the way there (outbound) or on the way home (return)"),
   adults: z.number().int().nullable(),
   children: z.number().int().nullable(),
   infants: z.number().int().nullable(),
-  tripType: z.enum(["return", "oneway"]).nullable(),
+  tripType: z.enum(["return", "oneway"]).nullable().describe("For set_trip only; multi-city uses set_route"),
   stayNights: z.number().int().nullable(),
   cabin: z.enum(["ECONOMY", "PREMIUM_ECONOMY", "BUSINESS"]).nullable(),
   sort: z.enum(["best", "cheapest", "fastest"]).nullable(),
@@ -49,6 +54,10 @@ function toIntent(p: z.infer<typeof IntentSchema>, utterance: string): Intent {
     case "search": return { type: "search" };
     case "set_dates": return { type: "set_dates", windowStart: or(p.windowStart), windowEnd: or(p.windowEnd), returnDate: or(p.returnDate) };
     case "set_stopover": return { type: "set_stopover", airport: p.stopoverAirport, nights: or(p.stopoverNights), leg: or(p.stopoverLeg), windowStart: or(p.windowStart), windowEnd: or(p.windowEnd), returnDate: or(p.returnDate) };
+    case "set_route":
+      return p.routeLegs && p.routeLegs.length >= 2
+        ? { type: "set_route", legs: p.routeLegs.map((l) => ({ ...(l.from ? { from: l.from.toUpperCase() } : {}), to: l.to.toUpperCase(), ...(l.date ? { date: l.date } : {}) })) }
+        : { type: "unknown", utterance };
     case "set_step": return p.stepDays ? { type: "set_step", stepDays: p.stepDays } : { type: "unknown", utterance };
     case "set_passengers": return { type: "set_passengers", adults: or(p.adults), children: or(p.children), infants: or(p.infants) };
     case "set_trip": return { type: "set_trip", tripType: or(p.tripType), stayNights: or(p.stayNights) };
@@ -67,6 +76,7 @@ const SYSTEM = `You are the voice of a flight travel agent app. The user speaks;
 The app tracks flights from Melbourne (MEL) to Harare (HRE). Intents:
 - search: run the fare scan now.
 - set_dates: change the departure window (always resolve to concrete YYYY-MM-DD dates; "anytime" means today to the following 31 January; "middle to end of November" is the 11th to the last day). If the user says when they come back ("returning early January"), set returnDate too.
+- set_route: a multi-city trip of separate flights, each with its own date ("Melbourne to Joburg on 2 December, Joburg to Cape Town on the 3rd, Cape Town to Harare on the 7th, home on 5 January"). Fill routeLegs in order with IATA codes (Joburg = JNB, Cape Town = CPT, Victoria Falls = VFA, home = the first flight's departure city).
 - set_stopover: make it a multi-city trip with a multi-night stop ("3 nights in Dubai on the way") or remove it ("no stopover").
 - set_step: how often to sample departure dates ("check every 2 days" -> stepDays 2).
 - set_passengers / set_trip / set_cabin: change travellers, one-way vs return and nights away, or cabin.
@@ -87,7 +97,7 @@ export async function interpretWithClaude(utterance: string, ctx: InterpretConte
     today: ctx.today,
     currentSearch: {
       window: `${ctx.params.windowStart} to ${ctx.params.windowEnd}`,
-      trip: ctx.params.tripType === "return" ? (ctx.params.returnDate ? `return, coming back ${ctx.params.returnDate}` : `return, ${ctx.params.stayNights} nights away`) : "one way",
+      trip: ctx.params.route ? `multi-city: ${JSON.stringify(ctx.params.route)} (offset = days after the first flight)` : ctx.params.tripType === "return" ? (ctx.params.returnDate ? `return, coming back ${ctx.params.returnDate}` : `return, ${ctx.params.stayNights} nights away`) : "one way",
       passengers: passengerSummary(ctx.params),
       cabin: ctx.params.cabin,
       stopover: ctx.params.stopover ?? "none",

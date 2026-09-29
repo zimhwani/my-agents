@@ -1,7 +1,7 @@
 import { airportLabel } from "./airports";
 import { daysBetween, formatDuration, formatTime, humanDate, parseISODate, spokenDate, spokenDuration } from "./dates";
 import { sortOffers } from "./rank";
-import { whyNoDates } from "./params";
+import { legsFor, whyNoDates } from "./params";
 import type { Itinerary, RankedOffer, ScanResult, SearchParams, SortMode } from "./types";
 
 export function money(n: number, currency = "AUD"): string {
@@ -69,8 +69,22 @@ export function travellersSpoken(p: SearchParams): string {
   return parts.length > 1 ? `${parts.slice(0, -1).join(", ")} and ${parts.at(-1)}` : parts[0];
 }
 
+/** "Melbourne to Johannesburg on 2 December, Johannesburg to Cape Town on 3 December, …" */
+export function spokenLegs(legs: { from?: string; to: string; date?: string }[]): string {
+  const name = (c: string) => (c === "HOME" ? "home" : airportLabel(c));
+  return legs.map((l) => `${l.from ? `${name(l.from)} to ` : "to "}${name(l.to)}${l.date ? ` on ${spokenDate(l.date)}` : ""}`).join(", ");
+}
+
 /** One sentence: what the agent understood. */
 export function spokenUnderstood(p: SearchParams): string {
+  if (p.route) {
+    const legs = legsFor(p, p.windowStart) ?? [];
+    const flex = p.windowStart !== p.windowEnd ? `, trying first-flight dates from ${dateRange(p.windowStart, p.windowEnd, true)}` : "";
+    const stops = [legs[0].from, ...legs.map((l) => l.to)].map(airportLabel);
+    const loop = legs.at(-1)!.to === legs[0].from;
+    const path = loop ? `${stops.slice(0, -1).join(", ")} and back to ${stops.at(-1)}` : `${stops.slice(0, -1).join(", ")} and ${stops.at(-1)}`;
+    return `Looking at ${legs.length} flights: ${path}, ${dateRange(legs[0].date, legs.at(-1)!.date, true)}${flex}, for ${travellersSpoken(p)}.`;
+  }
   const when = p.windowStart === p.windowEnd ? spokenDate(p.windowStart) : dateRange(p.windowStart, p.windowEnd, true);
   const nights = (n: number) => `${n} night${n === 1 ? "" : "s"}`;
   const so = p.stopover ? `, with ${nights(p.stopover.nights)} in ${airportLabel(p.stopover.airport)} on the way${p.stopover.leg === "return" ? " home" : ""}` : "";
@@ -112,7 +126,7 @@ export function spokenOffer(o: RankedOffer, position: number): string {
   const out = o.outbound;
   const parts = [
     `Option ${position}: ${money(o.price.total, o.price.currency)} with ${o.validatingCarrierName}`,
-    `${routeLabel(out)}, leaving ${spokenDate(o.departureDate)}`,
+    o.legs && o.legs.length > 1 ? `${o.legs.length} flights starting ${spokenDate(o.departureDate)}, first one ${routeLabel(out)}` : `${routeLabel(out)}, leaving ${spokenDate(o.departureDate)}`,
     `${spokenDuration(o.totalDurationMin)} in total`,
   ];
   if (o.warnings.length) parts.push(`heads-up: ${o.warnings[0].toLowerCase()}`);
@@ -122,6 +136,11 @@ export function spokenOffer(o: RankedOffer, position: number): string {
 /** "Tell me about option two": about 50 words. */
 export function spokenOfferDetail(o: RankedOffer, position: number): string {
   const out = o.outbound;
+  if (o.legs && o.legs.length > 1) {
+    const legs = o.legs.map((l) => `${airportLabel(l.segments[0].from)} to ${airportLabel(l.segments.at(-1)!.to)} ${spokenDate(l.segments[0].departure.slice(0, 10))} at ${formatTime(l.segments[0].departure)}, ${routeLabel(l)}`);
+    const note = o.warnings.length ? ` Heads-up: ${o.warnings[0].toLowerCase()}.` : "";
+    return `Option ${position} is ${money(o.price.total, o.price.currency)} for the family with ${o.validatingCarrierName}, ${o.legs.length} flights. ${legs.join(". ")}.${note}`;
+  }
   const first = out.segments[0];
   const last = out.segments[out.segments.length - 1];
   const back = o.returnDate ? ` Coming back ${spokenDate(o.returnDate)}.` : "";

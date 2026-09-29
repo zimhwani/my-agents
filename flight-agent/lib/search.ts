@@ -14,7 +14,7 @@ interface CacheEntry {
 const cache = new Map<string, CacheEntry>();
 
 function cacheKey(provider: string, p: SearchParams, dep: string, ret?: string): string {
-  const so = p.stopover ? `${p.stopover.airport}:${p.stopover.nights}:${p.stopover.leg}` : "";
+  const so = p.route ? JSON.stringify(p.route) : p.stopover ? `${p.stopover.airport}:${p.stopover.nights}:${p.stopover.leg}` : "";
   return JSON.stringify([provider, p.origin, p.destination, p.tripType, p.adults, p.children, p.infants, p.cabin, p.currency, p.maxStops, dep, ret ?? "", so]);
 }
 

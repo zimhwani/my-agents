@@ -2,7 +2,8 @@
 import { useEffect, useRef } from "react";
 import { AIRPORTS, airportLabel } from "@/lib/airports";
 import { dateRange, shortDay } from "@/lib/format";
-import { passengerSummary } from "@/lib/params";
+import { legsFor, passengerSummary, routeCodes } from "@/lib/params";
+import { FlightsEditor, seedRoute } from "./FlightsEditor";
 import type { Cabin, SearchParams, TripType } from "@/lib/types";
 import type { EditField } from "./UnderstoodChips";
 
@@ -39,16 +40,18 @@ export function TripSettings({ params: p, onChange, onSearch, loading, datesToSc
     ref.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
   }, [open, focus]);
 
-  const back = p.tripType === "oneway" ? "one way" : p.returnDate ? `back ${shortDay(p.returnDate)}` : `${p.stayNights} nights away`;
+  const back = p.route ? null : p.tripType === "oneway" ? "one way" : p.returnDate ? `back ${shortDay(p.returnDate)}` : `${p.stayNights} nights away`;
+  const multi = !!p.route;
   const parts = [
-    `${p.origin} → ${p.destination}`,
+    p.route ? `Multi-city ${routeCodes(p.route)}` : `${p.origin} → ${p.destination}`,
+    p.route ? (legsFor(p, p.windowStart) ?? []).map((l) => shortDay(l.date)).join(", ") : null,
     p.stopover ? `${p.stopover.nights} nights in ${airportLabel(p.stopover.airport)}${p.stopover.leg === "return" ? " on the way home" : ""}` : null,
-    `leave ${p.windowStart === p.windowEnd ? shortDay(p.windowStart) : dateRange(p.windowStart, p.windowEnd)}`,
+    multi ? (p.windowStart === p.windowEnd ? null : `first flight ${dateRange(p.windowStart, p.windowEnd)}`) : `leave ${p.windowStart === p.windowEnd ? shortDay(p.windowStart) : dateRange(p.windowStart, p.windowEnd)}`,
     back,
     passengerSummary(p),
     p.cabin === "ECONOMY" ? "Economy" : p.cabin === "BUSINESS" ? "Business" : "Premium economy",
     `max ${p.maxStops} stop${p.maxStops === 1 ? "" : "s"}`,
-    `checking every ${p.stepDays === 1 ? "day" : `${p.stepDays} days`} (${datesToScan} dates)`,
+    multi && datesToScan === 1 ? null : `checking every ${p.stepDays === 1 ? "day" : `${p.stepDays} days`} (${datesToScan} date${datesToScan === 1 ? "" : "s"})`,
   ].filter(Boolean) as string[];
 
   return (
@@ -63,14 +66,27 @@ export function TripSettings({ params: p, onChange, onSearch, loading, datesToSc
       </div>}
       {open && (
         <form className="card editor" onSubmit={(e) => { e.preventDefault(); onSearch(); onOpenChange(false); }}>
+          <div className="seg trip-type" role="group" aria-label="Trip type" data-group="trip">
+            {(["return", "oneway", "multicity"] as TripType[]).map((t) => (
+              <button
+                key={t}
+                type="button"
+                aria-pressed={p.tripType === t}
+                onClick={() => onChange(t === "multicity" ? { tripType: t, route: seedRoute(p), windowEnd: p.windowStart } : { tripType: t, route: undefined })}
+              >
+                {t === "return" ? "Return" : t === "oneway" ? "One way" : "Multi-city"}
+              </button>
+            ))}
+          </div>
+          {multi && (
+            <div className="group wide" data-group="flights">
+              <h3>Flights</h3>
+              <FlightsEditor params={p} onChange={onChange} />
+            </div>
+          )}
           <div className="editor-groups">
-            <div className="group" data-group="when">
+            <div className="group" data-group="when" hidden={multi}>
               <h3>When</h3>
-              <div className="seg" role="group" aria-label="Trip type">
-                {(["return", "oneway"] as TripType[]).map((t) => (
-                  <button key={t} type="button" aria-pressed={p.tripType === t} onClick={() => onChange({ tripType: t })}>{t === "return" ? "Return" : "One way"}</button>
-                ))}
-              </div>
               <div className="fields">
                 <label className="field">Leave from
                   <input id="leave-from" type="date" value={p.windowStart} onChange={(e) => onChange({ windowStart: e.target.value })} />
@@ -100,7 +116,7 @@ export function TripSettings({ params: p, onChange, onSearch, loading, datesToSc
                 <div className="field">Infants, under 2 (on lap) <Stepper id="infants" label="Infants" value={p.infants} min={0} max={p.adults} onChange={(n) => onChange({ infants: n })} /></div>
               </div>
             </div>
-            <div className="group" data-group="stopover">
+            <div className="group" data-group="stopover" hidden={multi}>
               <h3>Stopover (multi-city)</h3>
               <div className="fields">
                 <label className="field">Break the trip in
@@ -130,7 +146,14 @@ export function TripSettings({ params: p, onChange, onSearch, loading, datesToSc
                     <option value="BUSINESS">Business</option>
                   </select>
                 </label>
-                <label className="field">Max stops each way
+                {multi && (
+                  <label className="field">Check a start date every
+                    <select id="step-days-mc" value={p.stepDays} onChange={(e) => onChange({ stepDays: Number(e.target.value) })}>
+                      {[1, 2, 3, 5, 7, 14].map((d) => <option key={d} value={d}>{d === 1 ? "day" : `${d} days`}</option>)}
+                    </select>
+                  </label>
+                )}
+                <label className="field">{multi ? "Max stops per flight" : "Max stops each way"}
                   <select id="max-stops" value={p.maxStops} onChange={(e) => onChange({ maxStops: Number(e.target.value) })}>
                     <option value={1}>1</option>
                     <option value={2}>2</option>
@@ -139,7 +162,7 @@ export function TripSettings({ params: p, onChange, onSearch, loading, datesToSc
                 </label>
               </div>
             </div>
-            <div className="group" data-group="where">
+            <div className="group" data-group="where" hidden={multi}>
               <h3>Where</h3>
               <div className="fields">
                 <label className="field">From
@@ -152,8 +175,8 @@ export function TripSettings({ params: p, onChange, onSearch, loading, datesToSc
             </div>
           </div>
           <div className="editor-foot">
-            <button className="btn primary" type="submit" disabled={loading}>{loading ? "Checking…" : `Search ${datesToScan} date${datesToScan === 1 ? "" : "s"}`}</button>
-            <span className="muted small">Each date is one fare search.</span>
+            <button className="btn primary" type="submit" disabled={loading}>{loading ? "Checking…" : multi && datesToScan === 1 ? "Search" : `Search ${datesToScan} date${datesToScan === 1 ? "" : "s"}`}</button>
+            <span className="muted small">{multi ? "Prices are for the whole trip, all flights." : "Each date is one fare search."}</span>
           </div>
         </form>
       )}

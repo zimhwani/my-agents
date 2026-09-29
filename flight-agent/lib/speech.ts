@@ -2,6 +2,7 @@
 import { airportLabel } from "./airports";
 import { spokenDate } from "./dates";
 import { HELP_TEXT, parseIntent } from "./intent";
+import { spokenLegs } from "./format";
 import type { Intent, InterpretResponse, SearchParams } from "./types";
 
 export interface RulesContext {
@@ -27,6 +28,7 @@ export function speechFor(intent: Intent): string {
       }
       return intent.returnDate ? `Returning ${spokenDate(intent.returnDate)}.` : "Updating the dates.";
     }
+    case "set_route": return `Planning ${intent.legs.length} flights: ${spokenLegs(intent.legs)}.`;
     case "set_stopover":
       return intent.airport
         ? `Adding ${intent.nights ?? 3} nights in ${airportLabel(intent.airport)} on the way${intent.leg === "return" ? " home" : ""}${intent.windowStart ? `, leaving ${spokenDate(intent.windowStart)}` : ""}.`

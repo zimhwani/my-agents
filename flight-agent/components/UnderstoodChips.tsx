@@ -1,10 +1,10 @@
 "use client";
 import { airportLabel } from "@/lib/airports";
 import { dateRange, shortDay } from "@/lib/format";
-import { passengerSummary } from "@/lib/params";
+import { legsFor, passengerSummary, routeCodes } from "@/lib/params";
 import type { SearchParams } from "@/lib/types";
 
-export type EditField = "where" | "when" | "who" | "options" | "stopover";
+export type EditField = "where" | "when" | "who" | "options" | "stopover" | "flights";
 
 /** One chip per slot the agent is using, so a misheard date is visible and one tap from fixing. */
 export function UnderstoodChips({ params: p, datesCount, returnInferred, onEdit }: {
@@ -13,11 +13,18 @@ export function UnderstoodChips({ params: p, datesCount, returnInferred, onEdit 
   returnInferred: boolean;
   onEdit: (field: EditField) => void;
 }) {
-  const chips: { k: string; v: string; field: EditField; inferred?: boolean }[] = [
-    { k: "Route", v: `${p.origin} → ${p.destination}`, field: "where" },
-    { k: "Leave", v: p.windowStart === p.windowEnd ? shortDay(p.windowStart) : dateRange(p.windowStart, p.windowEnd), field: "when" },
-  ];
-  if (p.tripType === "oneway") chips.push({ k: "Trip", v: "One way", field: "when" });
+  const chips: { k: string; v: string; field: EditField; inferred?: boolean }[] = p.route
+    ? [
+        { k: "Multi-city", v: routeCodes(p.route), field: "flights" },
+        { k: "Flights", v: (legsFor(p, p.windowStart) ?? []).map((l) => shortDay(l.date).replace(/^\w+ /, "")).join(" · "), field: "flights" },
+      ]
+    : [
+        { k: "Route", v: `${p.origin} → ${p.destination}`, field: "where" },
+        { k: "Leave", v: p.windowStart === p.windowEnd ? shortDay(p.windowStart) : dateRange(p.windowStart, p.windowEnd), field: "when" },
+      ];
+  if (p.route) {
+    if (p.windowStart !== p.windowEnd) chips.push({ k: "First flight", v: dateRange(p.windowStart, p.windowEnd), field: "flights" });
+  } else if (p.tripType === "oneway") chips.push({ k: "Trip", v: "One way", field: "when" });
   else if (p.returnDate) chips.push({ k: "Back", v: shortDay(p.returnDate), field: "when", inferred: returnInferred });
   else chips.push({ k: `In ${airportLabel(p.destination)}`, v: `${p.stayNights} nights`, field: "when" });
   if (p.stopover) chips.push({ k: p.stopover.leg === "return" ? "Stopover home" : "Stopover", v: `${airportLabel(p.stopover.airport)} · ${p.stopover.nights} nights`, field: "stopover" });
@@ -37,7 +44,7 @@ export function UnderstoodChips({ params: p, datesCount, returnInferred, onEdit 
           <span className="v">{c.v}</span>
         </button>
       ))}
-      <button className="uchip edit" onClick={() => onEdit("when")}>Edit trip</button>
+      <button className="uchip edit" onClick={() => onEdit(p.route ? "flights" : "when")}>Edit trip</button>
     </div>
   );
 }

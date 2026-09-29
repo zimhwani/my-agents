@@ -305,3 +305,26 @@ details.notes ul { margin: var(--s-2) 0 0; padding-left: 18px; font-size: var(--
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+
+/* ---- Multi-city flights editor ---- */
+.seg.trip-type { margin-bottom: 14px; }
+.group.wide { margin-bottom: 14px; }
+.flight-rows { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.flight-row { display: grid; grid-template-columns: 28px minmax(0,1fr) minmax(0,1fr) minmax(0,150px) 40px; gap: 8px; align-items: end; }
+.flight-no { width: 28px; height: 40px; display: grid; place-items: center; font-weight: 600; color: var(--accent); font-variant-numeric: tabular-nums; }
+.icon-btn.trash:disabled { opacity: 0.35; pointer-events: none; }
+.flight-actions { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; margin-top: 12px; }
+.field.inline { display: inline-flex; align-items: center; gap: 8px; }
+.field.inline input[type="checkbox"] { width: 18px; min-height: 18px; height: 18px; }
+.field.inline input[type="date"] { width: auto; }
+.flights .hint { margin: 8px 0 0; font-size: var(--t-xs); color: var(--ink-3, var(--ink-2)); }
+@media (max-width: 640px) {
+  .flight-row { grid-template-columns: 24px minmax(0,1fr) 40px; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
+  .flight-row .field { grid-column: 2; }
+  .flight-row .flight-no { grid-row: 1; align-self: end; }
+  .flight-row .trash { grid-column: 3; grid-row: 1; }
+}
+.legs-list { display: grid; gap: 12px; }
+.leg-head { display: flex; justify-content: space-between; gap: 8px; font-size: var(--t-sm); color: var(--ink-2); margin-bottom: 4px; }
+.leg-head b { color: var(--ink); font-weight: 600; }
+[hidden] { display: none !important; }

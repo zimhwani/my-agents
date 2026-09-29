@@ -1,6 +1,6 @@
 import { addDays, endOfNextJanuary, humanDate, isValidISODate, todayISO, daysBetween } from "./dates";
 import { airportLabel } from "./airports";
-import type { Cabin, SearchParams, Stopover, TripLeg, TripType } from "./types";
+import type { Cabin, RouteLeg, SearchParams, Stopover, TripLeg, TripType } from "./types";
 
 const CABINS: Cabin[] = ["ECONOMY", "PREMIUM_ECONOMY", "BUSINESS"];
 
@@ -41,7 +41,18 @@ export function normalizeParams(input: unknown, now: Date = new Date()): SearchP
   const d = defaultParams(now);
   const o = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
 
-  const tripType: TripType = o.tripType === "oneway" ? "oneway" : "return";
+  let tripType: TripType = o.tripType === "oneway" ? "oneway" : o.tripType === "multicity" ? "multicity" : "return";
+  // Multi-city: 2-6 flights, each with valid airports, offsets starting at 0 and never going backwards.
+  let route: RouteLeg[] | undefined;
+  if (tripType === "multicity" && Array.isArray(o.route)) {
+    const legs = (o.route as unknown[]).slice(0, 6).map((l) => {
+      const x = (l && typeof l === "object" ? l : {}) as Record<string, unknown>;
+      return { from: iata(x.from, ""), to: iata(x.to, ""), offset: clampInt(x.offset, 0, 366, 0) };
+    }).filter((l) => l.from && l.to && l.from !== l.to);
+    for (let i = 1; i < legs.length; i++) legs[i].offset = Math.max(legs[i].offset, legs[i - 1].offset);
+    if (legs.length >= 2) route = legs.map((l, i) => ({ ...l, offset: i === 0 ? 0 : l.offset - legs[0].offset }));
+  }
+  if (tripType === "multicity" && !route) tripType = "return";
   const cabin = CABINS.includes(o.cabin as Cabin) ? (o.cabin as Cabin) : d.cabin;
 
   let windowStart = isValidISODate(o.windowStart) ? o.windowStart : d.windowStart;
@@ -77,7 +88,8 @@ export function normalizeParams(input: unknown, now: Date = new Date()): SearchP
     windowEnd,
     stayNights: clampInt(o.stayNights, 1, 90, d.stayNights),
     returnDate: tripType === "return" ? returnDate : undefined,
-    ...(stopover ? { stopover } : {}),
+    ...(stopover && !route ? { stopover } : {}),
+    ...(route ? { route } : {}),
     stepDays: clampInt(o.stepDays, 1, 31, d.stepDays),
     adults,
     children,
@@ -94,6 +106,7 @@ export function normalizeParams(input: unknown, now: Date = new Date()): SearchP
  * stopover does not fit before the return date.
  */
 export function legsFor(p: SearchParams, departureDate: string, returnDate?: string): TripLeg[] | null {
+  if (p.route) return p.route.map((l) => ({ from: l.from, to: l.to, date: addDays(departureDate, l.offset) }));
   const s = p.stopover;
   if (!s) {
     const legs: TripLeg[] = [{ from: p.origin, to: p.destination, date: departureDate }];
@@ -158,7 +171,56 @@ function sampleDatesFor(p: SearchParams): string[] {
   return out;
 }
 
+/**
+ * Turns spoken or typed multi-city flights into search params. Missing cities
+ * chain from the previous flight (the first defaults to the origin), "HOME"
+ * is the first departure city, and missing dates keep the current spacing
+ * (or three days apart; the flight home fills the rest of the usual stay).
+ */
+export function withRoute(
+  current: SearchParams,
+  legs: { from?: string; to: string; date?: string }[],
+  window?: { windowStart?: string; windowEnd?: string },
+): SearchParams {
+  const start = legs[0]?.from && legs[0].from !== "HOME" ? legs[0].from : current.origin;
+  const filled = legs.map((l, i) => ({
+    from: !l.from || l.from === "HOME" ? (i === 0 ? start : legs[i - 1].to === "HOME" ? start : legs[i - 1].to) : l.from,
+    to: l.to === "HOME" ? start : l.to,
+    date: l.date,
+  }));
+  const first = filled[0]?.date ?? window?.windowStart ?? current.windowStart;
+  const old = current.route;
+  let prev = first;
+  const route: RouteLeg[] = filled.map((l, i) => {
+    let date = i === 0 ? first : l.date;
+    if (!date) {
+      const kept = old?.[i] && old[i - 1] ? old[i].offset - old[i - 1].offset : undefined;
+      const soFar = daysBetween(first, prev);
+      date = addDays(prev, kept ?? (l.to === start ? Math.max(3, current.stayNights - soFar) : 3));
+    }
+    if (date < prev) date = prev;
+    prev = date;
+    return { from: l.from, to: l.to, offset: daysBetween(first, date) };
+  });
+  const exact = !!filled[0]?.date;
+  return normalizeParams({
+    ...current,
+    tripType: "multicity",
+    route,
+    stopover: undefined,
+    returnDate: undefined,
+    windowStart: window?.windowStart ?? first,
+    windowEnd: window?.windowEnd ?? (exact || current.windowEnd < first ? first : current.windowEnd),
+  });
+}
+
+/** "MEL → JNB → CPT → HRE → MEL" (codes, for chips and headings). */
+export function routeCodes(route: RouteLeg[]): string {
+  return [route[0].from, ...route.map((l, i) => (i > 0 && route[i - 1].to !== l.from ? `${l.from}…${l.to}` : l.to))].join(" → ");
+}
+
 export function tripSummary(p: SearchParams): string {
+  if (p.route) return `multi-city, ${p.route.length} flights`;
   if (p.tripType !== "return") return "one way";
   return p.returnDate ? `returning ${humanDate(p.returnDate)}` : `return, ${p.stayNights} nights away`;
 }

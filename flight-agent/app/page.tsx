@@ -16,7 +16,7 @@ import { apiHeaders, apiUrl, loadKeys, saveKeys, type StoredKeys } from "@/lib/c
 import { sampleDates, spokenDate, todayISO } from "@/lib/dates";
 import { money, spokenBrief, spokenMoney, spokenOfferDetail, spokenScanSummary } from "@/lib/format";
 import { HELP_TEXT, parseIntent } from "@/lib/intent";
-import { defaultParams, legsFor, normalizeParams, returnDateFor, whyNoDates } from "@/lib/params";
+import { defaultParams, legsFor, normalizeParams, returnDateFor, whyNoDates, withRoute } from "@/lib/params";
 import { sortOffers } from "@/lib/rank";
 import type { Intent, InterpretResponse, ScanResult, SearchParams, SortMode } from "@/lib/types";
 
@@ -138,7 +138,7 @@ function FlightAgent() {
         provider: json.provider,
         isSample: json.isSample,
         window: [p.windowStart, p.windowEnd],
-        key: JSON.stringify([p.origin, p.destination, p.windowStart, p.windowEnd, p.tripType, p.returnDate ?? p.stayNights, p.stopover ?? null, p.adults, p.children, p.infants, p.cabin, p.maxStops, p.stepDays]),
+        key: JSON.stringify([p.origin, p.destination, p.windowStart, p.windowEnd, p.tripType, p.returnDate ?? p.stayNights, p.stopover ?? null, p.route ?? null, p.adults, p.children, p.infants, p.cabin, p.maxStops, p.stepDays]),
         cheapest: cheapest ? { total: cheapest.price.total, currency: cheapest.price.currency, date: cheapest.departureDate, carrier: cheapest.validatingCarrierName } : null,
         best: best ? { total: best.price.total, currency: best.price.currency, date: best.departureDate, carrier: best.validatingCarrierName } : null,
       };
@@ -200,10 +200,15 @@ function FlightAgent() {
       }
       case "set_step":
         return searchWith(normalizeParams({ ...current, stepDays: intent.stepDays }));
+      case "set_route":
+        setReturnInferred(false);
+        return searchWith(withRoute(current, intent.legs, intent));
       case "set_stopover":
         if (intent.returnDate) setReturnInferred(false);
         return searchWith(normalizeParams({
           ...current,
+          route: undefined,
+          tripType: current.tripType === "multicity" ? "return" : current.tripType,
           stopover: intent.airport ? { airport: intent.airport, nights: intent.nights ?? current.stopover?.nights ?? 3, leg: intent.leg ?? "outbound" } : undefined,
           ...(intent.windowStart ? { windowStart: intent.windowStart, windowEnd: intent.windowEnd ?? intent.windowStart } : {}),
           ...(intent.returnDate ? { returnDate: intent.returnDate, tripType: "return" as const } : {}),
@@ -297,7 +302,7 @@ function FlightAgent() {
 
   const suggestions = result
     ? ["Read the top three", "Tell me about option 1", params.stopover ? "No stopover" : "Stop over in Dubai for 3 nights", "Check every 2 days"]
-    : ["Mid to late November, back early January", "Search early December", "Stop over in Dubai for 3 nights", "Help"];
+    : ["Mid to late November, back early January", "Melbourne to Joburg 2 Dec, Cape Town 3 Dec, Harare 7 Dec, home 5 Jan", "Stop over in Dubai for 3 nights", "Help"];
 
   const notes = (result?.warnings ?? []).filter((w) => !w.startsWith("Showing sample"));
   const openEditor = (field: EditField) => { setEditFocus(field); setEditorOpen(true); };

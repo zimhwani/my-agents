@@ -104,9 +104,14 @@ function timingPenalty(it: Itinerary, arrivalCity: string, weight: number, warni
   return p * weight;
 }
 
+/** Every flight in the offer: multi-city legs when known, else outbound and return. */
+export function allLegs(offer: FlightOffer): Itinerary[] {
+  return offer.legs ?? [offer.outbound, ...(offer.inbound ? [offer.inbound] : [])];
+}
+
 export function penaltiesFor(offer: FlightOffer): Penalties {
   const warnings: string[] = [];
-  const legs = [offer.outbound, ...(offer.inbound ? [offer.inbound] : [])];
+  const legs = allLegs(offer);
 
   let layover = 0;
   for (const leg of legs) {
@@ -117,15 +122,16 @@ export function penaltiesFor(offer: FlightOffer): Penalties {
     }
   }
 
-  let timing = timingPenalty(offer.outbound, airportLabel(offer.outbound.segments.at(-1)!.to), 1, warnings);
-  if (offer.inbound) timing += timingPenalty(offer.inbound, airportLabel(offer.inbound.segments.at(-1)!.to), 0.6, warnings);
+  let timing = 0;
+  legs.forEach((leg, i) => { timing += timingPenalty(leg, airportLabel(leg.segments.at(-1)!.to), i === 0 ? 1 : 0.6, warnings); });
 
   let stops = 0;
   for (const leg of legs) {
     const n = connectionCount(leg);
     if (n >= 2) {
       stops += 0.3 * (n - 1);
-      warnings.push(`${n} stops ${leg === offer.outbound ? "outbound" : "on the way home"}`);
+      const i = legs.indexOf(leg);
+      warnings.push(`${n} stops ${offer.legs ? `on flight ${i + 1}` : i === 0 ? "outbound" : "on the way home"}`);
     }
   }
 
@@ -138,7 +144,7 @@ export function penaltiesFor(offer: FlightOffer): Penalties {
 }
 
 export function totalDuration(offer: FlightOffer): number {
-  return offer.outbound.durationMin + (offer.inbound?.durationMin ?? 0);
+  return allLegs(offer).reduce((sum, l) => sum + l.durationMin, 0);
 }
 
 /** Connections where you change aircraft (a same-flight-number stop does not count). */
@@ -147,7 +153,7 @@ export function connectionCount(it: Itinerary): number {
 }
 
 export function totalStops(offer: FlightOffer): number {
-  return connectionCount(offer.outbound) + (offer.inbound ? connectionCount(offer.inbound) : 0);
+  return allLegs(offer).reduce((sum, l) => sum + connectionCount(l), 0);
 }
 
 const WEIGHTS = { price: 0.4, duration: 0.25, layover: 0.15, timing: 0.1, stops: 0.1 };
@@ -177,8 +183,7 @@ export function rankOffers(offers: FlightOffer[]): RankedOffer[] {
       WEIGHTS.timing * pen.timing +
       WEIGHTS.stops * pen.stops;
     const badges: string[] = [];
-    const smoothConnections = [o.outbound, o.inbound]
-      .filter((x): x is Itinerary => !!x)
+    const smoothConnections = allLegs(o)
       .every((leg) => leg.layovers.every((l) => l.sameFlight || l.stopover || (l.minutes >= 90 && l.minutes <= 300 && !l.overnight)));
     if (pen.timing === 0 && smoothConnections) badges.push("Family-friendly times");
     return {

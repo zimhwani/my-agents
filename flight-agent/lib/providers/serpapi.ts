@@ -78,7 +78,7 @@ export function mapSerpItinerary(it: SerpItinerary, params: SearchParams, depart
   });
   const outbound = buildItinerary(segments, it.total_duration);
   const validating = segments[0].carrier;
-  const legs = params.stopover ? legsFor(params, departureDate, returnDate) : null;
+  const legs = params.route || params.stopover ? legsFor(params, departureDate, returnDate) : null;
   return {
     id: `serpapi-${departureDate}-${index}-${segments.map((s) => s.flightNumber).join("-")}`,
     provider: "serpapi",
@@ -90,11 +90,16 @@ export function mapSerpItinerary(it: SerpItinerary, params: SearchParams, depart
     departureDate,
     returnDate: params.tripType === "return" ? returnDate : undefined,
     bookingUrl: googleUrl ?? googleFlightsLink(params, departureDate, returnDate),
-    ...(legs && params.stopover ? { stopover: params.stopover, laterLegs: legs.slice(1) } : {}),
+    ...(legs ? { laterLegs: legs.slice(1), ...(params.stopover ? { stopover: params.stopover } : {}) } : {}),
   };
 }
 
 export function googleFlightsLink(params: SearchParams, departureDate: string, returnDate?: string): string {
+  const legs = params.route ? legsFor(params, departureDate) : null;
+  if (legs) {
+    const q = `Multi-city flights ${legs.map((l) => `${l.from} to ${l.to} on ${l.date}`).join(", ")}`;
+    return `https://www.google.com/travel/flights?q=${encodeURIComponent(q)}`;
+  }
   const q = returnDate
     ? `Flights from ${params.origin} to ${params.destination} on ${departureDate} returning ${returnDate}`
     : `One way flights from ${params.origin} to ${params.destination} on ${departureDate}`;
@@ -108,7 +113,7 @@ export class SerpApiProvider implements FlightProvider {
   constructor(private readonly cfg: SerpApiConfig, private readonly fetchImpl: typeof fetch = fetch) {}
 
   buildQuery(params: SearchParams, departureDate: string, returnDate?: string): URLSearchParams {
-    const legs = params.stopover ? legsFor(params, departureDate, returnDate) : null;
+    const legs = params.route || params.stopover ? legsFor(params, departureDate, returnDate) : null;
     const q = new URLSearchParams({
       engine: "google_flights",
       departure_id: params.origin,

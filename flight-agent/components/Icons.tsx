@@ -15,6 +15,7 @@ export const SpeakerIcon = ({ size = 28 }: P) => <Svg size={size}><path d="M4 9.
 export const PlaneIcon = ({ size = 22 }: P) => <Svg size={size}><path d="M12 2.8c.8 0 1.4.6 1.4 1.4v5.1l6.8 4v1.9l-6.8-2.1v4.5l1.9 1.4v1.4L12 19.5l-3.3.9v-1.4l1.9-1.4v-4.5l-6.8 2.1v-1.9l6.8-4V4.2c0-.8.6-1.4 1.4-1.4z" /></Svg>;
 export const ClockIcon = ({ size = 16 }: P) => <Svg size={size}><circle cx="12" cy="12" r="8.5" /><path d="M12 7.5V12l3 2" /></Svg>;
 export const SettingsIcon = ({ size = 20 }: P) => <Svg size={size}><path d="M4 7h9M17 7h3M4 17h3M11 17h9" /><circle cx="15" cy="7" r="2" /><circle cx="9" cy="17" r="2" /></Svg>;
+export const TrashIcon = ({ size = 18 }: P) => <Svg size={size}><path d="M4.5 7h15M9.5 7V4.5h5V7M6.5 7l1 12.5h9l1-12.5M10 11v5M14 11v5" /></Svg>;
 export const CloseIcon = ({ size = 20 }: P) => <Svg size={size}><path d="M6 6l12 12M18 6L6 18" /></Svg>;
 export const ExternalIcon = ({ size = 16 }: P) => <Svg size={size}><path d="M14 4h6v6M20 4l-8.5 8.5M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5" /></Svg>;
 export const SendIcon = ({ size = 18 }: P) => <Svg size={size}><path d="M4.5 12 20 4.5 15 20l-3-6.5z" /><path d="M12 13.5 20 4.5" /></Svg>;

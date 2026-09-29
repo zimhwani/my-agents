@@ -1,4 +1,4 @@
-export type TripType = "return" | "oneway";
+export type TripType = "return" | "oneway" | "multicity";
 export type Cabin = "ECONOMY" | "PREMIUM_ECONOMY" | "BUSINESS";
 export type SortMode = "best" | "cheapest" | "fastest";
 
@@ -16,6 +16,14 @@ export interface TripLeg {
   date: string;
 }
 
+/** A multi-city flight as saved in the search: dated relative to the first flight. */
+export interface RouteLeg {
+  from: string;
+  to: string;
+  /** Days after the first flight's date (0 for the first flight). */
+  offset: number;
+}
+
 export interface SearchParams {
   origin: string;
   destination: string;
@@ -30,6 +38,8 @@ export interface SearchParams {
   returnDate?: string;
   /** Optional stopover: turns the trip into a multi-city itinerary */
   stopover?: Stopover;
+  /** Multi-city flights (tripType "multicity"); the first flight flies on the scanned date. */
+  route?: RouteLeg[];
   /** Days between sampled departure dates inside the window */
   stepDays: number;
   adults: number;
@@ -86,6 +96,8 @@ export interface FlightOffer {
   stopover?: Stopover;
   /** Legs after the first that are chosen when booking (live multi-city fares) */
   laterLegs?: TripLeg[];
+  /** Every flight of a multi-city trip, when known in full (sample fares) */
+  legs?: Itinerary[];
 }
 
 export interface OfferScores {
@@ -132,6 +144,7 @@ export type Intent =
   | { type: "search" }
   | { type: "set_dates"; windowStart?: string; windowEnd?: string; returnDate?: string; returnInferred?: boolean }
   | { type: "set_step"; stepDays: number }
+  | { type: "set_route"; legs: { from?: string; to: string; date?: string }[]; windowStart?: string; windowEnd?: string }
   | { type: "set_stopover"; airport: string | null; nights?: number; leg?: "outbound" | "return"; windowStart?: string; windowEnd?: string; returnDate?: string }
   | { type: "set_passengers"; adults?: number; children?: number; infants?: number }
   | { type: "set_trip"; tripType?: TripType; stayNights?: number }
