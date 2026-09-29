@@ -166,9 +166,19 @@ def yahoo_bars(symbol: str, minutes: int, days: int) -> tuple[list[Bar], int]:
     else:
         interval, fetch_min, days_cap = f"{minutes}m", minutes, min(days, 59)
     start = clock.now_et() - timedelta(days=days_cap)
-    df = yf.Ticker(ticker).history(start=start.date().isoformat(), interval=interval, auto_adjust=False,
-                                   prepost=True)
-    bars = frame_to_bars(df, daily=minutes >= 1440)
+    tk = yf.Ticker(ticker)
+    attempts = [dict(start=start.date().isoformat(), interval=interval, prepost=True),
+                dict(period=f"{days_cap}d", interval=interval),                      # FX pairs answer this form
+                dict(period=f"{days_cap}d", interval=interval.replace("60m", "1h"))]
+    bars: list[Bar] = []
+    for kw in attempts:
+        try:
+            bars = frame_to_bars(tk.history(auto_adjust=False, **kw), daily=minutes >= 1440)
+        except Exception as exc:
+            log.debug("%s %s: %s", ticker, kw, exc)
+            bars = []
+        if bars:
+            break
     if fetch_min != minutes and minutes < 1440:
         bars = aggregate(bars, minutes)
     return bars, days_cap

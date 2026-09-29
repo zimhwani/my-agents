@@ -128,3 +128,25 @@ def test_deriv_endpoint_fallback_and_hourly_to_4h_aggregation(monkeypatch):
     four = aggregate(hourly, 240)
     assert len(four) == 3 and four[0].open == 10 and four[0].close == 13.5 and four[0].high == 14 and four[0].low == 9
     assert four[0].volume == 4 and four[1].time.astimezone(timezone.utc).hour == 4 and four[2].volume == 1
+
+
+def test_five_day_markets_get_enough_history(settings):
+    crypto = load_strategy("strategies/crypto_trend_1d.json")
+    gold = load_strategy("strategies_cfd/gold_trend_1d.json")
+    need = gold.strategy.r.trend_ema_bars + gold.strategy.r.breakout_bars + 5
+    # a window that holds `need` weekday bars, allowing for weekends and a few holidays
+    assert gold.intraday_days * 5 / 7 - 5 >= need
+    assert crypto.intraday_days < gold.intraday_days
+    # end to end: a weekday-only daily series must produce trades (it produced none before)
+    from datetime import timedelta
+    gold.apply(settings, validate=False)
+    t = clock.at(DAY, clock.parse_hhmm("00:00")) - timedelta(days=700)
+    series, p, i = [], 1800.0, 0
+    while len(series) < 500:
+        if t.weekday() < 5:
+            i += 1
+            p *= 1.012 if (i // 40) % 2 == 0 else 0.988  # alternating strong trends
+            series.append(Bar(t, p, p * 1.006, p * 0.994, p * 1.001, 0))
+        t += timedelta(days=1)
+    res = Backtester(settings, gold, {"XAU/USD": series}, fee_bps=1.5).run()
+    assert res.trades, "weekday-only history must still produce trades"

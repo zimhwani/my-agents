@@ -47,6 +47,9 @@ class CryptoRules:
     thesis: str = ""                # why the edge might exist (shown in the research report)
     risks: str = ""                 # what would break it (shown in the research report)
     direction: str = "long_only"    # long_only | both | short_only (shorts need a venue that allows them: CFDs)
+    market: str = "crypto"          # crypto trades 7 days a week; cfd/fx close at weekends (fewer bars per day)
+    first_bar_only: bool = True     # breakouts: only the first bar through the level (anti-chase for fast
+                                    # entries); trend following sets False: any close beyond the channel counts
     session_start_utc: str = "00:00"  # session mode: the range is built from these bars (UTC) ...
     session_end_utc: str = "07:00"    # ... e.g. the Asian session before London opens
     entry_end_utc: str = "12:00"      # session mode: last bar close that may trigger an entry (UTC)
@@ -76,6 +79,8 @@ class CryptoRules:
         e, x, r = raw.get("entry", {}), raw.get("exit", {}), raw.get("risk", {})
         return cls(
             name=raw.get("strategy_name", cls.name),
+            market=str(raw.get("market", "crypto")).lower(),
+            first_bar_only=bool(e.get("first_bar_only", True)),
             universe=[s.upper() for s in raw.get("universe", DEFAULT_UNIVERSE)],
             bar_minutes=int(raw.get("bar_minutes", 15)),
             mode=str(raw.get("mode", e.get("mode", "breakout"))).lower(),
@@ -136,7 +141,10 @@ class CryptoMomentum:
         self.window_start: time = time(0, 0)
         self.window_end: time = time(23, 59, 59)
         bars_needed = self.r.trend_ema_bars + self._pattern_bars() + 5
-        self.intraday_days = max(3, int(bars_needed * self.bar_minutes / 1440) + 2)
+        days = bars_needed * self.bar_minutes / 1440
+        if self.r.market != "crypto":  # 5-day markets: ~5 trading days per 7, plus holidays and short sessions
+            days = days * 7 / 5 * 1.25 + 4
+        self.intraday_days = max(3, int(days) + 2)
 
     # gates, in the order they are checked; explain() reports the first one that fails
     GATES = ("history", "no_breakout", "not_first_bar", "below_ema", "low_relvol", "no_dip", "no_turn",
@@ -176,11 +184,11 @@ class CryptoMomentum:
         can_short = r.direction in ("both", "short_only") and r.mode != "fade"
         if can_long and last.close > hh:
             short = False
-            if prev.close > max(b.high for b in prev_window):
+            if r.first_bar_only and prev.close > max(b.high for b in prev_window):
                 return None, "not_first_bar"  # already broke out on the previous bar; take the first bar only
         elif can_short and last.close < ll:
             short = True
-            if prev.close < min(b.low for b in prev_window):
+            if r.first_bar_only and prev.close < min(b.low for b in prev_window):
                 return None, "not_first_bar"
         else:
             return None, "no_breakout"

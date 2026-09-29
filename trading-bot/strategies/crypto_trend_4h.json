@@ -26,7 +26,8 @@
     "atr_bars": 14,
     "stop_atr_mult": 2.5,
     "min_initial_risk_pct": 3.0,
-    "max_initial_risk_pct": 15
+    "max_initial_risk_pct": 15,
+    "first_bar_only": false
   },
   "exit": {
     "cooldown_minutes": 0,
