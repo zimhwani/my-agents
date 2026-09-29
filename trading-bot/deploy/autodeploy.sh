@@ -32,6 +32,20 @@ if ! timeout 600 "$PY" -m pytest -q -p no:cacheprovider > /tmp/tradebot-deploy-t
   exit 1
 fi
 
+# deploy/gold.strategy (one line: a rules file path) picks the gold bot's strategy from git, so switching
+# it is a commit rather than an edit on the server. Missing file = leave .env.gold alone.
+if [ -f deploy/gold.strategy ] && [ -f .env.gold ]; then
+  GOLD_RULES=$(head -n1 deploy/gold.strategy | tr -d '[:space:]')
+  if [ -f "$GOLD_RULES" ] && ! grep -qx "STRATEGY_FILE=$GOLD_RULES" .env.gold; then
+    if grep -q '^STRATEGY_FILE=' .env.gold; then
+      sed -i "s|^STRATEGY_FILE=.*|STRATEGY_FILE=$GOLD_RULES|" .env.gold
+    else
+      echo "STRATEGY_FILE=$GOLD_RULES" >> .env.gold
+    fi
+    echo "gold strategy -> $GOLD_RULES"
+  fi
+fi
+
 systemctl restart tradebot-crypto
 if systemctl is-active --quiet tradebot; then systemctl restart tradebot; fi
 if systemctl is-enabled --quiet tradebot-gold 2>/dev/null; then systemctl restart tradebot-gold; fi
