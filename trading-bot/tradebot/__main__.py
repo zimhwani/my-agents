@@ -606,10 +606,23 @@ def cmd_research(args) -> None:
                     if (not out.exists() or args.refetch) and job not in jobs:
                         jobs.append(job)
             if jobs:
-                got = download(jobs, os.environ.get("DERIV_APP_ID", "1089"))
-                for (sym, gran), bars in got.items():
-                    save_csv(bars, data / f"{fname(sym)}_{gran // 60}min.csv")
-                    print(f"fetched {sym} {gran // 60}-min from Deriv: {len(bars)} bars", flush=True)
+                try:
+                    got = download(jobs, os.environ.get("DERIV_APP_ID", "1089"))
+                    for (sym, gran), bars in got.items():
+                        save_csv(bars, data / f"{fname(sym)}_{gran // 60}min.csv")
+                        print(f"fetched {sym} {gran // 60}-min from Deriv: {len(bars)} bars", flush=True)
+                except Exception as exc:
+                    print(f"Deriv history unavailable ({str(exc)[:300]}); falling back to Yahoo Finance", flush=True)
+                    from .deriv import yahoo_bars
+                    for sym, gran, start_e, end_e in jobs:
+                        minutes = gran // 60
+                        try:
+                            bars, covered = yahoo_bars(sym, minutes, (end_e - start_e) // 86400)
+                        except Exception as exc2:
+                            print(f"   {sym} {minutes}-min: Yahoo failed too ({exc2})", flush=True)
+                            continue
+                        save_csv(bars, data / f"{fname(sym)}_{minutes}min.csv")
+                        print(f"fetched {sym} {minutes}-min from Yahoo: {len(bars)} bars over {covered} days", flush=True)
         d = AlpacaCryptoData(s.alpaca_api_key, s.alpaca_api_secret)
         for minutes, fs in sorted(by_tf.items()):
             fs = [f for f in fs if f not in cfd]

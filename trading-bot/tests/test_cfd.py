@@ -103,3 +103,28 @@ def test_cfd_rules_load_with_their_own_costs_and_backtest_shorts(settings):
     res = Backtester(settings, ls, bars, fee_bps=1.5).run()
     assert res.trades and res.equity_curve
     assert {t.side for t in res.trades} <= {LONG, SHORT}
+
+
+def test_deriv_endpoint_fallback_and_hourly_to_4h_aggregation(monkeypatch):
+    from tradebot.deriv import _connect_any, aggregate
+    tried = []
+
+    async def opener(url):
+        tried.append(url)
+        if "binaryws" not in url:
+            raise OSError("HTTP 520")
+        return "ws"
+    monkeypatch.delenv("DERIV_WS_URL", raising=False)
+    assert asyncio.run(_connect_any("1089", opener)) == "ws"
+    assert "derivws.com" in tried[0] and "binaryws" in tried[1] and tried[1].endswith("app_id=1089")
+
+    async def dead(url):
+        raise OSError("HTTP 520")
+    with pytest.raises(ConnectionError, match="Deriv unreachable"):
+        asyncio.run(_connect_any("1089", dead))
+
+    t0 = datetime(2026, 9, 28, 0, 0, tzinfo=timezone.utc)
+    hourly = [Bar(clock.to_et(t0 + timedelta(hours=h)), 10 + h, 11 + h, 9 + h, 10.5 + h, 1) for h in range(9)]
+    four = aggregate(hourly, 240)
+    assert len(four) == 3 and four[0].open == 10 and four[0].close == 13.5 and four[0].high == 14 and four[0].low == 9
+    assert four[0].volume == 4 and four[1].time.astimezone(timezone.utc).hour == 4 and four[2].volume == 1

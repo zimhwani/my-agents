@@ -23,6 +23,19 @@ from .models import Bar
 log = logging.getLogger(__name__)
 
 WS_URL = "wss://ws.derivws.com/websockets/v3?app_id={app_id}"
+ENDPOINTS = (  # tried in order; DERIV_WS_URL (with {app_id}) goes first when set
+    "wss://ws.derivws.com/websockets/v3?app_id={app_id}",
+    "wss://ws.binaryws.com/websockets/v3?app_id={app_id}",
+    "wss://green.derivws.com/websockets/v3?app_id={app_id}",
+    "wss://blue.derivws.com/websockets/v3?app_id={app_id}",
+)
+BROWSER_HEADERS = {"Origin": "https://app.deriv.com",
+                   "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124 Safari/537.36"}
+
+# Yahoo Finance fallback tickers (gold/silver are front-month futures, close to spot)
+YAHOO = {"XAU/USD": "GC=F", "XAG/USD": "SI=F", "EUR/USD": "EURUSD=X", "GBP/USD": "GBPUSD=X",
+         "USD/JPY": "JPY=X", "AUD/USD": "AUDUSD=X", "USD/CAD": "CAD=X", "USD/CHF": "CHF=X",
+         "US500": "^GSPC", "US100": "^NDX", "US30": "^DJI", "DE40": "^GDAXI", "UK100": "^FTSE"}
 DEFAULT_APP_ID = "1089"  # Deriv's public app id for testing and read-only data
 GRANULARITIES = (60, 120, 180, 300, 600, 900, 1800, 3600, 7200, 14400, 28800, 86400)
 
@@ -72,10 +85,36 @@ async def fetch_candles(request: Request, symbol: str, granularity: int, start_e
     return candles_to_bars(rows)
 
 
-async def _ws_session(app_id: str, jobs: list[tuple[str, int, int, int]]) -> dict:
+async def _open(url: str):
     import websockets
+    try:
+        return await websockets.connect(url, ping_interval=20, max_size=2 ** 24, open_timeout=20,
+                                        additional_headers=BROWSER_HEADERS)
+    except TypeError:  # older websockets releases call it extra_headers
+        return await websockets.connect(url, ping_interval=20, max_size=2 ** 24, open_timeout=20,
+                                        extra_headers=BROWSER_HEADERS)
+
+
+async def _connect_any(app_id: str, opener=None):
+    import os
+    opener = opener or _open
+    urls = ([os.environ["DERIV_WS_URL"]] if os.environ.get("DERIV_WS_URL") else []) + list(ENDPOINTS)
+    errors = []
+    for u in urls:
+        url = u.format(app_id=app_id)
+        try:
+            ws = await opener(url)
+            log.info("Deriv: connected to %s", url.split("?")[0])
+            return ws
+        except Exception as exc:
+            errors.append(f"{url.split('?')[0]}: {exc}")
+    raise ConnectionError("Deriv unreachable -> " + " | ".join(errors))
+
+
+async def _ws_session(app_id: str, jobs: list[tuple[str, int, int, int]]) -> dict:
     out: dict = {}
-    async with websockets.connect(WS_URL.format(app_id=app_id), ping_interval=20, max_size=2 ** 24) as ws:
+    ws = await _connect_any(app_id)
+    async with ws:
         req_id = 0
 
         async def request(payload: dict) -> dict:
@@ -96,3 +135,40 @@ async def _ws_session(app_id: str, jobs: list[tuple[str, int, int, int]]) -> dic
 def download(jobs: list[tuple[str, int, int, int]], app_id: str = DEFAULT_APP_ID) -> dict:
     """{(symbol, granularity_seconds): [Bar]} for each (symbol, granularity, start_epoch, end_epoch)."""
     return asyncio.run(_ws_session(app_id, jobs))
+
+
+# -- Yahoo Finance fallback -----------------------------------------------------------------------
+def aggregate(bars: list[Bar], minutes: int) -> list[Bar]:
+    """Merge bars into ``minutes``-long bars aligned to UTC epoch multiples (e.g. 60m -> 4h)."""
+    step = minutes * 60
+    out: list[Bar] = []
+    for b in bars:
+        key = int(b.time.timestamp()) // step * step
+        start = clock.to_et(datetime.fromtimestamp(key, tz=timezone.utc))
+        if out and out[-1].time.timestamp() == start.timestamp():
+            o = out[-1]
+            out[-1] = Bar(o.time, o.open, max(o.high, b.high), min(o.low, b.low), b.close, o.volume + b.volume)
+        else:
+            out.append(Bar(start, b.open, b.high, b.low, b.close, b.volume))
+    return out
+
+
+def yahoo_bars(symbol: str, minutes: int, days: int) -> tuple[list[Bar], int]:
+    """(bars, days actually covered). Yahoo keeps ~730 days of hourly and ~60 days of 15-minute data."""
+    from datetime import timedelta
+    import yfinance as yf
+    from .marketdata import frame_to_bars
+    ticker = YAHOO.get(symbol, symbol)
+    if minutes >= 1440:
+        interval, fetch_min, days_cap = "1d", 1440, days
+    elif minutes >= 60:
+        interval, fetch_min, days_cap = "60m", 60, min(days, 729)
+    else:
+        interval, fetch_min, days_cap = f"{minutes}m", minutes, min(days, 59)
+    start = clock.now_et() - timedelta(days=days_cap)
+    df = yf.Ticker(ticker).history(start=start.date().isoformat(), interval=interval, auto_adjust=False,
+                                   prepost=True)
+    bars = frame_to_bars(df, daily=minutes >= 1440)
+    if fetch_min != minutes and minutes < 1440:
+        bars = aggregate(bars, minutes)
+    return bars, days_cap
