@@ -73,7 +73,7 @@ const stubPage = {
 for (const [outfile, plugins] of [["index.js", [denoNpm]], ["index-remote.js", [stubPage, denoNpm]]]) {
   await esbuild.build({
     entryPoints: [path.join(here, "server.ts")],
-    bundle: true, minify: outfile !== "index.js", format: "esm", platform: "neutral", target: ["es2022"],
+    bundle: true, minify: outfile !== "index.js", format: "esm", platform: "neutral", target: ["es2022"], charset: "ascii", legalComments: "none", ...(outfile === "index.js" ? {} : { lineLimit: 300 }),
     tsconfig: path.join(root, "tsconfig.json"),
     define: { "process.env.NODE_ENV": '"production"', "process.env": "globalThis.__ENV__", DEFAULT_PAGE_URL: JSON.stringify(DEFAULT_PAGE_URL) },
     loader: { ".html": "text" },
