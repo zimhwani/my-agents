@@ -128,6 +128,26 @@ def test_dukascopy_decode_download_and_rollup():
         dk.download("XAU/USD", 1, fetch=lambda u: _bi5(wrong), workers=1, end=day)
 
 
+def test_dukascopy_skips_a_day_that_times_out_but_not_a_dead_feed():
+    from tradebot import dukascopy as dk
+    day = date(2026, 9, 28)
+    rows = [(60 * i, 4_000_000, 4_000_050, 3_999_900, 4_000_200, 1.0) for i in range(10)]
+
+    def flaky(url):
+        if "/2026/08/25/" in url:
+            raise ConnectionError(url + ": The read operation timed out")
+        return _bi5(rows)
+
+    out = dk.download("XAU/USD", 60, fetch=flaky, workers=2, end=day)
+    assert len({b.time.date() for b in out}) == 50  # 60 days - 9 Saturdays - the one that timed out
+
+    def dead(url):
+        raise ConnectionError(url + ": timed out")
+
+    with pytest.raises(ConnectionError, match="days failed"):
+        dk.download("XAU/USD", 60, fetch=dead, workers=2, end=day)
+
+
 def test_day_rule_files_load_as_day_traders():
     for name in ("gold_day_breakout_15m", "gold_day_breakout_5m", "gold_day_pullback_15m",
                  "gold_day_london_15m", "gold_day_newyork_15m"):

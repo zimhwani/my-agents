@@ -13,6 +13,7 @@ import logging
 import lzma
 import statistics
 import struct
+import time as _time
 import urllib.error
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
@@ -34,11 +35,11 @@ RECORD = struct.Struct(">iiiiif")
 Fetch = Callable[[str], bytes | None]
 
 
-def _http(url: str) -> bytes | None:
+def _http(url: str, attempts: int = 4) -> bytes | None:
     req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (tradebot research)"})
-    for attempt in range(3):
+    for attempt in range(attempts):
         try:
-            with urllib.request.urlopen(req, timeout=30) as resp:
+            with urllib.request.urlopen(req, timeout=60) as resp:
                 return resp.read()
         except urllib.error.HTTPError as exc:
             if exc.code == 404:
@@ -46,6 +47,7 @@ def _http(url: str) -> bytes | None:
             err = exc
         except (urllib.error.URLError, TimeoutError, OSError) as exc:
             err = exc
+        _time.sleep(2 ** attempt)  # the datafeed throttles bursts; back off 1, 2, 4, 8 s
     raise ConnectionError(f"{url}: {err}")
 
 
@@ -68,22 +70,36 @@ def _roll(bars: list[Bar], minutes: int) -> list[Bar]:
     return aggregate(bars, minutes)
 
 
-def download(symbol: str, days: int, fetch: Fetch | None = None, workers: int = 8,
-             end: date | None = None) -> list[Bar]:
-    """5-minute bars for ``symbol`` over the last ``days`` calendar days (weekends simply absent)."""
+def download(symbol: str, days: int, fetch: Fetch | None = None, workers: int = 4,
+             end: date | None = None, max_missing: float = 0.03) -> list[Bar]:
+    """5-minute bars for ``symbol`` over the last ``days`` calendar days (weekends simply absent).
+
+    A day whose file still fails after retries is skipped and reported (a gap of a day barely moves a
+    two-year test); more than ``max_missing`` of the days failing means the feed is down: raise."""
     inst = INSTRUMENTS.get(symbol, symbol.replace("/", ""))
     divisor = DIVISORS.get(inst, 100000.0)
     fetch = fetch or _http
     end = end or datetime.now(timezone.utc).date() - timedelta(days=1)
     days_list = [end - timedelta(days=i) for i in range(days)][::-1]
     days_list = [d for d in days_list if d.weekday() != 5]  # Saturday never trades
+    failed: list[str] = []
 
     def one(d: date) -> list[Bar]:
-        raw = fetch(URL.format(inst=inst, y=d.year, m=d.month - 1, d=d.day))
+        url = URL.format(inst=inst, y=d.year, m=d.month - 1, d=d.day)
+        try:
+            raw = fetch(url)
+        except ConnectionError as exc:
+            failed.append(str(exc))
+            return []
         return _roll(decode_day(raw or b"", d, divisor), 5)
 
     with ThreadPoolExecutor(max_workers=workers) as pool:
         chunks = list(pool.map(one, days_list))
+    if failed:
+        if len(failed) > max(1, max_missing * len(days_list)):
+            raise ConnectionError(f"Dukascopy {inst}: {len(failed)} of {len(days_list)} days failed, e.g. {failed[0]}")
+        log.warning("Dukascopy %s: skipped %d of %d days that would not download (e.g. %s)",
+                    inst, len(failed), len(days_list), failed[0])
     bars = [b for chunk in chunks for b in chunk]
     lo_hi = PLAUSIBLE.get(inst)
     if bars and lo_hi:
