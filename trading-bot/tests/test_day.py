@@ -72,6 +72,32 @@ def test_pullback_fades_rallies_in_a_downtrend():
     assert s.explain("XAU/USD", down + rally + [turn], t + timedelta(minutes=15)) == "below_ema"
 
 
+def test_breakout_without_trend_filter_trades_both_ways():
+    r = CryptoRules(bar_minutes=15, breakout_bars=16, trend_ema_bars=0, min_rel_volume=0, stop_atr_mult=1.5,
+                    max_initial_risk_pct=5, direction="both")
+    s = CryptoMomentum(r)
+    t0 = datetime(2026, 9, 29, 7, 0, tzinfo=timezone.utc)
+    down = _bars(80, 4400, -1.0, t0)[:-16] + _bars(16, 4336, 0.0, t0 + timedelta(minutes=15 * 64))
+    last = down[-1]
+    pop = Bar(last.time + timedelta(minutes=15), last.close, last.close + 6, last.close - 0.1, last.close + 5, 0)
+    at = pop.time + timedelta(minutes=15)
+    sig, why = s.evaluate_explained("XAU/USD", down + [pop], [], at)
+    assert why == "signal" and sig.side == LONG and sig.stop < sig.entry  # buys a bounce inside a downtrend
+    up = _bars(80, 4000, 1.0, t0)[:-16] + _bars(16, 4064, 0.0, t0 + timedelta(minutes=15 * 64))
+    last = up[-1]
+    drop = Bar(last.time + timedelta(minutes=15), last.close, last.close + 0.1, last.close - 6, last.close - 5, 0)
+    sig, why = s.evaluate_explained("XAU/USD", up + [drop], [], drop.time + timedelta(minutes=15))
+    assert why == "signal" and sig.side == SHORT and sig.stop > sig.entry  # sells a drop inside an uptrend
+    s.r.trend_ema_bars = 50  # with the trend filter back on, the counter-trend buy is refused
+    assert s.explain("XAU/USD", down + [pop], at) == "below_ema"
+
+
+def test_live_gold_rules_trade_both_ways_without_trend_filter():
+    ls = load_strategy("strategies_cfd/gold_day_breakout_15m.json")
+    r = ls.strategy.r
+    assert r.direction == "both" and r.trend_ema_bars == 0 and ls.risk_overrides["allow_shorts"]
+
+
 def _bi5(rows):
     raw = b"".join(struct.pack(">iiiiif", *r) for r in rows)
     return lzma.compress(raw, format=lzma.FORMAT_ALONE)

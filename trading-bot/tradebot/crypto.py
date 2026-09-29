@@ -202,10 +202,13 @@ class CryptoMomentum:
                 return None, "not_first_bar"
         else:
             return None, "no_breakout"
-        closes = [b.close for b in bars[-(r.trend_ema_bars * 4):]]  # 4x warm-up is plenty; keeps replays fast
-        trend = ema(closes, r.trend_ema_bars)
-        if trend is None or (last.close >= trend if short else last.close <= trend):
-            return None, "below_ema"
+        trend = None
+        if r.trend_ema_bars > 0:  # 0 = no trend filter: breakouts count in either direction
+            closes = [b.close for b in bars[-(r.trend_ema_bars * 4):]]  # 4x warm-up is plenty; keeps replays fast
+            trend = ema(closes, r.trend_ema_bars)
+            if trend is None or (last.close >= trend if short else last.close <= trend):
+                return None, "below_ema"
+        trend_note = f", EMA{r.trend_ema_bars} {trend:.4g}" if trend is not None else ""
         vols = [b.volume for b in window]
         avg_vol = sum(vols) / len(vols) if vols else 0.0
         rel = last.volume / avg_vol if avg_vol > 0 else 0.0
@@ -221,10 +224,10 @@ class CryptoMomentum:
         if dist <= 0 or dist / entry * 100.0 > r.max_initial_risk_pct:
             return None, "stop_too_wide"
         if short:
-            reason = f"breakdown < {ll:.4g} ({r.breakout_bars} bars), EMA{r.trend_ema_bars} {trend:.4g}, ATR {a:.4g}"
+            reason = f"breakdown < {ll:.4g} ({r.breakout_bars} bars){trend_note}, ATR {a:.4g}"
             return Signal(symbol=symbol, side=SHORT, entry=entry, stop=entry + dist, target=entry - 3 * dist,
                           atr=a, time=now, reason=reason), "signal"
-        reason = f"breakout > {hh:.4g} ({r.breakout_bars} bars), EMA{r.trend_ema_bars} {trend:.4g}, relvol {rel:.2f}, ATR {a:.4g}"
+        reason = f"breakout > {hh:.4g} ({r.breakout_bars} bars){trend_note}, relvol {rel:.2f}, ATR {a:.4g}"
         if r.mode == "fade":  # same trigger, opposite side: short the breakout, stop the same distance above
             return Signal(symbol=symbol, side=SHORT, entry=entry, stop=entry + dist, target=entry - 3 * dist,
                           atr=a, time=now, reason="fade " + reason), "signal"
@@ -265,6 +268,8 @@ class CryptoMomentum:
             return r.rsi_bars * 6
         if r.mode == "session":
             return max(r.atr_bars * 4, int(1440 / max(1, r.bar_minutes)) + 2)
+        if r.trend_ema_bars <= 0:  # no trend EMA to warm up: still need enough bars for the ATR stop
+            return max(r.breakout_bars, r.atr_bars * 4)
         return r.breakout_bars
 
     def _eval_session(self, symbol: str, bars: list[Bar], now: datetime) -> tuple[Signal | None, str]:

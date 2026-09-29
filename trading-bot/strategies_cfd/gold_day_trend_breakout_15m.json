@@ -1,10 +1,10 @@
 {
-  "strategy_name": "Gold Day Breakout 15m (both ways)",
+  "strategy_name": "Gold Day Trend Breakout 15m",
   "market": "cfd",
   "direction": "both",
   "mode": "breakout",
-  "thesis": "Intraday momentum, both directions: BUY the first 15-minute close above the prior 4-hour high, SELL the first close below the prior 4-hour low, whatever the bigger trend, during London/New York liquidity (07:00-19:00 UTC). One position at a time; breakeven at 1R, 2-ATR trail, flat by 20:30 UTC. Two to four signals on a typical day.",
-  "risks": "Unvalidated until the research ranks it. With no trend filter it also buys bounces inside downtrends (and sells dips in uptrends), so more trades and more false breakouts than the trend-filtered variant; intraday gold is dominated by news (US data at 12:30 UTC, FOMC) and every trade pays the spread.",
+  "thesis": "Intraday momentum: a 15-minute close through the prior 4-hour high or low, in the direction of the ~2-day trend, during London/New York liquidity. Breakeven at 1R, 2-ATR trail, flat by 20:30 UTC. Trend-filtered variant (only buys above the 200-bar EMA, only sells below it). About one or two trades a day.",
+  "risks": "Unvalidated until the research ranks it. Intraday gold is dominated by news (US data at 12:30 UTC, FOMC); false breakouts cluster on quiet days; every trade pays the spread, so a thin edge can vanish.",
   "universe": [
     "XAU/USD"
   ],
@@ -18,7 +18,7 @@
     "trade_start_utc": "07:00",
     "trade_end_utc": "19:00",
     "breakout_bars": 16,
-    "trend_ema_bars": 0,
+    "trend_ema_bars": 200,
     "min_rel_volume": 0,
     "atr_bars": 14,
     "stop_atr_mult": 1.5,
