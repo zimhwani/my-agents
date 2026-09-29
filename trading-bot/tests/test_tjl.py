@@ -229,3 +229,20 @@ def test_sweep_over_tjl_rules(settings):
     rows = sweep(settings, TJLRules(), bars, {"max_initial_risk_pct": [0, 2.0], "max_initial_risk_mode": ["skip"]},
                  daily=daily)
     assert len(rows) == 2 and all("trades" in r for r in rows)
+
+
+def test_day_check_reasons_and_notes():
+    from datetime import timedelta
+    from tradebot import clock
+    from tradebot.models import Bar
+    from tradebot.tjl import TJLRules, TrendJoinLong
+    s = TrendJoinLong(TJLRules())
+    d0 = clock.at(DAY, clock.parse_hhmm("16:00")) - timedelta(days=300)
+    rising = [Bar(d0 + timedelta(days=i), 50 + i * 0.1, 51 + i * 0.1, 49 + i * 0.1, 50 + i * 0.1, 1e6) for i in range(250)]
+    last = rising[-1].close
+    assert s.day_check(last * 1.05, rising)[0] == "ok"
+    assert s.day_check(last * 1.01, rising)[0] == "gap_small"
+    assert s.day_check(last * 1.05, rising[-150:])[0] == "sma_history"
+    falling = [Bar(b.time, b.open, b.high, b.low, 100 - i * 0.1, b.volume) for i, b in enumerate(rising)]
+    why, detail = s.day_check(falling[-1].close * 1.05, falling)
+    assert why == "below_sma200" and "SMA200" in detail and "gap +5.0%" in detail

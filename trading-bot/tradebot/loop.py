@@ -220,6 +220,19 @@ class TradingLoop:
         parts = " · ".join(f"{k} {v}" for k, v in sorted(gates.items(), key=lambda kv: -kv[1]))
         stale = f" · stale bars: {', '.join(sorted(self._stale))}" if self._stale else ""
         log.info("bar %s gates: %s%s", boundary.strftime("%H:%M"), parts, stale)
+        self._report_day_filters(now)
+
+    def _report_day_filters(self, now: datetime) -> None:
+        """Once a day, tell Telegram why each watchlist stock did or didn't pass the daily filters."""
+        notes = getattr(self.strategy, "day_notes", None)
+        if not notes or getattr(self, "_day_report_sent", None) == now.date():
+            return
+        rows = [(sym, why, detail) for (sym, d), (why, detail) in notes.items() if d == now.date()]
+        if not rows:
+            return
+        self._day_report_sent = now.date()
+        body = "\n".join(f"{sym}: {'PASS' if why == 'ok' else why} · {detail}" for sym, why, detail in sorted(rows))
+        self.notify.send(f"🔎 <b>Daily filter check</b>\n<pre>{esc(body)}</pre>", silent=True)
 
     def _refresh_news(self, now: datetime) -> None:
         """Hourly: pull the economic calendar into the risk gate (macro blackout). Never raises."""

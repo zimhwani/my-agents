@@ -163,6 +163,7 @@ class TrendJoinLong:
         self.intraday_days = self.r.rvol_lookback_days + 4
         self.bar_minutes = 5
         self._explained: set = set()
+        self.day_notes: dict = {}  # (symbol, date) -> (reason, detail), read by the loop for a daily report
 
     def day_ok(self, open_price: float, prior_daily: list[Bar]) -> bool:
         """Cheap once-per-day check (gap + SMA); lets the backtester skip the rest."""
@@ -225,6 +226,7 @@ class TrendJoinLong:
 
         # daily filters (cheap, checked first)
         why, detail = self.day_check(today[0].open, prior_daily)
+        self.day_notes[(symbol, now.date())] = (why, detail)
         if why != "ok":
             key = (symbol, now.date())
             if key not in self._explained:  # once per symbol per day: the numbers behind the rejection

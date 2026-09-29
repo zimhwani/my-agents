@@ -147,7 +147,18 @@ class AlpacaData:
                     for b in bars]
         bars = self._cached(("d", symbol, days), 3600, fetch)
         today = clock.now_et().date()
-        return [b for b in bars if b.time.date() < today][-days:]
+        out = [b for b in bars if b.time.date() < today][-days:]
+        # IEX (the free feed) has no bar on days a stock didn't trade on IEX, so thinner names come back
+        # short and a 200-day average can't be computed; fall back to Yahoo's full daily history.
+        if len(out) < int(days * 0.9) and self._aux is not None and hasattr(self._aux, "daily_bars"):
+            try:
+                alt = self._aux.daily_bars(symbol, days)
+                if len(alt) > len(out):
+                    log.info("%s: %d daily bars from Alpaca/%s, using %d from Yahoo", symbol, len(out), self.feed, len(alt))
+                    return alt
+            except Exception as exc:
+                log.debug("%s: Yahoo daily fallback failed: %s", symbol, exc)
+        return out
 
     def intraday_bars(self, symbol: str, bar_minutes: int = 5, days: int = 5,
                       include_premarket: bool = False) -> list[Bar]:
