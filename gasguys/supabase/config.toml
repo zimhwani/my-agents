@@ -1,0 +1,39 @@
+# Supabase CLI config for Gasguys. `supabase start` for local, `supabase link` for the cloud project.
+# Secrets go in `supabase secrets set`, never in this file. See ../docs/go-live.md.
+project_id = "gasguys"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public"]
+max_rows = 200
+
+[db]
+port = 54322
+major_version = 17
+
+[auth]
+enabled = true
+site_url = "http://localhost:5173"
+enable_signup = true
+
+[auth.sms]
+enable_signup = true
+enable_confirmations = true
+# Customers sign in with their phone number and an SMS code. Pick an SMS provider that delivers to
+# Econet, NetOne and Telecel reliably and put its keys in `supabase secrets`.
+
+[functions.payments-start]
+verify_jwt = true
+
+[functions.paynow-result]
+verify_jwt = false        # Paynow signs it with the integration key instead
+
+[functions.whatsapp-webhook]
+verify_jwt = false        # Meta signs it (X-Hub-Signature-256)
+
+[functions.meter-telemetry]
+verify_jwt = false        # the MQTT broker sends a shared secret header
+
+[functions.sweep]
+verify_jwt = false        # pg_cron sends CRON_SECRET
