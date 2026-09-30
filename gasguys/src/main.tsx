@@ -56,7 +56,7 @@ function Shell() {
             <input type="checkbox" checked={sb.p.settings.autoApprove} onChange={(e) => ((sb.p.settings.autoApprove = e.target.checked), sb.changed())} />
             Auto-approve payments
           </label>
-          <button onClick={() => confirm("Reset the sandbox to its starting data?") && sb.reset()}>Reset</button>
+          <ResetButton onReset={() => sb.reset()} />
         </div>
       </header>
 
@@ -106,6 +106,19 @@ function Shell() {
         </main>
       )}
     </>
+  );
+}
+
+/** Two taps instead of confirm(), which embedded viewers suppress. */
+function ResetButton({ onReset }: { onReset: () => void }) {
+  const [armed, setArmed] = useState(false);
+  return armed ? (
+    <>
+      <button onClick={onReset}>Reset everything</button>
+      <button onClick={() => setArmed(false)}>Keep</button>
+    </>
+  ) : (
+    <button onClick={() => setArmed(true)}>Reset</button>
   );
 }
 
