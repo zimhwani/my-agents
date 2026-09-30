@@ -1,12 +1,4 @@
-import { useEffect, useId, useReducer, useState, type ReactNode, type SVGProps } from "react";
-import { sandbox } from "./sandbox/index.ts";
-
-/** Re-renders whenever anything in the sandbox changes. */
-export function useSandbox() {
-  const [, bump] = useReducer((x: number) => x + 1, 0);
-  useEffect(() => sandbox.subscribe(bump), []);
-  return sandbox;
-}
+import { useEffect, useId, useState, type ReactNode, type SVGProps } from "react";
 
 export function useHashRoute(): [string, (to: string) => void] {
   const [hash, setHash] = useState(() => location.hash.slice(1) || "/");

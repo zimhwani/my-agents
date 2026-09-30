@@ -106,3 +106,47 @@ export function parseInbound(payload: unknown): { phone: string; msg: Inbound }[
     }
   return out;
 }
+
+// ── Sign-in codes (Supabase Auth "Send SMS" hook → WhatsApp) ─────────────────────────────────────
+
+/** Name of the approved Authentication-category template; see docs/whatsapp-templates.md. */
+export const OTP_TEMPLATE = () => Deno.env.get("WHATSAPP_OTP_TEMPLATE") ?? "gasguys_login_code";
+
+/**
+ * Cloud API body for an Authentication template with a copy-code button. Meta's documented shape:
+ * the code goes in the body parameter and again as the button's parameter; the button is sent as
+ * sub_type "url" at index 0 even though it is a copy-code button.
+ * Language: Authentication templates use Meta's preset text, which (as far as we know) is not offered
+ * in Shona or Ndebele, so it is sent in English. The code must match the language the template was
+ * created with in WhatsApp Manager ("en" here; change to "en_US" if that is what was submitted).
+ */
+export function authCodeMessage(to: string, code: string, template = "gasguys_login_code", lang = "en"): Record<string, unknown> {
+  return {
+    messaging_product: "whatsapp",
+    recipient_type: "individual",
+    to,
+    type: "template",
+    template: {
+      name: template,
+      language: { code: lang },
+      components: [
+        { type: "body", parameters: [{ type: "text", text: code }] },
+        { type: "button", sub_type: "url", index: "0", parameters: [{ type: "text", text: code }] },
+      ],
+    },
+  };
+}
+
+/** Sends a sign-in code on WhatsApp. No plain-text fallback: outside the 24 h window it wouldn't arrive. */
+export async function sendAuthCode(phone: string, code: string): Promise<{ ok: true } | { ok: false; status: number; error: string }> {
+  const token = Deno.env.get("WHATSAPP_TOKEN");
+  const phoneId = Deno.env.get("WHATSAPP_PHONE_NUMBER_ID");
+  if (!token || !phoneId) return { ok: false, status: 503, error: "whatsapp_not_configured" };
+  const res = await fetch(`${GRAPH}/${phoneId}/messages`, {
+    method: "POST",
+    headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+    body: JSON.stringify(authCodeMessage(phone, code, OTP_TEMPLATE())),
+  });
+  if (res.ok) return { ok: true };
+  return { ok: false, status: res.status, error: (await res.text()).slice(0, 500) };
+}

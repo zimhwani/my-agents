@@ -87,7 +87,7 @@ export class GasguysService {
   }
 
   daysLeft(m: Meter) {
-    return daysFor(Math.min(m.creditGrams, m.gasGrams), m.avgDailyGrams);
+    return daysLeft(m);
   }
 
   // ── Buying gas ───────────────────────────────────────────────────────────────────────────────
@@ -375,6 +375,9 @@ export class GasguysService {
 }
 
 // ── Formatting helpers shared by the UI and the bot ────────────────────────────────────────────
+
+/** Cooking days left: limited by paid-for credit or by the gas physically in the cylinder, whichever runs out first. */
+export const daysLeft = (m: Pick<Meter, "creditGrams" | "gasGrams" | "avgDailyGrams">) => daysFor(Math.min(m.creditGrams, m.gasGrams), m.avgDailyGrams);
 
 /** Meter numbers are 11 digits, like ZESA meters, and printed 3-4-4 on the valve sticker. */
 export const normalizeMeterId = (s: string) => s.replace(/\D/g, "");

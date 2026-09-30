@@ -2,23 +2,24 @@ import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react";
 import { LANGS, t, type StringKey } from "../../core/i18n/index.ts";
 import { formatKg, formatMoney, fromUsd, gramsFor, PRESETS_USD } from "../../core/pricing.ts";
 import type { PaymentInstruction } from "../../core/providers.ts";
-import { formatMeterId, formatPhone, maskName, normalizeMeterId, normalizePhone } from "../../core/service.ts";
+import { formatMeterId, formatPhone, normalizeMeterId, normalizePhone } from "../../core/service.ts";
 import { formatToken } from "../../core/token.ts";
 import type { Currency, Customer, Lang, Meter, PayMethod, Payment } from "../../core/types.ts";
-import { DEMO_PHONE, GOGO_METER, SPARE_METER, sandbox } from "../sandbox/index.ts";
-import { fmtDate, fmtTime, Icon, Logo, monthShort, useSandbox } from "../ui.tsx";
+import { useBackend } from "../backend/context.tsx";
+import { fmtDate, fmtTime, Icon, Logo, monthShort } from "../ui.tsx";
 
 type Tr = (k: StringKey, v?: Record<string, string | number>) => string;
 type Screen =
   | { name: "home" }
   | { name: "buy"; gift?: boolean; preset?: number }
-  | { name: "pay"; paymentId: string; instruction: PaymentInstruction }
+  | { name: "pay"; paymentId: string; instruction: PaymentInstruction; returned?: boolean }
   | { name: "history" }
   | { name: "refill" }
   | { name: "settings" };
 
-const SESSION = "gasguys.session";
 const LANG = "gasguys.lang";
+/** Live mode: the card payment we sent the customer to Paynow's page for, so we can pick it up on return. */
+const PAY = "gasguys.pay";
 const read = (k: string) => {
   try {
     return localStorage.getItem(k);
@@ -36,27 +37,34 @@ const write = (k: string, v: string | null) => {
 };
 
 export function CustomerApp() {
-  const sb = useSandbox();
-  const [customerId, setCustomerId] = useState<string | null>(() => read(SESSION));
-  const customer = customerId ? sb.p.data.customers[customerId] ?? null : null;
+  const backend = useBackend();
+  // A live backend restores the session before the first real render, so a signed-in customer
+  // doesn't see the sign-in screen flash past. The sandbox is always ready.
+  if (!backend.ready())
+    return (
+      <div className="app">
+        <div className="app-head">
+          <Logo />
+        </div>
+      </div>
+    );
+  return <Session />;
+}
+
+function Session() {
+  const backend = useBackend();
+  const customer = backend.customer();
   const [lang, setLangState] = useState<Lang>(() => customer?.lang ?? ((read(LANG) as Lang) || "en"));
   const tr: Tr = (k, v) => t(lang, k, v);
   const setLang = async (l: Lang) => {
     setLangState(l);
     write(LANG, l);
-    if (customer) await sb.svc.updateCustomer(customer, { lang: l });
+    if (customer) await backend.updateCustomer({ lang: l });
   };
-  const signIn = (c: Customer) => {
-    write(SESSION, c.id);
-    setCustomerId(c.id);
-  };
-  const signOut = () => {
-    write(SESSION, null);
-    setCustomerId(null);
-  };
+  const signOut = () => void backend.signOut();
 
-  const meters = customer ? Object.values(sb.p.data.meters).filter((m) => m.customerId === customer.id) : [];
-  if (!customer || meters.length === 0) return <Onboarding tr={tr} lang={lang} setLang={setLang} customer={customer} onDone={signIn} />;
+  const meters = customer ? backend.meters() : [];
+  if (!customer || meters.length === 0) return <Onboarding tr={tr} lang={lang} setLang={setLang} customer={customer} />;
   return <Main tr={tr} lang={lang} setLang={setLang} customer={customer} meters={meters} signOut={signOut} />;
 }
 
@@ -107,37 +115,53 @@ const METHOD: Record<PayMethod, { bg: string; mark: ReactNode; name: string }> =
 
 // ── Onboarding ───────────────────────────────────────────────────────────────────────────────────
 
-function Onboarding(props: { tr: Tr; lang: Lang; setLang: (l: Lang) => void; customer: Customer | null; onDone: (c: Customer) => void }) {
+/** Signing in (and linking a meter) makes the backend's customer and meters appear, which swaps this for Main. */
+function Onboarding(props: { tr: Tr; lang: Lang; setLang: (l: Lang) => void; customer: Customer | null }) {
   const { tr, lang } = props;
+  const backend = useBackend();
+  const demo = backend.sandbox;
   const [step, setStep] = useState<"lang" | "phone" | "otp" | "meter">(props.customer ? "meter" : "lang");
-  const [phone, setPhone] = useState(formatPhone(DEMO_PHONE).slice(1));
+  const [phone, setPhone] = useState(demo ? formatPhone(demo.demoPhone).slice(1) : "");
   const [otp, setOtp] = useState("");
   const [otpFocus, setOtpFocus] = useState(false);
   const [meterId, setMeterId] = useState("");
   const [nickname, setNickname] = useState("");
   const [err, setErr] = useState<string | null>(null);
-  const [customer, setCustomer] = useState<Customer | null>(props.customer);
+  const [busy, setBusy] = useState(false);
   const idx = ["lang", "phone", "otp", "meter"].indexOf(step);
 
-  const submitPhone = () => {
-    const p = normalizePhone(phone);
-    if (!p) return setErr(tr("err_invalid_phone"));
-    setErr(null);
-    setStep("otp");
+  /** Runs one step at a time, so a double tap doesn't send two codes or link twice. */
+  const once = async (fn: () => Promise<unknown>) => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      await fn();
+    } finally {
+      setBusy(false);
+    }
   };
-  const submitOtp = async () => {
-    if (otp !== "123456") return setErr(tr("otp_wrong"));
-    setErr(null);
-    const c = await sandbox.svc.ensureCustomer(normalizePhone(phone)!, lang, nickname);
-    setCustomer(c);
-    if ((await sandbox.store.metersFor(c.id)).length) return props.onDone(c);
-    setStep("meter");
-  };
-  const submitMeter = async () => {
-    const res = await sandbox.svc.linkMeter(customer!.id, meterId);
-    if (!res.ok) return setErr(tr(res.error === "meter_taken" ? "meter_taken" : "meter_not_found"));
-    props.onDone(customer!);
-  };
+  const submitPhone = () =>
+    once(async () => {
+      const p = normalizePhone(phone);
+      if (!p) return setErr(tr("err_invalid_phone"));
+      const res = await backend.requestOtp(p);
+      if (!res.ok) return setErr(tr("err_generic"));
+      setErr(null);
+      setStep("otp");
+    });
+  const submitOtp = () =>
+    once(async () => {
+      const res = await backend.verifyOtp(normalizePhone(phone)!, otp, { lang, name: nickname });
+      if (!res.ok) return setErr(tr(res.error === "otp_wrong" ? "otp_wrong" : "err_generic"));
+      setErr(null);
+      if (backend.meters().length) return; // signed in with a meter: Main takes over
+      setStep("meter");
+    });
+  const submitMeter = () =>
+    once(async () => {
+      const res = await backend.linkMeter(meterId);
+      if (!res.ok) return setErr(res.error === "meter_taken" || res.error === "meter_not_found" ? tr(res.error) : tr("err_generic"));
+    });
 
   return (
     <div className="app">
@@ -204,9 +228,11 @@ function Onboarding(props: { tr: Tr; lang: Lang; setLang: (l: Lang) => void; cus
             <button className="btn primary block" onClick={submitPhone}>
               {tr("btn_continue")} <Icon.Arrow />
             </button>
-            <div className="sandbox-hint">
-              <b>{formatPhone(DEMO_PHONE).slice(1)}</b> is Tendai, who already has a meter. Any other Zimbabwe mobile number starts a new account.
-            </div>
+            {demo && (
+              <div className="sandbox-hint">
+                <b>{formatPhone(demo.demoPhone).slice(1)}</b> is Tendai, who already has a meter. Any other Zimbabwe mobile number starts a new account.
+              </div>
+            )}
           </>
         )}
 
@@ -240,9 +266,11 @@ function Onboarding(props: { tr: Tr; lang: Lang; setLang: (l: Lang) => void; cus
             <button className="link" style={{ alignSelf: "flex-start" }} onClick={() => setStep("phone")}>
               <Icon.Back /> {tr("btn_back")}
             </button>
-            <div className="sandbox-hint">
-              The code is always <b>123456</b>. Production sends it by SMS through Supabase Auth.
-            </div>
+            {demo && (
+              <div className="sandbox-hint">
+                The code is always <b>{demo.otp}</b>. Production sends it by SMS through Supabase Auth.
+              </div>
+            )}
           </>
         )}
 
@@ -258,9 +286,11 @@ function Onboarding(props: { tr: Tr; lang: Lang; setLang: (l: Lang) => void; cus
             <button className="btn primary block" onClick={submitMeter} disabled={normalizeMeterId(meterId).length !== 11}>
               {tr("btn_continue")} <Icon.Arrow />
             </button>
-            <div className="sandbox-hint">
-              Try the uninstalled meter <b>{formatMeterId(SPARE_METER)}</b>. In production a technician links the meter at install, and this step confirms it with an SMS code.
-            </div>
+            {demo && (
+              <div className="sandbox-hint">
+                Try the uninstalled meter <b>{formatMeterId(demo.spareMeter)}</b>. In production a technician links the meter at install, and this step confirms it with an SMS code.
+              </div>
+            )}
           </>
         )}
       </div>
@@ -314,7 +344,8 @@ function MeterSticker({ hint }: { hint: string }) {
 
 function Main(props: { tr: Tr; lang: Lang; setLang: (l: Lang) => void; customer: Customer; meters: Meter[]; signOut: () => void }) {
   const { tr, customer, meters } = props;
-  const [screen, setScreen] = useState<Screen>({ name: "home" });
+  const backend = useBackend();
+  const [screen, setScreen] = useState<Screen>(() => (backend.mode === "live" && resumeCardPayment()) || { name: "home" });
   const [meterId, setMeterId] = useState(meters[0].id);
   const [dismissedLeak, setDismissedLeak] = useState<string | null>(null);
   const meter = meters.find((m) => m.id === meterId) ?? meters[0];
@@ -335,8 +366,8 @@ function Main(props: { tr: Tr; lang: Lang; setLang: (l: Lang) => void; customer:
       <div className="app-body">
         {screen.name === "home" && <Home tr={tr} customer={customer} meters={meters} meter={meter} setMeterId={setMeterId} go={go} />}
         {screen.name === "buy" && <Buy key={`${!!screen.gift}-${screen.preset ?? ""}`} tr={tr} customer={customer} meter={meter} gift={!!screen.gift} preset={screen.preset} go={go} />}
-        {screen.name === "pay" && <Pay tr={tr} paymentId={screen.paymentId} instruction={screen.instruction} go={go} />}
-        {screen.name === "history" && <History tr={tr} customer={customer} meters={meters} go={go} />}
+        {screen.name === "pay" && <Pay tr={tr} paymentId={screen.paymentId} instruction={screen.instruction} returned={!!screen.returned} go={go} />}
+        {screen.name === "history" && <History tr={tr} customer={customer} go={go} />}
         {screen.name === "refill" && <Refill tr={tr} customer={customer} meter={meter} go={go} />}
         {screen.name === "settings" && <Settings tr={tr} lang={props.lang} setLang={props.setLang} customer={customer} signOut={props.signOut} />}
       </div>
@@ -367,12 +398,14 @@ function Main(props: { tr: Tr; lang: Lang; setLang: (l: Lang) => void; customer:
 
 function Home(props: { tr: Tr; customer: Customer; meters: Meter[]; meter: Meter; setMeterId: (id: string) => void; go: (s: Screen) => void }) {
   const { tr, meter: m, go } = props;
-  const tariff = sandbox.svc.tariff;
-  const days = sandbox.svc.daysLeft(m);
+  const backend = useBackend();
+  const tariff = backend.tariff();
+  const days = backend.daysLeft(m);
   const cylPct = Math.max(0, Math.min(100, (m.gasGrams / (m.cylinderKg * 1000)) * 100));
   const creditKg = m.creditGrams / 1000;
-  const refill = Object.values(sandbox.p.data.refills).find((r) => r.meterId === m.id && r.status !== "delivered" && r.status !== "cancelled");
-  const recent = Object.values(sandbox.p.data.payments)
+  const refill = backend.openRefill(m.id);
+  const recent = backend
+    .payments()
     .filter((p) => p.meterId === m.id && p.status === "paid")
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
     .slice(0, 3);
@@ -581,6 +614,8 @@ function DayStrip({ days }: { days: number }) {
 }
 
 function LedgerEntry({ tr, p, customer, showDate }: { tr: Tr; p: Payment; customer: Customer; showDate?: boolean }) {
+  const backend = useBackend();
+  const ownerName = (meterId: string) => backend.meterOwnerName(meterId);
   const kg = (p.grams / 1000).toFixed(2);
   const giftIn = p.gift && p.customerId !== customer.id;
   const giftOut = p.gift && p.customerId === customer.id;
@@ -609,26 +644,37 @@ function LedgerEntry({ tr, p, customer, showDate }: { tr: Tr; p: Payment; custom
 
 function Buy(props: { tr: Tr; customer: Customer; meter: Meter; gift: boolean; preset?: number; go: (s: Screen) => void }) {
   const { tr, customer, gift } = props;
-  const tariff = sandbox.svc.tariff;
+  const backend = useBackend();
+  const tariff = backend.tariff();
   const [currency, setCurrency] = useState<Currency>("USD");
   const [preset, setPreset] = useState<number | null>(props.preset ?? (gift ? 5 : 2));
   const [other, setOther] = useState("");
   const [method, setMethod] = useState<PayMethod>(gift ? "card" : "ecocash");
   const [payPhone, setPayPhone] = useState(formatPhone(customer.phone));
-  const [recipientInput, setRecipientInput] = useState(gift ? formatMeterId(GOGO_METER) : "");
+  const [recipientInput, setRecipientInput] = useState(gift && backend.sandbox ? formatMeterId(backend.sandbox.giftMeter) : "");
   const [message, setMessage] = useState("");
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [recipient, setRecipient] = useState<{ meterId: string; name: string; suburb: string } | null>(null);
   const [confirmed, setConfirmed] = useState(false);
+  const [lookedUp, setLookedUp] = useState(""); // the meter number the last finished lookup was for
 
   useEffect(() => {
     setConfirmed(false);
     setRecipient(null);
     if (!gift) return;
     const id = normalizeMeterId(recipientInput);
-    if (id.length === 11) void sandbox.svc.giftLookup(id).then(setRecipient);
-  }, [recipientInput, gift]);
+    let current = true; // a live lookup can finish after the number has changed again
+    if (id.length === 11)
+      void backend.giftLookup(id).then((r) => {
+        if (!current) return;
+        setRecipient(r);
+        setLookedUp(id);
+      });
+    return () => {
+      current = false;
+    };
+  }, [backend, recipientInput, gift]);
 
   const presets = currency === "USD" ? PRESETS_USD : PRESETS_USD.map((a) => Math.round(fromUsd(a, "ZWG", tariff) / 5) * 5);
   const amount = preset ?? Number(other.replace(",", "."));
@@ -641,16 +687,13 @@ function Buy(props: { tr: Tr; customer: Customer; meter: Meter; gift: boolean; p
     const phone = method === "ecocash" ? normalizePhone(payPhone) : customer.phone;
     if (!phone) return setErr(tr("err_invalid_phone"));
     setBusy(true);
-    const res = await sandbox.svc.startPurchase({
+    const res = await backend.startPurchase({
       meterId: targetMeter!,
       amount,
       currency,
       method,
       payerPhone: phone,
-      payerName: customer.name,
-      payerCustomerId: customer.id,
       giftMessage: gift ? message || null : null,
-      channel: "web",
     });
     setBusy(false);
     if (!res.ok) return setErr(res.error === "amount_too_small" ? tr("err_amount_min", { amount: formatMoney(fromUsd(tariff.minUsd, currency, tariff), currency) }) : tr("err_generic"));
@@ -688,7 +731,7 @@ function Buy(props: { tr: Tr; customer: Customer; meter: Meter; gift: boolean; p
               )}
             </div>
           )}
-          {normalizeMeterId(recipientInput).length === 11 && !recipient && <div className="notice warn">{tr("meter_not_found")}</div>}
+          {normalizeMeterId(recipientInput).length === 11 && lookedUp === normalizeMeterId(recipientInput) && !recipient && <div className="notice warn">{tr("meter_not_found")}</div>}
           <input className="input" value={message} onChange={(e) => setMessage(e.target.value)} placeholder={tr("gift_message")} style={{ fontSize: 16 }} aria-label={tr("gift_message")} />
         </section>
       )}
@@ -795,15 +838,31 @@ function Kv({ k, v }: { k: string; v: ReactNode }) {
   );
 }
 
-function Pay({ tr, paymentId, instruction, go }: { tr: Tr; paymentId: string; instruction: PaymentInstruction; go: (s: Screen) => void }) {
-  const sb = useSandbox();
-  const p = sb.p.data.payments[paymentId];
-  const prompt = sb.p.prompts.find((x) => x.reference === p?.reference);
+function Pay({ tr, paymentId, instruction, returned, go }: { tr: Tr; paymentId: string; instruction: PaymentInstruction; returned: boolean; go: (s: Screen) => void }) {
+  const backend = useBackend();
+  const p = backend.payment(paymentId);
+  const prompt = p ? backend.sandbox?.promptFor(p.reference) : null;
   const [secs, setSecs] = useState(90);
   useEffect(() => {
     const t = setInterval(() => setSecs((s) => Math.max(0, s - 1)), 1000);
     return () => clearInterval(t);
   }, []);
+  // Live: keep the payment row fresh until it settles (Realtime usually beats the poll).
+  useEffect(() => backend.watchPayment(paymentId), [backend, paymentId]);
+  // Live card payments: go to Paynow's hosted page, and remember the payment so the app reopens this
+  // screen when Paynow sends the customer back.
+  useEffect(() => {
+    if (backend.mode !== "live" || instruction.kind !== "redirect") return;
+    if (!returned) {
+      write(PAY, JSON.stringify({ paymentId, instruction }));
+      location.assign(instruction.url);
+    }
+    return () => write(PAY, null);
+  }, [backend, paymentId, instruction, returned]);
+  const settled = !!p && p.status !== "pending";
+  useEffect(() => {
+    if (settled && returned) write(PAY, null);
+  }, [settled, returned]);
   const shareText = useMemo(() => (p ? `Gasguys receipt ${p.reference}: ${formatMoney(p.amount, p.currency)} = ${(p.grams / 1000).toFixed(2)} kg for meter ${formatMeterId(p.meterId)}` : ""), [p]);
   if (!p) return null;
   const kg = (p.grams / 1000).toFixed(2);
@@ -823,7 +882,7 @@ function Pay({ tr, paymentId, instruction, go }: { tr: Tr; paymentId: string; in
         {p.gift && (
           <div className="notice ok">
             <Icon.Gift />
-            <div>{tr("gift_sent", { name: ownerName(p.meterId) })}</div>
+            <div>{tr("gift_sent", { name: backend.meterOwnerName(p.meterId) })}</div>
           </div>
         )}
         <div className="slip-wrap">
@@ -957,14 +1016,14 @@ function Pay({ tr, paymentId, instruction, go }: { tr: Tr; paymentId: string; in
         {tr("receipt_ref", { ref: "" })}
         <span className="mono">{p.reference}</span>
       </p>
-      {prompt && (
+      {prompt && backend.sandbox && (
         <div className="sandbox-hint stack">
           <span>Play the customer. {prompt.method === "ecocash" ? "Enter a PIN on the WhatsApp phone's EcoCash prompt, or:" : "Approve here:"}</span>
           <div className="row">
-            <button className="btn sm dark" onClick={() => sandbox.resolvePrompt(prompt.providerRef, "paid")}>
+            <button className="btn sm dark" onClick={() => backend.sandbox?.resolvePrompt(prompt.providerRef, "paid")}>
               Approve
             </button>
-            <button className="btn sm ghost" onClick={() => sandbox.resolvePrompt(prompt.providerRef, "failed")}>
+            <button className="btn sm ghost" onClick={() => backend.sandbox?.resolvePrompt(prompt.providerRef, "failed")}>
               Decline
             </button>
           </div>
@@ -977,21 +1036,27 @@ function Pay({ tr, paymentId, instruction, go }: { tr: Tr; paymentId: string; in
   );
 }
 
-const ownerName = (meterId: string) => {
-  const owner = sandbox.p.data.customers[sandbox.p.data.meters[meterId]?.customerId ?? ""];
-  return owner ? maskName(owner.name) : formatMeterId(meterId);
-};
+/** Live mode, after Paynow's card page sends the customer back: reopen the payment they were paying. */
+function resumeCardPayment(): Screen | null {
+  try {
+    const v = JSON.parse(read(PAY) ?? "null") as { paymentId?: string; instruction?: PaymentInstruction } | null;
+    return v?.paymentId && v.instruction ? { name: "pay", paymentId: v.paymentId, instruction: v.instruction, returned: true } : null;
+  } catch {
+    return null;
+  }
+}
 
 /** Zimbabwe fire brigade. Confirm the right number (and a Gasguys 24h safety line) before launch. */
 const EMERGENCY_TEL = "993";
 
 // ── History, refill, settings, leak ──────────────────────────────────────────────────────────────
 
-function History({ tr, customer, meters, go }: { tr: Tr; customer: Customer; meters: Meter[]; go: (s: Screen) => void }) {
-  const sb = useSandbox();
-  const mine = new Set(meters.map((m) => m.id));
-  const list = Object.values(sb.p.data.payments)
-    .filter((p) => (p.customerId === customer.id || mine.has(p.meterId)) && p.status !== "pending")
+function History({ tr, customer, go }: { tr: Tr; customer: Customer; go: (s: Screen) => void }) {
+  const backend = useBackend();
+  // The backend's list is already "paid by me, or onto my meters".
+  const list = backend
+    .payments()
+    .filter((p) => p.status !== "pending")
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   const days: [string, Payment[]][] = [];
   for (const p of list) {
@@ -1035,11 +1100,12 @@ const SLOTS: StringKey[] = ["refill_slot_today_pm", "refill_slot_tomorrow_am", "
 const SIZE_H: Record<number, [number, number]> = { 9: [40, 26], 14: [50, 28], 19: [58, 30], 48: [98, 34] };
 
 function Refill({ tr, customer, meter, go }: { tr: Tr; customer: Customer; meter: Meter; go: (s: Screen) => void }) {
-  const sb = useSandbox();
+  const backend = useBackend();
   const [size, setSize] = useState(meter.cylinderKg);
   const [slot, setSlot] = useState<StringKey>(SLOTS[1]);
   const [landmark, setLandmark] = useState("");
-  const open = Object.values(sb.p.data.refills).find((r) => r.meterId === meter.id && r.status !== "delivered" && r.status !== "cancelled");
+  const [err, setErr] = useState<string | null>(null);
+  const open = backend.openRefill(meter.id);
   const steps = ["requested", "scheduled", "out_for_delivery", "delivered"] as const;
 
   if (open) {
@@ -1060,7 +1126,7 @@ function Refill({ tr, customer, meter, go }: { tr: Tr; customer: Customer; meter
           ))}
         </div>
         <p className="muted">{open.slot}</p>
-        <div className="sandbox-hint">Move the order along from the Ops console.</div>
+        {backend.sandbox && <div className="sandbox-hint">Move the order along from the Ops console.</div>}
         <button className="btn ghost block" onClick={() => go({ name: "home" })}>
           {tr("btn_back")}
         </button>
@@ -1100,7 +1166,14 @@ function Refill({ tr, customer, meter, go }: { tr: Tr; customer: Customer; meter
         <label htmlFor="lm">{tr("refill_address")}</label>
         <input id="lm" className="input" value={landmark} onChange={(e) => setLandmark(e.target.value)} placeholder="Opposite Mbare Musika, gate 3" style={{ fontSize: 16 }} />
       </div>
-      <button className="btn primary block" onClick={() => sandbox.svc.requestRefill(meter.id, `${tr(slot)} · ${size} kg${landmark ? " · " + landmark : ""}`)}>
+      {err && <div className="notice warn">{err}</div>}
+      <button
+        className="btn primary block"
+        onClick={async () => {
+          const res = await backend.requestRefill(meter.id, `${tr(slot)} · ${size} kg${landmark ? " · " + landmark : ""}`);
+          setErr(res.ok ? null : tr("err_generic"));
+        }}
+      >
         {tr("btn_confirm")}
       </button>
     </>
@@ -1108,6 +1181,7 @@ function Refill({ tr, customer, meter, go }: { tr: Tr; customer: Customer; meter
 }
 
 function Settings({ tr, lang, setLang, customer, signOut }: { tr: Tr; lang: Lang; setLang: (l: Lang) => void; customer: Customer; signOut: () => void }) {
+  const backend = useBackend();
   return (
     <>
       <h1 className="title">{tr("nav_settings")}</h1>
@@ -1137,7 +1211,7 @@ function Settings({ tr, lang, setLang, customer, signOut }: { tr: Tr; lang: Lang
       <section className="section">
         <h2 className="section-title">{tr("support_title")}</h2>
         <div className="choices">
-          <a className="choice" href="#/whatsapp" style={{ textDecoration: "none" }}>
+          <a className="choice" href={backend.supportWhatsApp} style={{ textDecoration: "none" }}>
             <span className="ico">
               <Icon.Chat />
             </span>
@@ -1164,7 +1238,7 @@ function Settings({ tr, lang, setLang, customer, signOut }: { tr: Tr; lang: Lang
           </div>
         </div>
       </section>
-      <div className="sandbox-hint">{tr("sandbox_note")}</div>
+      {backend.sandbox && <div className="sandbox-hint">{tr("sandbox_note")}</div>}
       <button className="btn ghost block" onClick={signOut}>
         {tr("settings_logout")}
       </button>

@@ -1,7 +1,8 @@
 import { formatKg, formatMoney } from "../../core/pricing.ts";
 import { formatMeterId, formatPhone } from "../../core/service.ts";
 import type { AlertKind, RefillOrder } from "../../core/types.ts";
-import { timeAgo, useSandbox } from "../ui.tsx";
+import { useSandbox } from "../sandbox/useSandbox.ts";
+import { timeAgo } from "../ui.tsx";
 
 const ALERT_LABEL: Record<AlertKind, string> = {
   leak: "Gas leak",

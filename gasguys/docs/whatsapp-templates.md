@@ -11,4 +11,14 @@ Messages Gasguys sends first (not as a reply) need a template approved in WhatsA
 | `low_cylinder` | Cylinder under 15% | Your cylinder has {{1}} kg left. We've booked a refill; reply to change the time. | Request refill |
 | `payment_receipt` | Payment settles after the window closed (e.g. a slow card) | ✅ Payment {{1}} received. {{2}} kg sent to meter {{3}}. | Check balance |
 
+### Sign-in code (Authentication category)
+
+Sent by the `auth-send-sms` function, which Supabase Auth calls as its *Send SMS hook* whenever a customer signs in to the web app. Create it in WhatsApp Manager as an **Authentication** template, not Utility: Meta supplies the wording, and you pick options.
+
+| Name | When | Body | Button |
+|---|---|---|---|
+| `gasguys_login_code` | Customer asks for a sign-in code on the web app | Meta's preset: "{{1}} is your verification code." Tick *Add security recommendation* ("For your security, do not share this code.") and set the expiry to 10 minutes to match Supabase's OTP lifetime. | Copy code |
+
+The function sends the code as the body parameter and again as the copy-code button's parameter ([whatsapp.ts](../supabase/functions/_shared/whatsapp.ts) `authCodeMessage`). Authentication templates only come in Meta's languages, so this one is English for everyone; the code is the part that matters. The name can be changed with the `WHATSAPP_OTP_TEMPLATE` secret; if you submit it as `en_US` rather than `en`, change the language code in `authCodeMessage` too.
+
 Rules from the UX spec: at most one low-gas message a day, none between 21:00 and 06:00, and leak alerts also go by SMS.

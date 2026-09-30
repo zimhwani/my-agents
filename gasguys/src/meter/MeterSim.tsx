@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { formatKg } from "../../core/pricing.ts";
 import { formatMeterId } from "../../core/service.ts";
 import { DEMO_METER } from "../sandbox/index.ts";
-import { Icon, Mark, useSandbox } from "../ui.tsx";
+import { useSandbox } from "../sandbox/useSandbox.ts";
+import { Icon, Mark } from "../ui.tsx";
 
 /**
  * The valve as the ESP32 sees it: LCD, LEDs, token keypad, and the switches a tester flips to make

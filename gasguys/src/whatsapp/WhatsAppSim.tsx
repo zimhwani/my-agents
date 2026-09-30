@@ -4,7 +4,8 @@ import type { OutMessage } from "../../core/providers.ts";
 import { formatMoney } from "../../core/pricing.ts";
 import { formatPhone, normalizePhone } from "../../core/service.ts";
 import { DEMO_PHONE, GOGO_PHONE, sandbox, type ChatEntry } from "../sandbox/index.ts";
-import { Icon, Mark, useSandbox } from "../ui.tsx";
+import { useSandbox } from "../sandbox/useSandbox.ts";
+import { Icon, Mark } from "../ui.tsx";
 
 const Verified = () => (
   <svg viewBox="0 0 24 24" aria-label="Verified">
