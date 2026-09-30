@@ -35,3 +35,22 @@ These 27 strings were added while building the prototype, after the UX pass, and
 | `sandbox_note` | Test mode: no real money moves. | Kuedza: hapana mari chaiyo inobhadharwa. | Ukuhlola: akulamali yangempela ethunyelwayo. |
 | `sign_in` | Sign in | Pinda | Ngena |
 | `meter_offline` | Your meter is offline. Gas you buy also comes as a token you can enter on it. | Mita yenyu haisi pa network. Gasi ramunotenga rinouyawo setokeni yamunogona kuisa pamita. | Imitha yakho ayikho enethiwekhini. Igesi oyithengayo ifika njengethokheni ongayifaka emitheni. |
+
+## Strings added in the visual redesign (drafts)
+
+These 10 keys were added for the redesign (see [design-review.md](design-review.md)). The Shona and Ndebele versions are simple first drafts and need the same native-speaker review as everything above.
+
+| Key | English | Shona (draft) | Ndebele (draft) |
+|---|---|---|---|
+| `days_unit` | days | mazuva | insuku |
+| `day_unit` | day | zuva | ilanga |
+| `runs_out_about` | Lasts until about {date} | Richapera munenge {date} | Izaphela kungaba ngo-{date} |
+| `history_empty_body` | Your receipts will show here after you buy gas. | Marisiti enyu achaonekwa pano kana matenga gasi. | Amarisidi akho azabonakala lapha nxa usuthenge igesi. |
+| `ussd_preview_label` | You will see this on your phone | Muchaona izvi pafoni yenyu | Uzabona lokhu efonini yakho |
+| `share_whatsapp` | Share on WhatsApp | Tumira paWhatsApp | Thumela ku-WhatsApp |
+| `receipt_title` | Receipt | Risiti | Irisidi |
+| `paid_with` | Paid with | Wabhadhara ne | Ubhadale nge |
+| `date_label` | Date | Zuva | Usuku |
+| `gas_label` | Gas | Gasi | Igesi |
+
+Things to check: `days_unit` sits under a large number, so the plural must work alone ("6 mazuva" / "6 insuku"). `runs_out_about` takes an English-style date ("6 Oct"), because Chromium has no Shona or Ndebele date data. Dates on receipts are printed that way in Zimbabwe anyway, but confirm it reads naturally.

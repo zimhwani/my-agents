@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react";
 import { LANGS, t, type StringKey } from "../../core/i18n/index.ts";
 import { formatKg, formatMoney, fromUsd, gramsFor, PRESETS_USD } from "../../core/pricing.ts";
 import type { PaymentInstruction } from "../../core/providers.ts";
@@ -6,12 +6,12 @@ import { formatMeterId, formatPhone, maskName, normalizeMeterId, normalizePhone 
 import { formatToken } from "../../core/token.ts";
 import type { Currency, Customer, Lang, Meter, PayMethod, Payment } from "../../core/types.ts";
 import { DEMO_PHONE, GOGO_METER, SPARE_METER, sandbox } from "../sandbox/index.ts";
-import { Icon, Logo, timeAgo, useSandbox } from "../ui.tsx";
+import { fmtDate, fmtTime, Icon, Logo, monthShort, useSandbox } from "../ui.tsx";
 
 type Tr = (k: StringKey, v?: Record<string, string | number>) => string;
 type Screen =
   | { name: "home" }
-  | { name: "buy"; gift?: boolean }
+  | { name: "buy"; gift?: boolean; preset?: number }
   | { name: "pay"; paymentId: string; instruction: PaymentInstruction }
   | { name: "history" }
   | { name: "refill" }
@@ -60,6 +60,51 @@ export function CustomerApp() {
   return <Main tr={tr} lang={lang} setLang={setLang} customer={customer} meters={meters} signOut={signOut} />;
 }
 
+// ── Small shared pieces ──────────────────────────────────────────────────────────────────────────
+
+function LangSelect({ lang, setLang }: { lang: Lang; setLang: (l: Lang) => void }) {
+  return (
+    <select className="lang-select" value={lang} onChange={(e) => setLang(e.target.value as Lang)} aria-label="Language">
+      {LANGS.map((l) => (
+        <option key={l.code} value={l.code}>
+          {l.label}
+        </option>
+      ))}
+    </select>
+  );
+}
+
+/** A gas cylinder drawn to scale: collar, body, foot ring, and optionally its gas level. */
+function CylinderGlyph({ h, w = Math.round(h * 0.56), pct, tone = "flame" }: { h: number; w?: number; pct?: number; tone?: "flame" | "low" | "empty" }) {
+  const collar = Math.max(4, h * 0.13);
+  const foot = Math.max(3, h * 0.07);
+  const bodyTop = collar;
+  const bodyH = h - collar - foot + 1;
+  const rx = Math.min(w * 0.32, bodyH * 0.3);
+  const fill = tone === "empty" ? "var(--alert)" : tone === "low" ? "var(--maize)" : "var(--flame)";
+  const level = pct === undefined ? null : bodyTop + bodyH * (1 - Math.max(0, Math.min(100, pct)) / 100);
+  const id = `cyl${h}${w}${Math.round(pct ?? -1)}`;
+  return (
+    <svg className="cyl" width={w} height={h} viewBox={`0 0 ${w} ${h}`} aria-hidden focusable="false">
+      <defs>
+        <clipPath id={id}>
+          <rect x="1" y={bodyTop} width={w - 2} height={bodyH - 1} rx={rx} />
+        </clipPath>
+      </defs>
+      <rect x={w * 0.27} y="1" width={w * 0.46} height={collar} rx="1.5" fill="none" stroke="currentColor" strokeWidth="1.5" />
+      {level !== null && <rect x="0" y={level} width={w} height={h} fill={fill} clipPath={`url(#${id})`} />}
+      <rect x="1" y={bodyTop} width={w - 2} height={bodyH - 1} rx={rx} fill="none" stroke="currentColor" strokeWidth="1.5" />
+      <rect x={w * 0.18} y={h - foot} width={w * 0.64} height={foot - 0.75} rx="1" fill="currentColor" />
+    </svg>
+  );
+}
+
+const METHOD: Record<PayMethod, { bg: string; mark: ReactNode; name: string }> = {
+  ecocash: { bg: "#1c4f9c", mark: "E", name: "EcoCash" },
+  innbucks: { bg: "#c8261d", mark: "I", name: "InnBucks" },
+  card: { bg: "#16140f", mark: <Icon.Card />, name: "Visa / Mastercard" },
+};
+
 // ── Onboarding ───────────────────────────────────────────────────────────────────────────────────
 
 function Onboarding(props: { tr: Tr; lang: Lang; setLang: (l: Lang) => void; customer: Customer | null; onDone: (c: Customer) => void }) {
@@ -67,6 +112,7 @@ function Onboarding(props: { tr: Tr; lang: Lang; setLang: (l: Lang) => void; cus
   const [step, setStep] = useState<"lang" | "phone" | "otp" | "meter">(props.customer ? "meter" : "lang");
   const [phone, setPhone] = useState(formatPhone(DEMO_PHONE).slice(1));
   const [otp, setOtp] = useState("");
+  const [otpFocus, setOtpFocus] = useState(false);
   const [meterId, setMeterId] = useState("");
   const [nickname, setNickname] = useState("");
   const [err, setErr] = useState<string | null>(null);
@@ -96,13 +142,11 @@ function Onboarding(props: { tr: Tr; lang: Lang; setLang: (l: Lang) => void; cus
   return (
     <div className="app">
       <div className="app-head">
-        <span className="brand">
-          <Logo /> Gasguys
-        </span>
-        {step !== "lang" && <LangPill lang={lang} setLang={props.setLang} />}
+        <Logo />
+        {step !== "lang" && <LangSelect lang={lang} setLang={props.setLang} />}
       </div>
       <div className="app-body">
-        <div className="steps">
+        <div className="steps" aria-label={`${idx + 1} / 4`}>
           {[0, 1, 2, 3].map((i) => (
             <i key={i} className={i <= idx ? "on" : ""} />
           ))}
@@ -110,85 +154,112 @@ function Onboarding(props: { tr: Tr; lang: Lang; setLang: (l: Lang) => void; cus
 
         {step === "lang" && (
           <>
-            <div className="hero" style={{ padding: 24 }}>
-              <h1 style={{ fontSize: 28, position: "relative", zIndex: 1 }}>{tr("welcome_title")}</h1>
-              <p className="sub" style={{ position: "relative", zIndex: 1 }}>{tr("welcome_body")}</p>
+            <div className="welcome">
+              <h1 className="display">{tr("welcome_title")}</h1>
+              <p>{tr("welcome_body")}</p>
             </div>
-            <h2 style={{ fontSize: 18 }}>
-              {t("en", "choose_language")} · {t("sn", "choose_language")} · {t("nd", "choose_language")}
-            </h2>
-            {LANGS.map((l) => (
-              <button key={l.code} className={`btn block ${lang === l.code ? "primary" : "ghost"}`} onClick={() => props.setLang(l.code)}>
-                {l.label}
-              </button>
-            ))}
-            <div className="notice ok">
+            <section className="section">
+              <div className="trilingual">
+                {LANGS.map((l) => (l.code === lang ? <b key={l.code}>{t(l.code, "choose_language")}</b> : <span key={l.code}>{t(l.code, "choose_language")}</span>))}
+              </div>
+              <div className="choices" role="radiogroup">
+                {LANGS.map((l) => (
+                  <button key={l.code} role="radio" aria-checked={lang === l.code} className={`choice big ${lang === l.code ? "on" : ""}`} onClick={() => props.setLang(l.code)}>
+                    <span className="radio" />
+                    <span className="grow">
+                      <b>{l.label}</b>
+                      <span className="sub">{t(l.code, "nav_buy")}</span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </section>
+            <p className="note ok">
               <Icon.Shield />
               {tr("trust_no_upfront")}
-            </div>
-            <button className="btn dark block" onClick={() => setStep("phone")}>
-              {tr("btn_continue")}
+            </p>
+            <button className="btn primary block" onClick={() => setStep("phone")}>
+              {tr("btn_continue")} <Icon.Arrow />
             </button>
           </>
         )}
 
         {step === "phone" && (
           <>
-            <h1 style={{ fontSize: 24 }}>{tr("sign_in")}</h1>
-            <div className="field">
-              <label>{tr("phone_label")}</label>
-              <div className="prefix">
-                <span>+263</span>
-                <input inputMode="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder={tr("phone_hint")} />
+            <h1 className="title">{tr("sign_in")}</h1>
+            <div className="stack" style={{ gap: 20 }}>
+              <div className="field">
+                <label htmlFor="ph">{tr("phone_label")}</label>
+                <div className="prefix">
+                  <span>+263</span>
+                  <input id="ph" inputMode="tel" autoComplete="tel-national" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder={tr("phone_hint")} />
+                </div>
               </div>
-            </div>
-            <div className="field">
-              <label>{tr("your_name")}</label>
-              <input className="input" value={nickname} onChange={(e) => setNickname(e.target.value)} placeholder="Tendai" />
+              <div className="field">
+                <label htmlFor="nm">{tr("your_name")}</label>
+                <input id="nm" className="input" value={nickname} onChange={(e) => setNickname(e.target.value)} placeholder="Tendai" autoComplete="given-name" />
+              </div>
             </div>
             {err && <div className="notice warn">{err}</div>}
             <button className="btn primary block" onClick={submitPhone}>
-              {tr("btn_continue")}
+              {tr("btn_continue")} <Icon.Arrow />
             </button>
             <div className="sandbox-hint">
-              <b>Sandbox:</b> {formatPhone(DEMO_PHONE).slice(1)} is Tendai, who already has a meter. Any other Zimbabwe mobile number starts a new account.
+              <b>{formatPhone(DEMO_PHONE).slice(1)}</b> is Tendai, who already has a meter. Any other Zimbabwe mobile number starts a new account.
             </div>
           </>
         )}
 
         {step === "otp" && (
           <>
-            <h1 style={{ fontSize: 24 }}>{tr("otp_label")}</h1>
-            <p className="muted">{tr("otp_sent", { phone })}</p>
-            <input className="input num" inputMode="numeric" maxLength={6} value={otp} onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))} style={{ letterSpacing: ".4em", fontSize: 24, textAlign: "center" }} />
+            <div className="stack" style={{ gap: 6 }}>
+              <h1 className="title">{tr("otp_label")}</h1>
+              <p className="muted">{tr("otp_sent", { phone })}</p>
+            </div>
+            <div className="code-cells">
+              {[0, 1, 2, 3, 4, 5].map((i) => (
+                <span key={i} className={otpFocus && i === Math.min(otp.length, 5) ? "cur" : ""}>
+                  {otp[i] ?? ""}
+                </span>
+              ))}
+              <input
+                aria-label={tr("otp_label")}
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                maxLength={6}
+                value={otp}
+                onFocus={() => setOtpFocus(true)}
+                onBlur={() => setOtpFocus(false)}
+                onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
+              />
+            </div>
             {err && <div className="notice warn">{err}</div>}
             <button className="btn primary block" onClick={submitOtp} disabled={otp.length !== 6}>
               {tr("btn_confirm")}
             </button>
-            <button className="link" onClick={() => setStep("phone")}>
-              {tr("btn_back")}
+            <button className="link" style={{ alignSelf: "flex-start" }} onClick={() => setStep("phone")}>
+              <Icon.Back /> {tr("btn_back")}
             </button>
             <div className="sandbox-hint">
-              <b>Sandbox:</b> the code is always <b>123456</b>. Production sends it by SMS through Supabase Auth.
+              The code is always <b>123456</b>. Production sends it by SMS through Supabase Auth.
             </div>
           </>
         )}
 
         {step === "meter" && (
           <>
-            <h1 style={{ fontSize: 24 }}>{tr("meter_link_title")}</h1>
-            <MeterSticker />
+            <h1 className="title">{tr("meter_link_title")}</h1>
+            <MeterSticker hint={tr("meter_id_hint")} />
             <div className="field">
-              <label>{tr("meter_enter_id")}</label>
-              <input className="input num" inputMode="numeric" value={meterId} onChange={(e) => setMeterId(e.target.value)} placeholder="370 0000 0000" />
-              <span className="muted">{tr("meter_id_hint")}</span>
+              <label htmlFor="mid">{tr("meter_enter_id")}</label>
+              <input id="mid" className="input mono" inputMode="numeric" value={meterId} onChange={(e) => setMeterId(e.target.value)} placeholder="370 0000 0000" />
             </div>
             {err && <div className="notice warn">{err}</div>}
             <button className="btn primary block" onClick={submitMeter} disabled={normalizeMeterId(meterId).length !== 11}>
-              {tr("btn_continue")}
+              {tr("btn_continue")} <Icon.Arrow />
             </button>
             <div className="sandbox-hint">
-              <b>Sandbox:</b> try the uninstalled meter <b>{formatMeterId(SPARE_METER)}</b>. In production a technician links the meter at install, and this step confirms it with an SMS code.
+              Try the uninstalled meter <b>{formatMeterId(SPARE_METER)}</b>. In production a technician links the meter at install, and this step confirms it with an SMS code.
             </div>
           </>
         )}
@@ -197,28 +268,45 @@ function Onboarding(props: { tr: Tr; lang: Lang; setLang: (l: Lang) => void; cus
   );
 }
 
-function MeterSticker() {
-  return (
-    <svg viewBox="0 0 320 110" style={{ width: "100%", height: "auto" }} aria-hidden>
-      <rect x="1" y="1" width="318" height="108" rx="16" fill="#fff" stroke="#e7e3dc" />
-      <rect x="18" y="18" width="74" height="74" rx="8" fill="#14213D" />
-      <path d="M30 30h20v20H30zM60 30h20v20H60zM30 60h20v20H30zM62 62h6v6h-6zM72 72h8v8h-8zM62 74h6v6h-6z" fill="#fff" />
-      <text x="110" y="42" fontFamily="Plus Jakarta Sans" fontWeight="700" fontSize="14" fill="#14213D">GASGUYS SMART VALVE</text>
-      <text x="110" y="72" fontFamily="ui-monospace, monospace" fontWeight="700" fontSize="22" fill="#FF6B1A">370 1234 5678</text>
-      <text x="110" y="92" fontFamily="Inter" fontSize="11" fill="#6B7280">Meter no. · 11 digits</text>
-    </svg>
+/** The label on the valve, drawn so people know which number to look for. */
+function MeterSticker({ hint }: { hint: string }) {
+  // A fixed, plausible-looking QR: three finder squares and a scatter of modules.
+  const mods = useMemo(() => {
+    const out: [number, number][] = [];
+    let s = 7;
+    for (let y = 0; y < 21; y++)
+      for (let x = 0; x < 21; x++) {
+        const finder = (x < 8 && y < 8) || (x > 12 && y < 8) || (x < 8 && y > 12);
+        s = (s * 1103515245 + 12345) & 0x7fffffff;
+        if (!finder && s % 5 < 2) out.push([x, y]);
+      }
+    return out;
+  }, []);
+  const finder = (x: number, y: number) => (
+    <g key={`${x}${y}`}>
+      <rect x={x} y={y} width="7" height="7" fill="#16140f" />
+      <rect x={x + 1} y={y + 1} width="5" height="5" fill="#fbfaf6" />
+      <rect x={x + 2} y={y + 2} width="3" height="3" fill="#16140f" />
+    </g>
   );
-}
-
-function LangPill({ lang, setLang }: { lang: Lang; setLang: (l: Lang) => void }) {
   return (
-    <select className="lang-pill" value={lang} onChange={(e) => setLang(e.target.value as Lang)} aria-label="Language">
-      {LANGS.map((l) => (
-        <option key={l.code} value={l.code}>
-          {l.label}
-        </option>
-      ))}
-    </select>
+    <div className="sticker" aria-hidden>
+      <svg className="qr" viewBox="-1 -1 23 23" shapeRendering="crispEdges">
+        {mods.map(([x, y]) => (
+          <rect key={`${x}-${y}`} x={x} y={y} width="1" height="1" fill="#16140f" />
+        ))}
+        {finder(0, 0)}
+        {finder(14, 0)}
+        {finder(0, 14)}
+      </svg>
+      <div>
+        <div className="brand-line">Gasguys smart valve</div>
+        <div className="no">
+          <mark>370 1234 5678</mark>
+        </div>
+        <div className="faint">{hint}</div>
+      </div>
+    </div>
   );
 }
 
@@ -236,21 +324,19 @@ function Main(props: { tr: Tr; lang: Lang; setLang: (l: Lang) => void; customer:
   return (
     <div className="app">
       <div className="app-head">
-        <span className="brand">
-          <Logo /> Gasguys
-        </span>
-        <div className="row">
-          <LangPill lang={props.lang} setLang={props.setLang} />
-          <button className="lang-pill" onClick={() => go({ name: "settings" })} aria-label={tr("nav_settings")}>
-            ⚙︎
+        <Logo />
+        <div className="tools">
+          <LangSelect lang={props.lang} setLang={props.setLang} />
+          <button className={`icon-btn ${screen.name === "settings" ? "on" : ""}`} onClick={() => go({ name: "settings" })} aria-label={tr("nav_settings")} title={tr("nav_settings")}>
+            <Icon.Account />
           </button>
         </div>
       </div>
       <div className="app-body">
         {screen.name === "home" && <Home tr={tr} customer={customer} meters={meters} meter={meter} setMeterId={setMeterId} go={go} />}
-        {screen.name === "buy" && <Buy tr={tr} customer={customer} meter={meter} gift={!!screen.gift} go={go} />}
+        {screen.name === "buy" && <Buy key={`${!!screen.gift}-${screen.preset ?? ""}`} tr={tr} customer={customer} meter={meter} gift={!!screen.gift} preset={screen.preset} go={go} />}
         {screen.name === "pay" && <Pay tr={tr} paymentId={screen.paymentId} instruction={screen.instruction} go={go} />}
-        {screen.name === "history" && <History tr={tr} customer={customer} meters={meters} />}
+        {screen.name === "history" && <History tr={tr} customer={customer} meters={meters} go={go} />}
         {screen.name === "refill" && <Refill tr={tr} customer={customer} meter={meter} go={go} />}
         {screen.name === "settings" && <Settings tr={tr} lang={props.lang} setLang={props.setLang} customer={customer} signOut={props.signOut} />}
       </div>
@@ -260,12 +346,12 @@ function Main(props: { tr: Tr; lang: Lang; setLang: (l: Lang) => void; customer:
             ["home", "nav_home", <Icon.Home />],
             ["buy", "nav_buy", <Icon.Flame />],
             ["gift", "nav_gift", <Icon.Gift />],
-            ["history", "nav_history", <Icon.Clock />],
+            ["history", "nav_history", <Icon.Receipt />],
           ] as const
         ).map(([name, key, icon]) => {
-          const on = name === "gift" ? screen.name === "buy" && !!screen.gift : name === "buy" ? screen.name === "buy" && !screen.gift : screen.name === name;
+          const on = name === "gift" ? screen.name === "buy" && !!screen.gift : name === "buy" ? (screen.name === "buy" && !screen.gift) || screen.name === "pay" : screen.name === name;
           return (
-            <button key={name} className={on ? "on" : ""} onClick={() => go(name === "gift" ? { name: "buy", gift: true } : ({ name } as Screen))}>
+            <button key={name} className={on ? "on" : ""} aria-current={on ? "page" : undefined} onClick={() => go(name === "gift" ? { name: "buy", gift: true } : ({ name } as Screen))}>
               {icon}
               {tr(key)}
             </button>
@@ -277,8 +363,11 @@ function Main(props: { tr: Tr; lang: Lang; setLang: (l: Lang) => void; customer:
   );
 }
 
+// ── Home ─────────────────────────────────────────────────────────────────────────────────────────
+
 function Home(props: { tr: Tr; customer: Customer; meters: Meter[]; meter: Meter; setMeterId: (id: string) => void; go: (s: Screen) => void }) {
   const { tr, meter: m, go } = props;
+  const tariff = sandbox.svc.tariff;
   const days = sandbox.svc.daysLeft(m);
   const cylPct = Math.max(0, Math.min(100, (m.gasGrams / (m.cylinderKg * 1000)) * 100));
   const creditKg = m.creditGrams / 1000;
@@ -289,14 +378,16 @@ function Home(props: { tr: Tr; customer: Customer; meters: Meter[]; meter: Meter
     .slice(0, 3);
   const lastToken = recent.find((p) => p.delivery === "token");
   const offlineHours = Math.floor((Date.now() - Date.parse(m.lastSeen)) / 3.6e6);
+  const state = creditKg <= 0 || days === 0 ? "empty" : days <= 3 ? "low" : "";
+  const runOut = new Date(Date.now() + days * 864e5);
+  const cylTone = cylPct < 5 ? "empty" : cylPct < 20 ? "low" : "flame";
 
   return (
     <>
-      <div className="row between">
-        <div>
-          <div className="muted">{tr("greeting", { name: props.customer.name.split(" ")[0] || "" })}</div>
+      <div className="row between" style={{ alignItems: "flex-end" }}>
+        <div className="meter-id">
           {props.meters.length > 1 ? (
-            <select className="lang-pill" value={m.id} onChange={(e) => props.setMeterId(e.target.value)}>
+            <select value={m.id} onChange={(e) => props.setMeterId(e.target.value)} aria-label={tr("bot_choose_meter")}>
               {props.meters.map((x) => (
                 <option key={x.id} value={x.id}>
                   {formatMeterId(x.id)} · {x.suburb}
@@ -304,142 +395,192 @@ function Home(props: { tr: Tr; customer: Customer; meters: Meter[]; meter: Meter
               ))}
             </select>
           ) : (
-            <b className="num">
-              {tr("meter_label")} {formatMeterId(m.id)}
-            </b>
+            <>
+              <span className="where">{m.suburb}</span>
+              <span className="no">
+                <span>{tr("meter_label")}</span> {formatMeterId(m.id)}
+              </span>
+            </>
           )}
         </div>
-        <span className={`pill ${m.online ? "" : "warn"}`} title={m.online ? "" : tr("meter_offline")}>
-          <Icon.Wifi /> {m.online ? timeAgo(m.lastSeen) : "Offline"}
-        </span>
+        {m.online ? (
+          <span className="faint row" style={{ gap: 5 }} title={tr("last_updated", { time: fmtTime(m.lastSeen) })}>
+            <span style={{ width: 18, height: 18, display: "inline-flex" }}>
+              <Icon.Signal />
+            </span>
+            <span className="mono" style={{ fontSize: 13 }}>
+              {fmtTime(m.lastSeen)}
+            </span>
+          </span>
+        ) : (
+          <span className="status warn">Offline</span>
+        )}
       </div>
 
       {!m.online && (
         <div className="notice warn">
-          <Icon.Wifi />
-          <div>
+          <Icon.NoSignal />
+          <div className="grow">
             {offlineHours >= 1 && `${tr("err_meter_offline", { hours: offlineHours })}. `}
             {lastToken?.token ? tr("token_enter", { kg: (lastToken.grams / 1000).toFixed(2) }) : tr("meter_offline")}
-            {lastToken?.token && <div className="token" style={{ marginTop: 8 }}>{formatToken(lastToken.token)}</div>}
+            {lastToken?.token && (
+              <div className="token-box">
+                <div className="token">{formatToken(lastToken.token)}</div>
+              </div>
+            )}
           </div>
         </div>
       )}
 
-      <div className="hero">
-        <div className="row between" style={{ position: "relative", zIndex: 1 }}>
-          <div>
-            <div className="sub">{tr("credit_balance")}</div>
-            <div className="days num">{creditKg.toFixed(creditKg < 10 ? 2 : 1)} kg</div>
-            <div className="sub" style={{ marginTop: 6, fontSize: 16, color: "#fff" }}>
-              {days === 1 ? tr("days_left_one") : tr("days_left", { days })}
-            </div>
-          </div>
-          <Gauge pct={Math.min(100, (days / 14) * 100)} />
-        </div>
-        <div className="row" style={{ marginTop: 14, gap: 8, position: "relative", zIndex: 1, flexWrap: "wrap" }}>
+      <section className={`readout ${state}`} aria-label={days === 1 ? tr("days_left_one") : tr("days_left", { days })}>
+        <div className="readout-top">
+          <span className="eyebrow">{tr("gas_remaining")}</span>
           {m.leak ? (
-            <span className="pill bad">
-              <span className="dot" /> {tr("leak_title")}
-            </span>
+            <span className="status bad">{tr("leak_title")}</span>
           ) : m.valve === "open" ? (
-            <span className="pill on">
-              <span className="dot" /> {tr("valve_open")}
-            </span>
+            <span className="status on">{tr("valve_open")}</span>
           ) : (
-            <span className="pill off">
-              <span className="dot" /> {tr("valve_closed")}
-            </span>
+            <span className="status off">{tr("valve_closed")}</span>
           )}
-          <span className="pill" style={{ background: "rgba(255,255,255,.1)", color: "#fff", borderColor: "transparent" }}>
-            ≈ {formatMoney(fromUsd((m.creditGrams / 1000) * sandbox.svc.tariff.usdPerKg, "USD"), "USD")}
+        </div>
+        <div className="big" aria-hidden>
+          <span className="n display num">{days}</span>
+          <span className="u">{days === 1 ? tr("day_unit") : tr("days_unit")}</span>
+        </div>
+        <div className="sub">
+          <span>
+            {tr("credit_balance")} <b className="num">{creditKg.toFixed(creditKg < 10 ? 2 : 1)} kg</b>
+          </span>
+          <span>
+            ≈ <b className="num">{formatMoney(fromUsd(creditKg * tariff.usdPerKg, "USD"), "USD")}</b>
           </span>
         </div>
-      </div>
+        <DayStrip days={days} />
+        {days > 0 && (
+          <div className="foot">
+            <span>{tr("runs_out_about", { date: fmtDate(runOut) })}</span>
+          </div>
+        )}
+      </section>
 
       {m.valve === "closed" && !m.leak && m.creditGrams <= 0 && <div className="notice warn">{tr("valve_closed_no_credit")}</div>}
 
-      <button className="btn primary block" onClick={() => go({ name: "buy" })}>
-        <Icon.Flame /> {tr("nav_buy")}
-      </button>
+      <section className="section">
+        <div className="section-head">
+          <h2 className="section-title">{tr("nav_buy")}</h2>
+          <span className="faint mono" style={{ fontSize: 13 }}>
+            ${tariff.usdPerKg.toFixed(2)} / kg
+          </span>
+        </div>
+        <div className="board four">
+          {PRESETS_USD.map((a) => (
+            <button key={a} className="price" onClick={() => go({ name: "buy", preset: a })} aria-label={`$${a} ≈ ${formatKg(gramsFor(a, "USD", tariff))}`}>
+              <span className="amt num">
+                <small>$</small>
+                {a}
+              </span>
+              <span className="kg">{formatKg(gramsFor(a, "USD", tariff))}</span>
+            </button>
+          ))}
+        </div>
+      </section>
 
-      <div className="card stack">
-        <div className="row between">
-          <h3>
-            {tr("cylinder")} · {m.cylinderKg} kg
-          </h3>
-          <span className="muted num">{formatKg(m.gasGrams)}</span>
-        </div>
-        <div className={`bar ${cylPct < 5 ? "empty" : cylPct < 20 ? "low" : ""}`}>
-          <i style={{ width: `${cylPct}%` }} />
-        </div>
-        {refill ? (
-          <div className="notice info">
-            <Icon.Cylinder />
-            <div>
-              <b>{tr("refill_title")}</b> · {tr(`refill_status_${refill.status}` as StringKey)} · {refill.slot}
-            </div>
+      <section className="section">
+        <div className="cyl-row" style={{ flexWrap: "wrap" }}>
+          <CylinderGlyph h={44} pct={cylPct} tone={cylTone} />
+          <div className="t grow">
+            <b>
+              {tr("cylinder")} · {m.cylinderKg} kg
+            </b>
+            <span className="faint num">
+              {formatKg(m.gasGrams)} · {Math.round(cylPct)}%
+            </span>
           </div>
-        ) : cylPct < 20 ? (
+          {refill ? (
+            <span className="tag warn">
+              {tr(`refill_status_${refill.status}` as StringKey)}
+            </span>
+          ) : (
+            cylPct >= 20 && (
+              <button className="link" onClick={() => go({ name: "refill" })}>
+                {tr("refill_title")} <Icon.Arrow />
+              </button>
+            )
+          )}
+        </div>
+        {refill && (
+          <p className="faint row" style={{ gap: 8 }}>
+            <span style={{ width: 20, height: 20, display: "inline-flex", flex: "none" }}>
+              <Icon.Truck />
+            </span>
+            {tr("refill_title")} · {refill.slot}
+          </p>
+        )}
+        {!refill && cylPct < 20 && (
           <>
-            <p className="muted" style={{ margin: 0 }}>
-              {tr("low_cylinder_body", { kg: (m.gasGrams / 1000).toFixed(1) })}
-            </p>
+            <p className="muted">{tr("low_cylinder_body", { kg: (m.gasGrams / 1000).toFixed(1) })}</p>
             <button className="btn ghost block" onClick={() => go({ name: "refill" })}>
               <Icon.Cylinder /> {tr("refill_title")}
             </button>
           </>
-        ) : (
-          <button className="link" style={{ alignSelf: "flex-start" }} onClick={() => go({ name: "refill" })}>
-            {tr("refill_title")} →
-          </button>
         )}
-      </div>
+      </section>
 
-      <div className="card">
-        <div className="row between">
-          <h3>{tr("history_title")}</h3>
-          <button className="link" onClick={() => go({ name: "history" })}>
-            {tr("see_all")}
-          </button>
+      <section className="section">
+        <div className="section-head">
+          <h2 className="section-title">{tr("history_title")}</h2>
+          {recent.length > 0 && (
+            <button className="link" onClick={() => go({ name: "history" })}>
+              {tr("see_all")} <Icon.Arrow />
+            </button>
+          )}
         </div>
-        {recent.length === 0 && <p className="muted">{tr("history_empty")}</p>}
-        {recent.map((p) => (
-          <PaymentRow key={p.id} tr={tr} p={p} customer={props.customer} />
-        ))}
-      </div>
+        {recent.length === 0 ? (
+          <p className="faint">{tr("history_empty_body")}</p>
+        ) : (
+          <div className="ledger" style={{ borderTop: "1px solid var(--rule)" }}>
+            {recent.map((p) => (
+              <LedgerEntry key={p.id} tr={tr} p={p} customer={props.customer} showDate />
+            ))}
+          </div>
+        )}
+      </section>
 
-      <div className="card row" style={{ gap: 12 }}>
-        <div className="ico" style={{ background: "#fff3ec", color: "var(--flame)" }}>
+      <button className="line-row" onClick={() => go({ name: "buy", gift: true })}>
+        <span className="ico">
           <Icon.Gift />
-        </div>
-        <div style={{ flex: 1 }}>
+        </span>
+        <span className="grow">
           <b>{tr("gift_title")}</b>
-          <div className="muted">{tr("gift_body")}</div>
-        </div>
-        <button className="btn sm ghost" onClick={() => go({ name: "buy", gift: true })}>
-          {tr("nav_gift")}
-        </button>
-      </div>
+          <span className="faint">{tr("gift_body")}</span>
+        </span>
+        <span className="chev">
+          <Icon.Chevron />
+        </span>
+      </button>
     </>
   );
 }
 
-function Gauge({ pct }: { pct: number }) {
-  const r = 38;
-  const c = Math.PI * r;
-  const color = pct < 15 ? "#E0322B" : pct < 35 ? "#FFC53D" : "#1FA35C";
+/** The next fourteen days, numbered by date, filled up to the day the gas runs out. */
+function DayStrip({ days }: { days: number }) {
+  const today = new Date();
+  const cells = Array.from({ length: 14 }, (_, i) => new Date(today.getFullYear(), today.getMonth(), today.getDate() + i));
   return (
-    <svg width="104" height="62" viewBox="0 0 104 62" className="gauge" aria-hidden>
-      <path d="M14 56a38 38 0 0 1 76 0" fill="none" stroke="rgba(255,255,255,.15)" strokeWidth="12" strokeLinecap="round" />
-      <path d="M14 56a38 38 0 0 1 76 0" fill="none" stroke={color} strokeWidth="12" strokeLinecap="round" strokeDasharray={`${(c * pct) / 100} ${c}`} style={{ transition: "stroke-dasharray .6s" }} />
-      <g transform="translate(40 26)" fill="#FF6B1A">
-        <path d="M12 3c1 3.5 5 5.5 5 10a5 5 0 0 1-10 0c0-2.6 1.4-4 2.6-5.4.3 1.8 1.1 2.6 2.1 2.9-.7-2.8 0-5.3.3-7.5z" />
-      </g>
-    </svg>
+    <div className="days" aria-hidden>
+      {cells.map((_, i) => (
+        <i key={`b${i}`} className={i < days ? "f" : ""} />
+      ))}
+      {cells.map((d, i) => (
+        <span key={`l${i}`} className={d.getDate() === 1 || i === 0 ? "m" : i === days ? "end" : ""}>
+          {d.getDate() === 1 ? monthShort(d) : d.getDate()}
+        </span>
+      ))}
+    </div>
   );
 }
 
-function PaymentRow({ tr, p, customer }: { tr: Tr; p: Payment; customer: Customer }) {
+function LedgerEntry({ tr, p, customer, showDate }: { tr: Tr; p: Payment; customer: Customer; showDate?: boolean }) {
   const kg = (p.grams / 1000).toFixed(2);
   const giftIn = p.gift && p.customerId !== customer.id;
   const giftOut = p.gift && p.customerId === customer.id;
@@ -450,34 +591,27 @@ function PaymentRow({ tr, p, customer }: { tr: Tr; p: Payment; customer: Custome
       : tr("history_purchase", { kg, amount: formatMoney(p.amount, p.currency) });
   const failed = p.status !== "paid";
   return (
-    <div className="list-item">
-      <div className="ico" style={{ background: failed ? "#eef0f3" : giftIn || giftOut ? "#fff3ec" : "var(--msasa-bg)", color: failed ? "#6b7280" : giftIn || giftOut ? "var(--flame)" : "#13703f" }}>
-        {giftIn || giftOut ? <Icon.Gift /> : <Icon.Flame />}
-      </div>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontWeight: 600, fontSize: 14.5 }}>{label}</div>
-        <div className="muted" style={{ fontSize: 12.5 }}>
-          {new Date(p.createdAt).toLocaleString()} · {p.method === "ecocash" ? "EcoCash" : p.method === "innbucks" ? "InnBucks" : "Card"} · {p.reference}
+    <div className={`entry ${failed ? "failed" : ""} ${giftIn || giftOut ? "gift" : ""}`}>
+      <span className="when">{showDate ? fmtDate(p.createdAt) : fmtTime(p.createdAt)}</span>
+      <div>
+        <div className="what">{label}</div>
+        <div className="meta">
+          {METHOD[p.method].name} · <span className="mono">{p.reference}</span>
           {failed && ` · ${p.status}`}
         </div>
       </div>
+      <div className="amt">{giftOut ? `${kg} kg` : `+${kg} kg`}</div>
     </div>
   );
 }
 
 // ── Buy and gift ─────────────────────────────────────────────────────────────────────────────────
 
-const METHOD_STYLE: Record<PayMethod, { bg: string; short: string; name: string }> = {
-  ecocash: { bg: "#0d4b9a", short: "Eco", name: "EcoCash" },
-  innbucks: { bg: "#e0322b", short: "Inn", name: "InnBucks" },
-  card: { bg: "#14213d", short: "VISA", name: "Visa / Mastercard" },
-};
-
-function Buy(props: { tr: Tr; customer: Customer; meter: Meter; gift: boolean; go: (s: Screen) => void }) {
+function Buy(props: { tr: Tr; customer: Customer; meter: Meter; gift: boolean; preset?: number; go: (s: Screen) => void }) {
   const { tr, customer, gift } = props;
   const tariff = sandbox.svc.tariff;
   const [currency, setCurrency] = useState<Currency>("USD");
-  const [preset, setPreset] = useState<number | null>(gift ? 5 : 2);
+  const [preset, setPreset] = useState<number | null>(props.preset ?? (gift ? 5 : 2));
   const [other, setOther] = useState("");
   const [method, setMethod] = useState<PayMethod>(gift ? "card" : "ecocash");
   const [payPhone, setPayPhone] = useState(formatPhone(customer.phone));
@@ -523,21 +657,30 @@ function Buy(props: { tr: Tr; customer: Customer; meter: Meter; gift: boolean; g
     props.go({ name: "pay", paymentId: res.payment.id, instruction: res.instruction });
   };
 
+  const sym = currency === "USD" ? "$" : "ZiG ";
   return (
     <>
-      <h1 style={{ fontSize: 24 }}>{gift ? tr("gift_title") : tr("buy_title")}</h1>
-      {gift ? (
-        <div className="card stack">
-          <p className="muted" style={{ margin: 0 }}>
-            {tr("gift_body")}
+      <div className="stack" style={{ gap: 6 }}>
+        <h1 className="title">{gift ? tr("gift_title") : tr("buy_title")}</h1>
+        {gift ? (
+          <p className="muted">{tr("gift_body")}</p>
+        ) : (
+          <p className="muted">
+            {tr("meter_label")} <span className="mono">{formatMeterId(props.meter.id)}</span> · {props.meter.suburb}
           </p>
+        )}
+      </div>
+
+      {gift && (
+        <section className="section">
           <div className="field">
-            <label>{tr("recipient_meter")}</label>
-            <input className="input num" inputMode="numeric" value={recipientInput} onChange={(e) => setRecipientInput(e.target.value)} placeholder="370 0000 0000" />
+            <label htmlFor="rcp">{tr("recipient_meter")}</label>
+            <input id="rcp" className="input mono" inputMode="numeric" value={recipientInput} onChange={(e) => setRecipientInput(e.target.value)} placeholder="370 0000 0000" />
           </div>
           {recipient && (
             <div className={`notice ${confirmed ? "ok" : "info"}`} style={{ alignItems: "center" }}>
-              <div style={{ flex: 1 }}>{tr("recipient_name_check", { name: `${recipient.name} · ${recipient.suburb}` })}</div>
+              {confirmed ? <Icon.Check /> : <Icon.Account />}
+              <div className="grow">{tr("recipient_name_check", { name: `${recipient.name} · ${recipient.suburb}` })}</div>
               {!confirmed && (
                 <button className="btn sm dark" onClick={() => setConfirmed(true)}>
                   {tr("yes")}
@@ -546,22 +689,19 @@ function Buy(props: { tr: Tr; customer: Customer; meter: Meter; gift: boolean; g
             </div>
           )}
           {normalizeMeterId(recipientInput).length === 11 && !recipient && <div className="notice warn">{tr("meter_not_found")}</div>}
-          <input className="input" value={message} onChange={(e) => setMessage(e.target.value)} placeholder={tr("gift_message")} style={{ fontSize: 15 }} />
-        </div>
-      ) : (
-        <div className="muted">
-          {tr("meter_label")} <b className="num">{formatMeterId(props.meter.id)}</b> · {props.meter.suburb}
-        </div>
+          <input className="input" value={message} onChange={(e) => setMessage(e.target.value)} placeholder={tr("gift_message")} style={{ fontSize: 16 }} aria-label={tr("gift_message")} />
+        </section>
       )}
 
-      <div className="card stack">
-        <div className="row between">
-          <b>{tr("amount")}</b>
-          <div className="seg">
+      <section className="section">
+        <div className="section-head">
+          <h2 className="section-title">{tr("amount")}</h2>
+          <div className="seg" role="group" aria-label="Currency">
             {(["USD", "ZWG"] as Currency[]).map((c) => (
               <button
                 key={c}
                 className={currency === c ? "on" : ""}
+                aria-pressed={currency === c}
                 onClick={() => {
                   setCurrency(c);
                   setPreset(c === "USD" ? 2 : Math.round(fromUsd(2, "ZWG", tariff) / 5) * 5);
@@ -572,59 +712,86 @@ function Buy(props: { tr: Tr; customer: Customer; meter: Meter; gift: boolean; g
             ))}
           </div>
         </div>
-        <div className="chips">
+        <div className="board">
           {presets.map((a) => (
-            <button key={a} className={`chip ${preset === a ? "on" : ""}`} onClick={() => setPreset(a)}>
-              {formatMoney(a, currency).replace(".00", "")}
-              <small>≈ {formatKg(gramsFor(a, currency, tariff))}</small>
+            <button key={a} className={`price ${preset === a ? "on" : ""}`} aria-pressed={preset === a} onClick={() => setPreset(a)}>
+              <span className="amt num">
+                <small>{sym.trim()}</small>
+                {a}
+              </span>
+              <span className="kg">≈ {formatKg(gramsFor(a, currency, tariff))}</span>
             </button>
           ))}
-          <button className={`chip ${preset === null ? "on" : ""}`} onClick={() => setPreset(null)}>
-            {tr("amount_other")}
-            <small>{currency === "USD" ? "$" : "ZiG"}</small>
+          <button className={`price other ${preset === null ? "on" : ""}`} aria-pressed={preset === null} onClick={() => setPreset(null)}>
+            <span className="amt">{tr("amount_other")}</span>
+            <span className="kg" style={{ marginLeft: "auto" }}>
+              {sym.trim()}
+            </span>
           </button>
         </div>
-        {preset === null && <input className="input num" inputMode="decimal" autoFocus value={other} onChange={(e) => setOther(e.target.value)} placeholder="0.00" />}
-        {grams > 0 && (
-          <div className="muted">
-            {tr("amount_gets_you", { amount: formatMoney(amount, currency), kg: (grams / 1000).toFixed(2) })} ·{" "}
-            {tr("days_left", { days: Math.floor(grams / props.meter.avgDailyGrams) })}
+        {preset === null && (
+          <div className="prefix">
+            <span>{sym.trim()}</span>
+            <input inputMode="decimal" autoFocus value={other} onChange={(e) => setOther(e.target.value)} placeholder="0.00" aria-label={tr("amount_other")} />
           </div>
         )}
-      </div>
+        {grams > 0 && (
+          <div className="yields">
+            <b>{tr("amount_gets_you", { amount: formatMoney(amount, currency), kg: (grams / 1000).toFixed(2) })}</b>
+            <span>{tr("days_left", { days: Math.floor(grams / props.meter.avgDailyGrams) })}</span>
+          </div>
+        )}
+      </section>
 
-      <div className="card stack">
-        <b>{tr("pay_with")}</b>
-        {(["ecocash", "innbucks", "card"] as PayMethod[]).map((mth) => (
-          <button key={mth} className={`method ${method === mth ? "on" : ""}`} onClick={() => setMethod(mth)}>
-            <span className="logo" style={{ background: METHOD_STYLE[mth].bg }}>
-              {METHOD_STYLE[mth].short}
-            </span>
-            <span style={{ flex: 1 }}>
-              <b>{METHOD_STYLE[mth].name}</b>
-              <span className="muted">{mth === "ecocash" ? tr("confirm_on_phone") : mth === "innbucks" ? "Code · QR" : tr("gift_from_card")}</span>
-            </span>
-          </button>
-        ))}
+      <section className="section">
+        <h2 className="section-title">{tr("pay_with")}</h2>
+        <div className="choices" role="radiogroup">
+          {(["ecocash", "innbucks", "card"] as PayMethod[]).map((mth) => (
+            <button key={mth} role="radio" aria-checked={method === mth} className={`choice ${method === mth ? "on" : ""}`} onClick={() => setMethod(mth)}>
+              <span className="radio" />
+              <span className="grow">
+                <b>{METHOD[mth].name}</b>
+                <span className="sub">{mth === "ecocash" ? tr("confirm_on_phone") : mth === "innbucks" ? "Code · QR" : tr("gift_from_card")}</span>
+              </span>
+              <span className="method-mark" style={{ background: METHOD[mth].bg }}>
+                {METHOD[mth].mark}
+              </span>
+            </button>
+          ))}
+        </div>
         {method === "ecocash" && (
           <div className="field">
-            <label>{tr("pay_number")}</label>
-            <input className="input num" inputMode="tel" value={payPhone} onChange={(e) => setPayPhone(e.target.value)} />
+            <label htmlFor="eco">{tr("pay_number")}</label>
+            <input id="eco" className="input mono" inputMode="tel" value={payPhone} onChange={(e) => setPayPhone(e.target.value)} />
           </div>
         )}
-      </div>
+      </section>
 
       {err && <div className="notice warn">{err}</div>}
-      <div className="stack" style={{ position: "sticky", bottom: 0, background: "var(--mist)", paddingTop: 8 }}>
-        <div className="row between muted">
-          <span>✓ {tr("fee_none")}</span>
-          <span>{tr("trust_secure")}</span>
-        </div>
+      <div className="paybar">
+        <p className="note ok" style={{ fontSize: 14 }}>
+          <Icon.Shield />
+          <span>
+            {tr("fee_none")} · {tr("trust_secure")}
+          </span>
+        </p>
         <button className="btn primary block" disabled={!canPay} onClick={pay}>
           {amount > 0 ? `${tr("btn_confirm")} · ${formatMoney(amount, currency)}` : tr("btn_confirm")}
         </button>
       </div>
     </>
+  );
+}
+
+// ── Paying ───────────────────────────────────────────────────────────────────────────────────────
+
+function Kv({ k, v }: { k: string; v: ReactNode }) {
+  return (
+    <div className="kv">
+      <span className="k">{k}</span>
+      <span className="dots" />
+      <span className="v">{v}</span>
+    </div>
   );
 }
 
@@ -639,105 +806,161 @@ function Pay({ tr, paymentId, instruction, go }: { tr: Tr; paymentId: string; in
   }, []);
   const shareText = useMemo(() => (p ? `Gasguys receipt ${p.reference}: ${formatMoney(p.amount, p.currency)} = ${(p.grams / 1000).toFixed(2)} kg for meter ${formatMeterId(p.meterId)}` : ""), [p]);
   if (!p) return null;
+  const kg = (p.grams / 1000).toFixed(2);
 
   if (p.status === "paid")
     return (
-      <div className="stack center">
-        <div className="big-tick">
-          <Icon.Check />
-        </div>
-        <h1 style={{ fontSize: 24 }}>{tr("payment_success")}</h1>
-        <p style={{ fontSize: 17, margin: 0 }}>
-          {p.delivery === "online" ? tr("credit_sent", { kg: (p.grams / 1000).toFixed(2) }) : tr("token_enter", { kg: (p.grams / 1000).toFixed(2) })}
-        </p>
-        {p.gift && <div className="notice ok">🎁 {tr("gift_sent", { name: ownerName(p.meterId) })}</div>}
-        <div className="card stack" style={{ textAlign: "left" }}>
-          <div className="row between">
-            <span className="muted">{tr("receipt_ref", { ref: "" }).replace(/[:.]?\s*$/, "")}</span>
-            <b className="num">{p.reference}</b>
-          </div>
-          <div className="row between">
-            <span className="muted">{tr("amount")}</span>
-            <b className="num">{formatMoney(p.amount, p.currency)}</b>
-          </div>
-          <div className="row between">
-            <span className="muted">{tr("meter_label")}</span>
-            <b className="num">{formatMeterId(p.meterId)}</b>
-          </div>
-          {p.token && p.delivery === "token" && (
-            <>
-              <span className="muted">{tr("token_title")}</span>
-              <div className="token">{formatToken(p.token)}</div>
-            </>
-          )}
-        </div>
-        <a className="btn ghost block" href={`https://wa.me/?text=${encodeURIComponent(shareText)}`} target="_blank" rel="noreferrer" style={{ textDecoration: "none" }}>
-          Share on WhatsApp
-        </a>
-        <button className="btn dark block" onClick={() => go({ name: "home" })}>
-          {tr("btn_done")}
-        </button>
-      </div>
-    );
-
-  if (p.status !== "pending")
-    return (
-      <div className="stack center">
-        <div className="big-tick" style={{ background: "var(--granite)" }}>
-          <span style={{ color: "#fff", fontSize: 40, fontWeight: 800 }}>!</span>
-        </div>
-        <h1 style={{ fontSize: 22 }}>{p.status === "expired" ? tr("payment_timeout") : tr("payment_failed")}</h1>
-        <button className="btn primary block" onClick={() => go({ name: "buy", gift: p.gift })}>
-          {tr("btn_retry")}
-        </button>
-        <button className="btn ghost block" onClick={() => go({ name: "home" })}>
-          {tr("btn_back")}
-        </button>
-      </div>
-    );
-
-  return (
-    <div className="stack center">
-      <h1 style={{ fontSize: 22 }}>{tr("waiting_payment")}</h1>
-      <p className="muted" style={{ margin: 0 }}>
-        {tr("review_summary", { amount: formatMoney(p.amount, p.currency), meter: formatMeterId(p.meterId) })}
-      </p>
-      {instruction.kind === "ussd_push" && (
-        <div className="card stack">
-          <div style={{ fontSize: 56 }}>📲</div>
-          <b style={{ fontSize: 18 }}>{tr("confirm_on_phone")}</b>
-          <span className="muted">
-            EcoCash · {formatPhone(instruction.phone)} · <span className="num">{secs}s</span>
+      <>
+        <div className="result-head">
+          <span className="result-mark">
+            <Icon.Check />
           </span>
+          <div className="stack" style={{ gap: 4 }}>
+            <h1 className="title">{tr("payment_success")}</h1>
+            <p className="muted">{p.delivery === "online" ? tr("credit_sent", { kg }) : tr("token_enter", { kg })}</p>
+          </div>
         </div>
+        {p.gift && (
+          <div className="notice ok">
+            <Icon.Gift />
+            <div>{tr("gift_sent", { name: ownerName(p.meterId) })}</div>
+          </div>
+        )}
+        <div className="slip-wrap">
+          <div className="slip">
+            <div className="slip-head">
+              <Logo size={22} />
+              <span className="k">{tr("receipt_title")}</span>
+            </div>
+            <Kv k={tr("receipt_ref", { ref: "" }).replace(/[:.]?\s*$/, "")} v={p.reference} />
+            <Kv k={tr("date_label")} v={`${fmtDate(p.createdAt, true)} ${fmtTime(p.createdAt)}`} />
+            <Kv k={tr("meter_label")} v={formatMeterId(p.meterId)} />
+            <Kv k={tr("paid_with")} v={METHOD[p.method].name} />
+            <Kv k={tr("amount")} v={formatMoney(p.amount, p.currency)} />
+            <div className="slip-total">
+              <span className="k">{tr("gas_label")}</span>
+              <span className="v display num">{kg} kg</span>
+            </div>
+            {p.token && p.delivery === "token" && (
+              <div className="token-box">
+                <span className="k">{tr("token_title")}</span>
+                <div className="token">{formatToken(p.token)}</div>
+              </div>
+            )}
+          </div>
+        </div>
+        <div className="stack">
+          <button className="btn primary block" onClick={() => go({ name: "home" })}>
+            {tr("btn_done")}
+          </button>
+          <a className="btn ghost block" href={`https://wa.me/?text=${encodeURIComponent(shareText)}`} target="_blank" rel="noreferrer">
+            <Icon.Share /> {tr("share_whatsapp")}
+          </a>
+        </div>
+      </>
+    );
+
+  if (p.status !== "pending") {
+    // "Payment did not go through. No money was taken." → headline, then the reassurance on its own.
+    const [head, ...rest] = (p.status === "expired" ? tr("payment_timeout") : tr("payment_failed")).split(/(?<=\.)\s+/);
+    return (
+      <>
+        <div className="result-head">
+          <span className="result-mark bad" style={{ fontSize: 28, fontWeight: 800 }}>
+            !
+          </span>
+          <div className="stack" style={{ gap: 6 }}>
+            <h1 className="title">{head}</h1>
+            {rest.length > 0 && <p className="section-title">{rest.join(" ")}</p>}
+          </div>
+        </div>
+        <div className="stack">
+          <button className="btn primary block" onClick={() => go({ name: "buy", gift: p.gift })}>
+            {tr("btn_retry")}
+          </button>
+          <button className="btn ghost block" onClick={() => go({ name: "home" })}>
+            {tr("btn_back")}
+          </button>
+          <a className="link" href="tel:+263000000000" style={{ alignSelf: "flex-start" }}>
+            <Icon.Call /> {tr("bot_talk_agent")}
+          </a>
+        </div>
+      </>
+    );
+  }
+
+  const mmss = `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, "0")}`;
+  return (
+    <>
+      <div className="stack" style={{ gap: 6 }}>
+        <h1 className="title">{tr("waiting_payment")}</h1>
+        <p className="muted">{tr("review_summary", { amount: formatMoney(p.amount, p.currency), meter: formatMeterId(p.meterId) })}</p>
+      </div>
+      {instruction.kind === "ussd_push" && (
+        <>
+          <div className="handset">
+            <span className="handset-cap">
+              <Icon.Phone /> {tr("ussd_preview_label")}
+            </span>
+            <div className="ussd-mock" aria-hidden>
+              <div>
+                Pay {p.currency === "USD" ? "USD" : "ZiG"} {p.amount.toFixed(2)} to GASGUYS. Ref {p.reference}. Enter PIN to confirm:
+              </div>
+              <div className="pin">
+                <i />
+              </div>
+              <div className="acts">
+                <span>CANCEL</span>
+                <span>SEND</span>
+              </div>
+            </div>
+          </div>
+          <div className="stack" style={{ gap: 10 }}>
+            <p className="section-title">{tr("confirm_on_phone")}</p>
+            <div className="countdown">
+              <div className="row between faint">
+                <span>
+                  EcoCash · <span className="mono">{formatPhone(instruction.phone)}</span>
+                </span>
+                <span className="mono">{mmss}</span>
+              </div>
+              <div className="track">
+                <i style={{ width: `${(secs / 90) * 100}%` }} />
+              </div>
+            </div>
+          </div>
+        </>
       )}
       {instruction.kind === "code" && (
-        <div className="card stack">
-          <span className="muted">InnBucks</span>
-          <div className="token" style={{ fontSize: 34 }}>
-            {instruction.code.replace(/(\d{3})(\d{3})/, "$1 $2")}
+        <section className="section">
+          <span className="eyebrow">InnBucks</span>
+          <div className="code-big mono" aria-label={instruction.code}>
+            {instruction.code.split("").map((c, i) => (
+              <Fragment key={i}>
+                {i === 3 && <span className="gap" />}
+                <span>{c}</span>
+              </Fragment>
+            ))}
           </div>
-          <span>{tr("innbucks_code", { code: instruction.code })}</span>
-          <a className="btn ghost block" href={instruction.deepLink} style={{ textDecoration: "none" }}>
-            Open InnBucks
+          <p className="muted">{tr("innbucks_code", { code: instruction.code })}</p>
+          <a className="btn ghost block" href={instruction.deepLink}>
+            Open InnBucks <Icon.Arrow />
           </a>
-        </div>
+        </section>
       )}
       {instruction.kind === "redirect" && (
-        <div className="card stack">
-          <div style={{ fontSize: 48 }}>💳</div>
-          <a className="btn primary block" href={instruction.url} style={{ textDecoration: "none" }}>
-            {tr("pay_card")}
-          </a>
-        </div>
+        <a className="btn primary block" href={instruction.url}>
+          <Icon.Card /> {tr("pay_card")}
+        </a>
       )}
-      <div className="muted">{tr("receipt_ref", { ref: p.reference })}</div>
+      <p className="faint">
+        {tr("receipt_ref", { ref: "" })}
+        <span className="mono">{p.reference}</span>
+      </p>
       {prompt && (
         <div className="sandbox-hint stack">
-          <span>
-            <b>Sandbox:</b> play the customer. {prompt.method === "ecocash" ? "Enter a PIN on the WhatsApp phone's EcoCash prompt, or:" : "Approve here:"}
-          </span>
-          <div className="row" style={{ justifyContent: "center" }}>
+          <span>Play the customer. {prompt.method === "ecocash" ? "Enter a PIN on the WhatsApp phone's EcoCash prompt, or:" : "Approve here:"}</span>
+          <div className="row">
             <button className="btn sm dark" onClick={() => sandbox.resolvePrompt(prompt.providerRef, "paid")}>
               Approve
             </button>
@@ -747,10 +970,10 @@ function Pay({ tr, paymentId, instruction, go }: { tr: Tr; paymentId: string; in
           </div>
         </div>
       )}
-      <button className="link" onClick={() => go({ name: "home" })}>
-        {tr("btn_back")}
+      <button className="link" style={{ alignSelf: "flex-start" }} onClick={() => go({ name: "home" })}>
+        <Icon.Back /> {tr("btn_back")}
       </button>
-    </div>
+    </>
   );
 }
 
@@ -764,26 +987,52 @@ const EMERGENCY_TEL = "993";
 
 // ── History, refill, settings, leak ──────────────────────────────────────────────────────────────
 
-function History({ tr, customer, meters }: { tr: Tr; customer: Customer; meters: Meter[] }) {
+function History({ tr, customer, meters, go }: { tr: Tr; customer: Customer; meters: Meter[]; go: (s: Screen) => void }) {
   const sb = useSandbox();
   const mine = new Set(meters.map((m) => m.id));
   const list = Object.values(sb.p.data.payments)
     .filter((p) => (p.customerId === customer.id || mine.has(p.meterId)) && p.status !== "pending")
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  const days: [string, Payment[]][] = [];
+  for (const p of list) {
+    const d = fmtDate(p.createdAt, true);
+    if (days.at(-1)?.[0] !== d) days.push([d, []]);
+    days.at(-1)![1].push(p);
+  }
   return (
     <>
-      <h1 style={{ fontSize: 24 }}>{tr("history_title")}</h1>
-      <div className="card">
-        {list.length === 0 && <p className="muted">{tr("history_empty")}</p>}
-        {list.map((p) => (
-          <PaymentRow key={p.id} tr={tr} p={p} customer={customer} />
-        ))}
-      </div>
+      <h1 className="title">{tr("history_title")}</h1>
+      {list.length === 0 ? (
+        <div className="empty-state">
+          <svg width="56" height="64" viewBox="0 0 56 64" fill="none" stroke="currentColor" strokeWidth="1.75" aria-hidden>
+            <path d="M8 4h40v56l-6.7-4-6.6 4-6.7-4-6.7 4-6.6-4L8 60z" strokeDasharray="4 3" />
+            <path d="M17 18h22M17 27h22M17 36h12" />
+          </svg>
+          <b className="section-title">{tr("history_empty")}</b>
+          <p className="muted">{tr("history_empty_body")}</p>
+          <button className="btn primary" onClick={() => go({ name: "buy" })}>
+            <Icon.Flame /> {tr("nav_buy")}
+          </button>
+        </div>
+      ) : (
+        <div className="ledger">
+          {days.map(([d, ps]) => (
+            <div key={d}>
+              <div className="ledger-day">{d}</div>
+              {ps.map((p) => (
+                <LedgerEntry key={p.id} tr={tr} p={p} customer={customer} />
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
     </>
   );
 }
 
 const SLOTS: StringKey[] = ["refill_slot_today_pm", "refill_slot_tomorrow_am", "refill_slot_tomorrow_pm"];
+/** Real cylinder heights, roughly: 9 kg ≈ 48 cm, 14 kg ≈ 58 cm, 19 kg ≈ 65 cm, 48 kg ≈ 125 cm. */
+const SIZE_H: Record<number, [number, number]> = { 9: [40, 26], 14: [50, 28], 19: [58, 30], 48: [98, 34] };
 
 function Refill({ tr, customer, meter, go }: { tr: Tr; customer: Customer; meter: Meter; go: (s: Screen) => void }) {
   const sb = useSandbox();
@@ -793,61 +1042,63 @@ function Refill({ tr, customer, meter, go }: { tr: Tr; customer: Customer; meter
   const open = Object.values(sb.p.data.refills).find((r) => r.meterId === meter.id && r.status !== "delivered" && r.status !== "cancelled");
   const steps = ["requested", "scheduled", "out_for_delivery", "delivered"] as const;
 
-  if (open)
+  if (open) {
+    const at = steps.indexOf(open.status as (typeof steps)[number]);
     return (
       <>
-        <h1 style={{ fontSize: 24 }}>{tr("refill_title")}</h1>
-        <div className="notice ok">{tr("refill_requested", { phone: formatPhone(customer.phone) })}</div>
-        <div className="card stack">
-          {steps.map((s, i) => {
-            const on = steps.indexOf(open.status as (typeof steps)[number]) >= i;
-            return (
-              <div key={s} className="row">
-                <span className="ico" style={{ background: on ? "var(--msasa)" : "#eef0f3", color: "#fff", width: 28, height: 28, borderRadius: 99 }}>
-                  {on ? "✓" : ""}
-                </span>
-                <span style={{ fontWeight: on ? 700 : 500 }}>{tr(`refill_status_${s}` as StringKey)}</span>
-              </div>
-            );
-          })}
-          <span className="muted">{open.slot}</span>
+        <h1 className="title">{tr("refill_title")}</h1>
+        <div className="notice ok">
+          <Icon.Check />
+          <div>{tr("refill_requested", { phone: formatPhone(customer.phone) })}</div>
         </div>
-        <div className="sandbox-hint">
-          <b>Sandbox:</b> move the order along from the Ops console.
+        <div className="track-steps">
+          {steps.map((s, i) => (
+            <div key={s} className={`track-step ${at >= i ? "done" : ""} ${at === i ? "cur" : ""}`}>
+              <span className="dot">{at >= i && <Icon.Check />}</span>
+              <span>{tr(`refill_status_${s}` as StringKey)}</span>
+            </div>
+          ))}
         </div>
+        <p className="muted">{open.slot}</p>
+        <div className="sandbox-hint">Move the order along from the Ops console.</div>
         <button className="btn ghost block" onClick={() => go({ name: "home" })}>
           {tr("btn_back")}
         </button>
       </>
     );
+  }
 
   return (
     <>
-      <h1 style={{ fontSize: 24 }}>{tr("refill_title")}</h1>
-      <p className="muted" style={{ margin: 0 }}>
-        {tr("refill_body")}
-      </p>
-      <div className="card stack">
-        <b>{tr("refill_size")}</b>
-        <div className="chips">
+      <div className="stack" style={{ gap: 6 }}>
+        <h1 className="title">{tr("refill_title")}</h1>
+        <p className="muted">{tr("refill_body")}</p>
+      </div>
+      <section className="section">
+        <h2 className="section-title">{tr("refill_size")}</h2>
+        <div className="sizes" role="radiogroup">
           {[9, 14, 19, 48].map((k) => (
-            <button key={k} className={`chip ${size === k ? "on" : ""}`} onClick={() => setSize(k)}>
-              {k} kg
+            <button key={k} role="radio" aria-checked={size === k} className={`size ${size === k ? "on" : ""}`} onClick={() => setSize(k)}>
+              <CylinderGlyph h={SIZE_H[k][0]} w={SIZE_H[k][1]} />
+              <b className="num">{k} kg</b>
             </button>
           ))}
         </div>
-        <b>{tr("refill_when")}</b>
-        <div className="chips">
+      </section>
+      <section className="section">
+        <h2 className="section-title">{tr("refill_when")}</h2>
+        <div className="choices" role="radiogroup">
           {SLOTS.map((s) => (
-            <button key={s} className={`chip ${slot === s ? "on" : ""}`} onClick={() => setSlot(s)}>
-              {tr(s)}
+            <button key={s} role="radio" aria-checked={slot === s} className={`choice ${slot === s ? "on" : ""}`} onClick={() => setSlot(s)}>
+              <span className="radio" />
+              <b>{tr(s)}</b>
             </button>
           ))}
         </div>
-        <div className="field">
-          <label>{tr("refill_address")}</label>
-          <input className="input" value={landmark} onChange={(e) => setLandmark(e.target.value)} placeholder="Opposite Mbare Musika, gate 3" style={{ fontSize: 15 }} />
-        </div>
+      </section>
+      <div className="field">
+        <label htmlFor="lm">{tr("refill_address")}</label>
+        <input id="lm" className="input" value={landmark} onChange={(e) => setLandmark(e.target.value)} placeholder="Opposite Mbare Musika, gate 3" style={{ fontSize: 16 }} />
       </div>
       <button className="btn primary block" onClick={() => sandbox.svc.requestRefill(meter.id, `${tr(slot)} · ${size} kg${landmark ? " · " + landmark : ""}`)}>
         {tr("btn_confirm")}
@@ -859,36 +1110,61 @@ function Refill({ tr, customer, meter, go }: { tr: Tr; customer: Customer; meter
 function Settings({ tr, lang, setLang, customer, signOut }: { tr: Tr; lang: Lang; setLang: (l: Lang) => void; customer: Customer; signOut: () => void }) {
   return (
     <>
-      <h1 style={{ fontSize: 24 }}>{tr("nav_settings")}</h1>
-      <div className="card stack">
-        <b>{customer.name || formatPhone(customer.phone)}</b>
-        <span className="muted num">{formatPhone(customer.phone)}</span>
+      <h1 className="title">{tr("nav_settings")}</h1>
+      <div className="row" style={{ gap: 14 }}>
+        <span className="ico" style={{ width: 52, height: 52, borderRadius: "50%" }}>
+          <Icon.Account />
+        </span>
+        <div>
+          <div className="section-title">{customer.name || formatPhone(customer.phone)}</div>
+          <div className="mono faint">{formatPhone(customer.phone)}</div>
+        </div>
       </div>
-      <div className="card stack">
-        <b>{tr("language")}</b>
-        {LANGS.map((l) => (
-          <button key={l.code} className={`btn block ${lang === l.code ? "primary" : "ghost"}`} onClick={() => setLang(l.code)}>
-            {l.label}
-          </button>
-        ))}
-      </div>
-      <div className="card stack">
-        <b>{tr("support_title")}</b>
-        <a className="btn ghost block" href="#/whatsapp" style={{ textDecoration: "none" }}>
-          {tr("support_whatsapp")}
-        </a>
-        <a className="btn ghost block" href="tel:+263000000000" style={{ textDecoration: "none" }}>
-          {tr("support_call")}
-        </a>
-        <div className="notice info">
+      <section className="section">
+        <h2 className="section-title">{tr("language")}</h2>
+        <div className="choices" role="radiogroup">
+          {LANGS.map((l) => (
+            <button key={l.code} role="radio" aria-checked={lang === l.code} className={`choice ${lang === l.code ? "on" : ""}`} onClick={() => setLang(l.code)}>
+              <span className="radio" />
+              <span className="grow">
+                <b>{l.label}</b>
+                <span className="sub">{t(l.code, "nav_buy")}</span>
+              </span>
+            </button>
+          ))}
+        </div>
+      </section>
+      <section className="section">
+        <h2 className="section-title">{tr("support_title")}</h2>
+        <div className="choices">
+          <a className="choice" href="#/whatsapp" style={{ textDecoration: "none" }}>
+            <span className="ico">
+              <Icon.Chat />
+            </span>
+            <b className="grow">{tr("support_whatsapp")}</b>
+            <span className="chev" style={{ width: 20, height: 20, color: "var(--ink-3)" }}>
+              <Icon.Chevron />
+            </span>
+          </a>
+          <a className="choice" href="tel:+263000000000" style={{ textDecoration: "none" }}>
+            <span className="ico">
+              <Icon.Call />
+            </span>
+            <b className="grow">{tr("support_call")}</b>
+            <span className="chev" style={{ width: 20, height: 20, color: "var(--ink-3)" }}>
+              <Icon.Chevron />
+            </span>
+          </a>
+        </div>
+        <div className="note" style={{ paddingTop: 4 }}>
           <Icon.Shield />
           <div>
-            <b>{tr("safety_title")}</b>
+            <b style={{ color: "var(--ink)" }}>{tr("safety_title")}</b>
             <div>{tr("leak_steps")}</div>
           </div>
         </div>
-      </div>
-      <div className="notice warn">{tr("sandbox_note")}</div>
+      </section>
+      <div className="sandbox-hint">{tr("sandbox_note")}</div>
       <button className="btn ghost block" onClick={signOut}>
         {tr("settings_logout")}
       </button>
@@ -896,35 +1172,49 @@ function Settings({ tr, lang, setLang, customer, signOut }: { tr: Tr; lang: Lang
   );
 }
 
+const LEAK_PICTS = [<Icon.Window />, <Icon.NoFlame />, <Icon.Exit />];
+
 function LeakAlert({ tr, meter, onSafe }: { tr: Tr; meter: Meter; onSafe: () => void }) {
   useEffect(() => {
     navigator.vibrate?.([400, 200, 400]);
   }, []);
   return (
     <div className="leak" role="alertdialog" aria-labelledby="leak-title">
-      <div style={{ width: 64, height: 64 }}>
-        <Icon.Warn />
+      <div className="leak-top">
+        <span className="warn">
+          <Icon.Warn />
+        </span>
+        <h1 id="leak-title">{tr("leak_title")}</h1>
+        <p className="lede">{tr("leak_shutoff")}</p>
       </div>
-      <h1 id="leak-title">{tr("leak_title")}</h1>
-      <p style={{ fontSize: 18, margin: 0 }}>{tr("leak_shutoff")}</p>
-      <ol>
+      <ol className="leak-steps">
         {tr("leak_steps")
           .split(/(?<=\.)\s+/)
-          .map((s) => (
-            <li key={s}>{s}</li>
+          .map((s, i) => (
+            <li key={s}>
+              <span className="pict">
+                {LEAK_PICTS[i]}
+                <em>{i + 1}</em>
+              </span>
+              {s}
+            </li>
           ))}
       </ol>
-      <p style={{ margin: 0, opacity: 0.9 }}>{tr("leak_tech_coming")}</p>
-      <p className="num" style={{ margin: 0, opacity: 0.8 }}>
-        {tr("meter_label")} {formatMeterId(meter.id)} · {meter.suburb}
-      </p>
-      <div style={{ flex: 1 }} />
-      <a className="btn block" href={`tel:${EMERGENCY_TEL}`} style={{ background: "#fff", color: "var(--alert)", textDecoration: "none" }}>
-        {tr("leak_call")}
-      </a>
-      <button className="btn ghost block" onClick={onSafe}>
-        {tr("leak_im_safe")}
-      </button>
+      <div className="leak-foot">
+        <p>{tr("leak_tech_coming")}</p>
+        <p className="meter">
+          {tr("meter_label")} {formatMeterId(meter.id)} · {meter.suburb}
+        </p>
+        <a className="btn block call" href={`tel:${EMERGENCY_TEL}`}>
+          <span className="row" style={{ gap: 10 }}>
+            <Icon.Call /> {tr("leak_call")}
+          </span>
+          <span className="mono">{EMERGENCY_TEL}</span>
+        </a>
+        <button className="btn ghost block" onClick={onSafe}>
+          {tr("leak_im_safe")}
+        </button>
+      </div>
     </div>
   );
 }

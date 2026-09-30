@@ -4,7 +4,19 @@ import type { OutMessage } from "../../core/providers.ts";
 import { formatMoney } from "../../core/pricing.ts";
 import { formatPhone, normalizePhone } from "../../core/service.ts";
 import { DEMO_PHONE, GOGO_PHONE, sandbox, type ChatEntry } from "../sandbox/index.ts";
-import { Icon, Logo, useSandbox } from "../ui.tsx";
+import { Icon, Mark, useSandbox } from "../ui.tsx";
+
+const Verified = () => (
+  <svg viewBox="0 0 24 24" aria-label="Verified">
+    <path d="M12 1.5l2.6 2 3.2-.3.9 3.1 2.8 1.6-1 3.1 1 3.1-2.8 1.6-.9 3.1-3.2-.3-2.6 2-2.6-2-3.2.3-.9-3.1-2.8-1.6 1-3.1-1-3.1 2.8-1.6.9-3.1 3.2.3z" fill="#fff" />
+    <path d="M7.8 12.2l2.8 2.8 5.6-5.6" fill="none" stroke="#008069" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+);
+const Ticks = () => (
+  <svg viewBox="0 0 16 11" aria-label="Read">
+    <path d="M1 5.8l3 3L10.5 2M6.5 8.3l.5.5L13.5 2" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+);
 
 const PHONES = [
   { phone: DEMO_PHONE, label: "Tendai (has meter)" },
@@ -40,10 +52,12 @@ export function WhatsAppSim() {
     <div className="wa">
       <div className="wa-head">
         <div className="av">
-          <Logo size={30} />
+          <Mark size={28} />
         </div>
         <div>
-          <b>Gasguys ✓</b>
+          <b>
+            Gasguys <Verified />
+          </b>
           <small>Business account</small>
         </div>
         <select
@@ -75,12 +89,12 @@ export function WhatsAppSim() {
               }
             }}
           >
-            ✓
+            <Icon.Check />
           </button>
         </div>
       )}
       <div className="wa-body" ref={body}>
-        <div className="bubble out" style={{ alignSelf: "center", background: "#fff5c4", fontSize: 12.5, textAlign: "center" }}>
+        <div className="bubble sys">
           Simulated chat for {formatPhone(phone)}. Say “hi” to start. Messages go through the real bot code.
         </div>
         {chat.map((c, i) => (
@@ -191,7 +205,9 @@ function Bubble({
     return (
       <div className="bubble in">
         {m.type === "text" ? m.text : m.title ?? m.id}
-        <time>{time} ✓✓</time>
+        <time>
+          {time} <Ticks />
+        </time>
       </div>
     );
   }
@@ -215,7 +231,7 @@ function Bubble({
       {m.kind === "list" && (
         <div className="wa-btns">
           <button disabled={!live} onClick={() => onList(m)}>
-            ☰ {m.button}
+            <Icon.List /> {m.button}
           </button>
         </div>
       )}

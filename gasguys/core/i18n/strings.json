@@ -146,7 +146,17 @@
     "your_name": "Your name",
     "sandbox_note": "Test mode: no real money moves.",
     "sign_in": "Sign in",
-    "meter_offline": "Your meter is offline. Gas you buy also comes as a token you can enter on it."
+    "meter_offline": "Your meter is offline. Gas you buy also comes as a token you can enter on it.",
+    "days_unit": "days",
+    "day_unit": "day",
+    "runs_out_about": "Lasts until about {date}",
+    "history_empty_body": "Your receipts will show here after you buy gas.",
+    "ussd_preview_label": "You will see this on your phone",
+    "share_whatsapp": "Share on WhatsApp",
+    "receipt_title": "Receipt",
+    "paid_with": "Paid with",
+    "date_label": "Date",
+    "gas_label": "Gas"
   },
   "sn": {
     "app_name": "Gasguys",
@@ -295,7 +305,17 @@
     "your_name": "Zita renyu",
     "sandbox_note": "Kuedza: hapana mari chaiyo inobhadharwa.",
     "sign_in": "Pinda",
-    "meter_offline": "Mita yenyu haisi pa network. Gasi ramunotenga rinouyawo setokeni yamunogona kuisa pamita."
+    "meter_offline": "Mita yenyu haisi pa network. Gasi ramunotenga rinouyawo setokeni yamunogona kuisa pamita.",
+    "days_unit": "mazuva",
+    "day_unit": "zuva",
+    "runs_out_about": "Richapera munenge {date}",
+    "history_empty_body": "Marisiti enyu achaonekwa pano kana matenga gasi.",
+    "ussd_preview_label": "Muchaona izvi pafoni yenyu",
+    "share_whatsapp": "Tumira paWhatsApp",
+    "receipt_title": "Risiti",
+    "paid_with": "Wabhadhara ne",
+    "date_label": "Zuva",
+    "gas_label": "Gasi"
   },
   "nd": {
     "app_name": "Gasguys",
@@ -444,6 +464,16 @@
     "your_name": "Ibizo lakho",
     "sandbox_note": "Ukuhlola: akulamali yangempela ethunyelwayo.",
     "sign_in": "Ngena",
-    "meter_offline": "Imitha yakho ayikho enethiwekhini. Igesi oyithengayo ifika njengethokheni ongayifaka emitheni."
+    "meter_offline": "Imitha yakho ayikho enethiwekhini. Igesi oyithengayo ifika njengethokheni ongayifaka emitheni.",
+    "days_unit": "insuku",
+    "day_unit": "ilanga",
+    "runs_out_about": "Izaphela kungaba ngo-{date}",
+    "history_empty_body": "Amarisidi akho azabonakala lapha nxa usuthenge igesi.",
+    "ussd_preview_label": "Uzabona lokhu efonini yakho",
+    "share_whatsapp": "Thumela ku-WhatsApp",
+    "receipt_title": "Irisidi",
+    "paid_with": "Ubhadale nge",
+    "date_label": "Usuku",
+    "gas_label": "Igesi"
   }
 }

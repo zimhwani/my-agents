@@ -42,13 +42,13 @@ export function Ops() {
 
   return (
     <div className="ops">
-      <div className="row between" style={{ flexWrap: "wrap" }}>
-        <h1 style={{ fontSize: 24 }}>Operations console</h1>
-        <span className="muted">Live from the sandbox · updates every second</span>
+      <div className="ops-head">
+        <h1>Operations</h1>
+        <span className="live">live from the sandbox · every second</span>
       </div>
       <div className="kpis">
         {kpis.map(([k, v]) => (
-          <div className="kpi" key={k}>
+          <div className={`kpi ${k === "Open alerts" && Number(v) > 0 ? "alert" : ""}`} key={k}>
             <b>{v}</b>
             <span>{k}</span>
           </div>
@@ -71,7 +71,7 @@ export function Ops() {
               <tbody>
                 {alerts.length === 0 && (
                   <tr>
-                    <td colSpan={4} className="muted">
+                    <td colSpan={4} className="empty-cell">
                       All clear
                     </td>
                   </tr>
@@ -79,7 +79,7 @@ export function Ops() {
                 {alerts.map((a) => (
                   <tr key={a.id}>
                     <td>
-                      <span className={`pill ${a.kind === "leak" || a.kind === "tamper" ? "bad" : "warn"}`}>{ALERT_LABEL[a.kind]}</span>
+                      <span className={`tag ${a.kind === "leak" || a.kind === "tamper" ? "bad" : "warn"}`}>{ALERT_LABEL[a.kind]}</span>
                     </td>
                     <td className="num">
                       {formatMeterId(a.meterId)}
@@ -115,7 +115,7 @@ export function Ops() {
               <tbody>
                 {refills.length === 0 && (
                   <tr>
-                    <td colSpan={4} className="muted">
+                    <td colSpan={4} className="empty-cell">
                       No open orders
                     </td>
                   </tr>
@@ -182,15 +182,15 @@ export function Ops() {
                     <td>{owner(m.customerId) || <span className="muted">unassigned</span>}</td>
                     <td className="num">{formatKg(m.creditGrams)}</td>
                     <td>
-                      <div className="bar" style={{ width: 90 }}>
-                        <i style={{ width: `${pct}%`, background: pct < 15 ? "var(--alert)" : pct < 30 ? "var(--maize)" : undefined }} />
+                      <div className={`meter-bar ${pct < 15 ? "crit" : pct < 30 ? "low" : ""}`}>
+                        <i style={{ width: `${pct}%` }} />
                       </div>
                       <span className="muted">
                         {pct}% of {m.cylinderKg} kg
                       </span>
                     </td>
-                    <td>{m.leak ? <span className="pill bad">locked</span> : <span className={`pill ${m.valve === "open" ? "on" : "off"}`}>{m.valve}</span>}</td>
-                    <td>{m.online ? timeAgo(m.lastSeen) : <span className="pill warn">offline</span>}</td>
+                    <td>{m.leak ? <span className="tag bad">locked</span> : <span className={`tag ${m.valve === "open" ? "on" : "off"}`}>{m.valve}</span>}</td>
+                    <td>{m.online ? timeAgo(m.lastSeen) : <span className="tag warn">offline</span>}</td>
                     <td>{m.batteryPct}%</td>
                     <td className="num">{m.tokenCounter}</td>
                   </tr>
@@ -221,7 +221,7 @@ export function Ops() {
             <tbody>
               {payments.length === 0 && (
                 <tr>
-                  <td colSpan={9} className="muted">
+                  <td colSpan={9} className="empty-cell">
                     No payments yet. Buy gas in the app or on WhatsApp.
                   </td>
                 </tr>
@@ -231,7 +231,7 @@ export function Ops() {
                   <td className="num">{p.reference}</td>
                   <td>{timeAgo(p.createdAt)}</td>
                   <td>
-                    {p.payerName || formatPhone(p.payerPhone)} {p.gift && "🎁"}
+                    {p.payerName || formatPhone(p.payerPhone)} {p.gift && <span className="tag">gift</span>}
                     <div className="muted">{p.channel}</div>
                   </td>
                   <td className="num">{formatMeterId(p.meterId)}</td>
@@ -239,7 +239,7 @@ export function Ops() {
                   <td className="num">{formatMoney(p.amount, p.currency)}</td>
                   <td className="num">{formatKg(p.grams)}</td>
                   <td>
-                    <span className={`pill ${p.status === "paid" ? "on" : p.status === "pending" ? "warn" : "off"}`}>{p.status}</span>
+                    <span className={`tag ${p.status === "paid" ? "on" : p.status === "pending" ? "warn" : "off"}`}>{p.status}</span>
                   </td>
                   <td>{p.delivery ?? "–"}</td>
                 </tr>

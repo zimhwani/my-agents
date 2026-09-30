@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { formatKg } from "../../core/pricing.ts";
 import { formatMeterId } from "../../core/service.ts";
 import { DEMO_METER } from "../sandbox/index.ts";
-import { useSandbox } from "../ui.tsx";
+import { Icon, Mark, useSandbox } from "../ui.tsx";
 
 /**
  * The valve as the ESP32 sees it: LCD, LEDs, token keypad, and the switches a tester flips to make
@@ -44,80 +44,89 @@ export function MeterSim({ meterId: fixed }: { meterId?: string }) {
   const cylPct = Math.max(0, (s.gasGrams / (meter.cylinderKg * 1000)) * 100);
 
   return (
-    <div className="device">
-      <div className="row between" style={{ marginBottom: 10 }}>
-        <b style={{ fontFamily: "var(--display)" }}>Smart valve · ESP32</b>
-        <span style={{ fontSize: 12, opacity: 0.7 }}>fw 0.1.0</span>
-      </div>
-      {!fixed && (
-        <select value={meterId} onChange={(e) => setMeterId(e.target.value)} aria-label="Meter">
-          {Object.values(sb.p.data.meters).map((m) => (
-            <option key={m.id} value={m.id}>
-              {formatMeterId(m.id)} · {m.suburb}
-            </option>
-          ))}
-        </select>
-      )}
+    <div className="device-col">
+      <div className="device">
+        <div className="device-head">
+          <b>
+            <Mark size={20} /> Smart valve
+          </b>
+          <span>ESP32 · fw 0.1.0</span>
+        </div>
+        {!fixed && (
+          <select value={meterId} onChange={(e) => setMeterId(e.target.value)} aria-label="Meter">
+            {Object.values(sb.p.data.meters).map((m) => (
+              <option key={m.id} value={m.id}>
+                {formatMeterId(m.id)} · {m.suburb}
+              </option>
+            ))}
+          </select>
+        )}
 
-      <div className="cyl" style={{ marginTop: 12 }}>
-        <svg width="70" height="110" viewBox="0 0 70 110" aria-hidden>
-          <rect x="27" y="2" width="16" height="10" rx="2" fill={s.valve === "open" ? "#3ddc84" : "#ff4d4d"} />
-          <rect x="6" y="12" width="58" height="94" rx="22" fill="#2b3552" stroke="#4a5677" />
-          <clipPath id="cl">
-            <rect x="6" y="12" width="58" height="94" rx="22" />
-          </clipPath>
-          <rect x="6" y={12 + 94 * (1 - cylPct / 100)} width="58" height={94 * (cylPct / 100)} fill="#ff6b1a" opacity=".85" clipPath="url(#cl)" />
-          {s.burnerOn && s.valve === "open" && (
-            <text x="35" y="68" textAnchor="middle" fontSize="22">
-              🔥
-            </text>
-          )}
-        </svg>
-        <div className="lcd" style={{ flex: 1, margin: 0 }}>
-          <div style={{ fontSize: 11 }}>{formatMeterId(meterId)}</div>
-          <div className="big">{flash ?? (entry ? entry.replace(/(\d{4})(?=\d)/g, "$1 ") : formatKg(s.creditGrams))}</div>
-          <div style={{ fontSize: 11 }}>
-            {entry ? "TOKEN" : "CREDIT"} · CYL {formatKg(s.gasGrams)} · VALVE {s.valve.toUpperCase()}
+        <div className="cyl">
+          <svg width="64" height="112" viewBox="0 0 64 112" aria-hidden>
+            <rect x="22" y="2" width="20" height="12" rx="2" fill={s.valve === "open" ? "#1f9d57" : "#d0271f"} />
+            <rect x="26" y="5" width="12" height="4" rx="2" fill="#dedad0" />
+            <clipPath id="cl">
+              <rect x="6" y="14" width="52" height="90" rx="18" />
+            </clipPath>
+            <rect x="6" y="14" width="52" height="90" rx="18" fill="#f7f5f0" />
+            <rect x="6" y={14 + 90 * (1 - cylPct / 100)} width="52" height={90 * (cylPct / 100)} fill="#ff6b1a" clipPath="url(#cl)" />
+            <rect x="6" y="14" width="52" height="90" rx="18" fill="none" stroke="#16140f" strokeWidth="2" />
+            <rect x="14" y="104" width="36" height="6" rx="1.5" fill="#16140f" />
+            {s.burnerOn && s.valve === "open" && <path d="M32 44c1.6 5 8 8 8 15a8 8 0 0 1-16 0c0-4 2.2-6.2 4.2-8.3.5 2.7 1.7 4 3.3 4.5-1-4.4 0-8.2.5-11.2z" fill="#16140f" />}
+          </svg>
+          <div className="lcd">
+            <small>{formatMeterId(meterId)}</small>
+            <div className="big">{flash ?? (entry ? entry.replace(/(\d{4})(?=\d)/g, "$1 ") : formatKg(s.creditGrams))}</div>
+            <small>
+              {entry ? "TOKEN" : "CREDIT"} · CYL {formatKg(s.gasGrams)} · {s.valve.toUpperCase()}
+            </small>
           </div>
+        </div>
+
+        <div className="leds">
+          <span className="led">
+            <i className={s.online ? "g" : ""} /> NET
+          </span>
+          <span className="led">
+            <i className={s.valve === "open" ? "g" : ""} /> GAS
+          </span>
+          <span className="led">
+            <i className={s.leak ? "r" : ""} /> LEAK
+          </span>
+          <span className="led">
+            <i className={s.batteryPct < 20 ? "y" : "g"} /> {Math.round(s.batteryPct)}%
+          </span>
+        </div>
+
+        <div className="keypad">
+          {["1", "2", "3", "4", "5", "6", "7", "8", "9", "⌫", "0", "OK"].map((k) => (
+            <button key={k} className={k === "OK" ? "ok" : k === "⌫" ? "del" : ""} onClick={() => key(k)} aria-label={k === "⌫" ? "Delete" : k}>
+              {k === "⌫" ? "DEL" : k}
+            </button>
+          ))}
         </div>
       </div>
 
-      <div className="leds" style={{ marginTop: 12 }}>
-        <span className="led">
-          <i className={s.online ? "g" : ""} /> NET
-        </span>
-        <span className="led">
-          <i className={s.valve === "open" ? "g" : ""} /> GAS
-        </span>
-        <span className="led">
-          <i className={s.leak ? "r" : ""} /> LEAK
-        </span>
-        <span className="led">
-          <i className={s.batteryPct < 20 ? "y" : "g"} /> {Math.round(s.batteryPct)}%
-        </span>
-      </div>
-
-      <div className="keypad">
-        {["1", "2", "3", "4", "5", "6", "7", "8", "9", "⌫", "0", "OK"].map((k) => (
-          <button key={k} className={k === "OK" ? "ok" : k === "⌫" ? "del" : ""} onClick={() => key(k)}>
-            {k}
-          </button>
-        ))}
-      </div>
-
       <div className="dev-acts">
-        <button className={s.burnerOn ? "on" : ""} onClick={() => act((d) => d.setBurner(!d.s.burnerOn))}>
-          {s.burnerOn ? "🔥 Stove on" : "Light the stove"}
+        <button className={s.burnerOn ? "on hot" : ""} onClick={() => act((d) => d.setBurner(!d.s.burnerOn))}>
+          <Icon.Flame /> {s.burnerOn ? "Stove on" : "Light the stove"}
         </button>
         <button className={s.online ? "" : "on"} onClick={() => act((d) => d.setOnline(!d.s.online))}>
-          {s.online ? "Lose network" : "📵 Offline"}
+          {s.online ? <Icon.Signal /> : <Icon.NoSignal />} {s.online ? "Lose network" : "Offline"}
         </button>
-        <button className={s.leak ? "on" : ""} onClick={() => act((d) => d.setLeak(!d.s.leak))}>
-          {s.leak ? "⚠️ Leaking" : "Simulate leak"}
+        <button className={s.leak ? "on bad" : ""} onClick={() => act((d) => d.setLeak(!d.s.leak))}>
+          <Icon.Warn /> {s.leak ? "Leaking" : "Simulate leak"}
         </button>
-        <button onClick={() => act((d) => d.refill(meter.cylinderKg))}>Swap in full cylinder</button>
+        <button onClick={() => act((d) => d.refill(meter.cylinderKg))}>
+          <Icon.Cylinder /> Swap in full cylinder
+        </button>
       </div>
 
+      <div className="serial-cap">
+        <span>serial · 115200</span>
+        <span>{logs.length} lines</span>
+      </div>
       <div className="serial" ref={serial} aria-label="Serial log">
         {logs.length === 0 && <div style={{ opacity: 0.6 }}>Waiting for events… light the stove or buy gas.</div>}
         {logs.map((l, i) => (
@@ -127,7 +136,7 @@ export function MeterSim({ meterId: fixed }: { meterId?: string }) {
           </div>
         ))}
       </div>
-      <details style={{ marginTop: 10, fontSize: 12 }}>
+      <details>
         <summary style={{ cursor: "pointer" }}>MQTT telemetry payload (gg/{meterId}/telemetry)</summary>
         <pre style={{ whiteSpace: "pre-wrap", fontFamily: "var(--mono)", fontSize: 11 }}>{JSON.stringify(dev.telemetry(new Date().toISOString()), null, 1)}</pre>
       </details>

@@ -5,6 +5,8 @@ import { CustomerApp } from "./customer/CustomerApp.tsx";
 import { MeterSim } from "./meter/MeterSim.tsx";
 import { Ops } from "./ops/Ops.tsx";
 import { sandbox } from "./sandbox/index.ts";
+import "@fontsource-variable/archivo/wdth.css";
+import "@fontsource/jetbrains-mono/latin-500.css";
 import "./styles.css";
 import { Logo, useHashRoute, useSandbox } from "./ui.tsx";
 import { WhatsAppSim } from "./whatsapp/WhatsAppSim.tsx";
@@ -33,7 +35,7 @@ function Shell() {
     <>
       <header className="studio-top">
         <span className="brand">
-          <Logo /> Gasguys <span className="badge">Sandbox</span>
+          <Logo /> <span className="badge">Sandbox</span>
         </span>
         <nav className="tabs">
           {TABS.map(([path, label]) => (
@@ -63,7 +65,9 @@ function Shell() {
       {route === "/" && (
         <main className="stage">
           <div className="stage-col">
-            <span className="stage-cap">Customer web app</span>
+            <span className="stage-cap">
+              <b>01</b> Customer web app
+            </span>
             <div className="phone">
               <div className="phone-screen">
                 <CustomerApp />
@@ -71,7 +75,9 @@ function Shell() {
             </div>
           </div>
           <div className="stage-col">
-            <span className="stage-cap">WhatsApp</span>
+            <span className="stage-cap">
+              <b>02</b> WhatsApp
+            </span>
             <div className="phone">
               <div className="phone-screen">
                 <WhatsAppSim />
@@ -79,7 +85,9 @@ function Shell() {
             </div>
           </div>
           <div className="stage-col">
-            <span className="stage-cap">The valve</span>
+            <span className="stage-cap">
+              <b>03</b> The valve
+            </span>
             <MeterSim />
           </div>
         </main>
@@ -128,45 +136,52 @@ function CardCheckout({ providerRef }: { providerRef: string }) {
   const [done, setDone] = useState<null | "paid" | "failed">(null);
   const prompt = sb.p.prompts.find((p) => p.providerRef === providerRef);
   return (
-    <div className="fullscreen-app" style={{ padding: 24, gap: 16 }}>
-      <div className="sandbox-hint">
-        <b>Sandbox card checkout.</b> In production this is the gateway's hosted, 3-D Secure card page. No card details are collected here.
+    <div className="fullscreen-app">
+      <div className="checkout">
+        <Logo />
+        <div className="sandbox-hint">
+          <b>Card checkout.</b> In production this is the gateway's hosted, 3-D Secure card page. No card details are collected here.
+        </div>
+        {!prompt && !done && <p className="muted">This payment is no longer waiting. You can close this tab.</p>}
+        {done && (
+          <div className="stack">
+            <h1 className="title">{done === "paid" ? "Paid" : "Payment cancelled"}</h1>
+            <p className="muted">You can close this tab and go back to Gasguys.</p>
+            <button className="btn dark block" onClick={() => history.back()}>
+              Back to Gasguys
+            </button>
+          </div>
+        )}
+        {prompt && !done && (
+          <div className="stack">
+            <span className="eyebrow">Pay Gasguys</span>
+            <h1 className="display num" style={{ fontSize: 72 }}>
+              {formatMoney(prompt.amount, prompt.currency)}
+            </h1>
+            <span className="faint">
+              Reference <span className="mono">{prompt.reference}</span>
+            </span>
+            <button
+              className="btn primary block"
+              onClick={async () => {
+                await sandbox.resolvePrompt(providerRef, "paid");
+                setDone("paid");
+              }}
+            >
+              Simulate successful card payment
+            </button>
+            <button
+              className="btn ghost block"
+              onClick={async () => {
+                await sandbox.resolvePrompt(providerRef, "failed");
+                setDone("failed");
+              }}
+            >
+              Simulate declined card
+            </button>
+          </div>
+        )}
       </div>
-      {!prompt && !done && <div className="card">This payment is no longer waiting. You can close this tab.</div>}
-      {done && (
-        <div className="card center">
-          <h2>{done === "paid" ? "Paid ✓" : "Payment cancelled"}</h2>
-          <p className="muted">You can close this tab and go back to Gasguys.</p>
-          <button className="btn dark block" onClick={() => history.back()}>
-            Back to Gasguys
-          </button>
-        </div>
-      )}
-      {prompt && !done && (
-        <div className="card stack">
-          <span className="muted">Pay Gasguys</span>
-          <h1 className="num">{formatMoney(prompt.amount, prompt.currency)}</h1>
-          <span className="muted">Reference {prompt.reference}</span>
-          <button
-            className="btn primary block"
-            onClick={async () => {
-              await sandbox.resolvePrompt(providerRef, "paid");
-              setDone("paid");
-            }}
-          >
-            Simulate successful card payment
-          </button>
-          <button
-            className="btn ghost block"
-            onClick={async () => {
-              await sandbox.resolvePrompt(providerRef, "failed");
-              setDone("failed");
-            }}
-          >
-            Simulate declined card
-          </button>
-        </div>
-      )}
     </div>
   );
 }
