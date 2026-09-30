@@ -1,0 +1,69 @@
+# Supabase CLI config for Gasguys. `supabase start` for local, `supabase link` for the cloud project.
+# Secrets go in `supabase secrets set`, never in this file. See ../docs/go-live.md.
+project_id = "gasguys"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public"]
+max_rows = 200
+
+[db]
+port = 54322
+major_version = 17
+
+[auth]
+enabled = true
+site_url = "http://localhost:5173"
+enable_signup = true
+
+[auth.sms]
+enable_signup = true
+enable_confirmations = true
+# Customers sign in with their phone number and a one-time code. The code is delivered on WhatsApp by
+# the Send SMS hook below (functions/auth-send-sms), not by an SMS provider: Supabase's built-in
+# providers deliver poorly to Econet, NetOne and Telecel.
+
+# Send SMS hook → WhatsApp. To turn it on:
+#   local:  put SEND_SMS_HOOK_SECRET="v1,whsec_<base64 of 32 random bytes>" in supabase/.env (read by
+#           env() below) and in supabase/functions/.env (read by `supabase functions serve`), set
+#           enabled = true, then `supabase start` and `supabase functions serve`. Both files are gitignored.
+#   cloud:  Dashboard → Authentication → Hooks → "Send SMS hook" → HTTPS →
+#           https://<project-ref>.supabase.co/functions/v1/auth-send-sms, generate the secret there, and
+#           `supabase secrets set SEND_SMS_HOOK_SECRET=<that secret>` so the function can verify it.
+#           (Or set uri to that URL here and run `supabase config push`.)
+[auth.hook.send_sms]
+enabled = false
+uri = "http://host.docker.internal:54321/functions/v1/auth-send-sms"
+secrets = "env(SEND_SMS_HOOK_SECRET)"
+
+[functions.payments-start]
+verify_jwt = true
+
+# The web app's other writes. Each also checks the JWT itself (admin.auth.getUser) to find the customer.
+[functions.me]
+verify_jwt = true
+
+[functions.link-meter]
+verify_jwt = true
+
+[functions.gift-lookup]
+verify_jwt = true
+
+[functions.refill-request]
+verify_jwt = true
+
+[functions.auth-send-sms]
+verify_jwt = false        # Supabase Auth signs it (Standard Webhooks, SEND_SMS_HOOK_SECRET)
+
+[functions.paynow-result]
+verify_jwt = false        # Paynow signs it with the integration key instead
+
+[functions.whatsapp-webhook]
+verify_jwt = false        # Meta signs it (X-Hub-Signature-256)
+
+[functions.meter-telemetry]
+verify_jwt = false        # the MQTT broker sends a shared secret header
+
+[functions.sweep]
+verify_jwt = false        # pg_cron sends CRON_SECRET

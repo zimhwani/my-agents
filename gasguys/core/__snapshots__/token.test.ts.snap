@@ -1,0 +1,11 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`GG1 offline token > pins test vectors shared with the firmware 1`] = `
+[
+  "310774333884",
+  "660454528386",
+  "085640737893",
+]
+`;
+
+exports[`signed credit command > pins a vector shared with the firmware 1`] = `"8a353b972e254ea0"`;

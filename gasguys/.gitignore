@@ -1,0 +1,9 @@
+node_modules
+dist
+.env
+.env.*
+!.env.example
+supabase/.temp
+firmware/.pio
+firmware/include/config.h
+deno.lock
