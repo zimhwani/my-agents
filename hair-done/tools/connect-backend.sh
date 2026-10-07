@@ -32,7 +32,15 @@ read -rsp "Stripe secret key (sk_test_..., hidden): " SK; echo
 read -rp  "Stripe publishable key (pk_test_...): " PK
 [[ "$PK" == pk_* ]] || { echo "That doesn't look like a Stripe publishable key."; exit 1; }
 read -rsp "Supabase personal access token (sbp_..., hidden): " SBP; echo
-[[ -n "$SBP" ]] || { echo "Need the Supabase token."; exit 1; }
+SK=$(printf '%s' "$SK" | tr -d '[:space:]'); PK=$(printf '%s' "$PK" | tr -d '[:space:]'); SBP=$(printf '%s' "$SBP" | tr -d '[:space:]')
+if [[ "$SBP" != sbp_* ]]; then
+  echo "That isn't a Supabase personal access token. They start with sbp_ and come from"
+  echo "supabase.com/dashboard/account/tokens (Generate new token), not from the project's API keys."
+  exit 1
+fi
+# Check the token works for this project before anything changes in Stripe.
+CODE=$(curl -sS -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $SBP" "https://api.supabase.com/v1/projects/$REF")
+[[ "$CODE" == 200 ]] || { echo "Supabase didn't accept that token for the hair-done project (HTTP $CODE). Nothing was changed."; exit 1; }
 
 stripe() { curl -sS -u "$SK:" "$@"; }
 
