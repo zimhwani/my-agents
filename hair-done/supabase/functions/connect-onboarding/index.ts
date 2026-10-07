@@ -16,13 +16,14 @@ Deno.serve(async (req) => {
     const acct = await stripe.accounts.create({
       type: "express",
       country: "AU",
-      email: contact?.email ?? undefined,
+      // Phone sign-in leaves email blank; Stripe rejects "", and asks for it during onboarding anyway.
+      email: contact?.email?.trim() || undefined,
       business_type: "individual",
       capabilities: { transfers: { requested: true }, card_payments: { requested: true } },
       business_profile: { mcc: "7230", product_description: "Mobile hair, nails, makeup, lashes and brows" },
       settings: { payouts: { schedule: { interval: "daily", delay_days: 2 } } },
       metadata: { pro_id: pro.id },
-    }, { idempotencyKey: `connect-${pro.id}` });
+    }, { idempotencyKey: `connect-v2-${pro.id}` });
     accountId = acct.id;
     await admin.from("pros").update({ stripe_account_id: accountId }).eq("id", pro.id);
   }

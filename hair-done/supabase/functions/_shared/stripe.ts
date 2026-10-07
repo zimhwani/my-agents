@@ -63,8 +63,9 @@ export async function customerFor(profileId: string): Promise<string> {
   const { data: profile } = await admin.from("profiles").select("first_name, last_name").eq("id", profileId).single();
   const c = await stripe.customers.create({
     name: [profile?.first_name, profile?.last_name].filter(Boolean).join(" ") || undefined,
-    email: contact?.email ?? undefined,
-    phone: contact?.phone ?? undefined,
+    // Phone sign-in leaves email blank; Stripe rejects "" so send nothing instead.
+    email: contact?.email?.trim() || undefined,
+    phone: contact?.phone?.trim() || undefined,
     metadata: { profile_id: profileId },
   }, { idempotencyKey: `customer-${profileId}` });
   await admin.from("profile_contacts").upsert({ profile_id: profileId, stripe_customer_id: c.id });
