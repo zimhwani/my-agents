@@ -73,7 +73,8 @@ async function onboardingLink(accountId: string, back: string): Promise<string> 
 export async function payoutsReady(accountId: string): Promise<boolean> {
   try {
     const a = await stripe.accounts.retrieve(accountId);
-    return a.payouts_enabled === true && a.capabilities?.transfers === "active";
+    // Bookable once money can be routed to her; Stripe holds it until her ID is verified for bank payouts.
+    return a.capabilities?.transfers === "active";
   } catch (e) {
     console.log("v1 retrieve failed, trying v2:", (e as Error).message);
   }

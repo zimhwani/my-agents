@@ -119,8 +119,15 @@ Deno.serve(async (req) => {
   for (const p of (waiting ?? []) as { id: string; stripe_account_id: string }[]) {
     try {
       const a = await stripe.accounts.retrieve(p.stripe_account_id);
-      if (a.payouts_enabled === true && a.capabilities?.transfers === "active") {
+      // Bookable once money can be routed to her; Stripe holds it until her ID is verified for bank payouts.
+      if (a.capabilities?.transfers === "active") {
         await admin.from("pros").update({ payouts_connected: true }).eq("id", p.id);
+      } else {
+        console.log("payouts not ready", p.id, JSON.stringify({
+          payouts_enabled: a.payouts_enabled, charges_enabled: a.charges_enabled, capabilities: a.capabilities,
+          currently_due: a.requirements?.currently_due, pending: a.requirements?.pending_verification,
+          disabled_reason: a.requirements?.disabled_reason,
+        }));
       }
     } catch (e) {
       console.log("payout check failed", p.id, (e as Error).message);
