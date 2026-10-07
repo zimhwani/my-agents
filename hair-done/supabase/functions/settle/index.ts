@@ -113,5 +113,19 @@ Deno.serve(async (req) => {
     }
   }
 
+  // 5. Pros who started payout setup: ask Stripe whether they're ready (covers a missed webhook).
+  const { data: waiting } = await admin.from("pros").select("id, stripe_account_id")
+    .not("stripe_account_id", "is", null).eq("payouts_connected", false).limit(25);
+  for (const p of (waiting ?? []) as { id: string; stripe_account_id: string }[]) {
+    try {
+      const a = await stripe.accounts.retrieve(p.stripe_account_id);
+      if (a.payouts_enabled === true && a.capabilities?.transfers === "active") {
+        await admin.from("pros").update({ payouts_connected: true }).eq("id", p.id);
+      }
+    } catch (e) {
+      console.log("payout check failed", p.id, (e as Error).message);
+    }
+  }
+
   return json(done);
 });
