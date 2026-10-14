@@ -96,8 +96,15 @@ the app runs on its built-in sample data, as it does today.
 
 ## 5. Your first real pros
 
+**One database change needs your OK.** `supabase/migrations/0011_save_schedule.sql` saves a pro's hours and
+days off in one go, so a failed save can't wipe them. It replaces her old hours, so the database tool asks
+before running it. Paste the file into Supabase → SQL editor and run it. Until then the app saves hours the
+old way, which works but isn't all-or-nothing.
+
 There's no admin screen yet. Until there is, you do these in Supabase → SQL editor:
 
+- **See who's sent their ID:** `select id, id_submitted_at from pros where id_submitted_at is not null and not is_verified;`
+  The photos are in Storage → `id-docs` → her id. They're private: only she and you can see them.
 - **Verify a pro** once you've checked her ID, ABN and insurance:
   `update pros set is_verified = true, id_checked_at = now(), insurance_on_file = true where id = '<her id>';`
   Only verified pros can switch on instant book.

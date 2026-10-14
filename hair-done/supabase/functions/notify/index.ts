@@ -1,6 +1,7 @@
 // Push notifications through APNs. Called by the database (pg_net) with the cron secret:
 //   { event: "status", booking_id, status }   a booking moved
 //   { event: "message", message_id }          someone sent a message
+//   { event: "moved", booking_id }            the client moved the booking to a new time
 //   { event: "reminders" }                    every five minutes: unanswered requests, day-before, two hours before
 // Copy follows docs/product-spec.md §12. Needs secrets APNS_KEY_ID, APNS_TEAM_ID, APNS_KEY_P8, APNS_TOPIC;
 // without them it answers 503 and sends nothing.
@@ -188,6 +189,15 @@ async function onStatus(bookingId: string, status: string) {
   }
 }
 
+/** The client moved the booking (24 hours' notice or more): the pro is told, nothing to accept. */
+async function onMoved(bookingId: string) {
+  const x = await load(bookingId);
+  if (!x) return 0;
+  const { b, client, service } = x;
+  return once(`moved:${b.id}:${b.starts_at}`, { to: b.pro_id!, side: "pro", kind: "booking", bookingId: b.id,
+    body: `${client} moved ${service} to ${when(b.starts_at)}. Nothing to do.` });
+}
+
 // ---------------------------------------------------------------------------------------------
 // Messages
 // ---------------------------------------------------------------------------------------------
@@ -256,6 +266,7 @@ Deno.serve(async (req) => {
     let sent = 0;
     if (body.event === "status" && body.booking_id) sent = await onStatus(body.booking_id, body.status);
     else if (body.event === "message" && body.message_id) sent = await onMessage(body.message_id);
+    else if (body.event === "moved" && body.booking_id) sent = await onMoved(body.booking_id);
     else if (body.event === "reminders") sent = await reminders();
     return json({ sent });
   } catch (e) {
