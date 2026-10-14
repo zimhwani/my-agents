@@ -100,46 +100,69 @@ Good lines to steal the tone from:
 ## 4. Look
 
 Magazine, not marketplace. Warm paper, ink, and one lacquer red. Serif
-display type, sans body. Lots of air. Photos do the talking.
+display type, sans body. Lots of air. Photos do the talking. Paper for
+browsing, ink for committing. The tokens and components live in
+`HairDone/DesignSystem/`; `docs/design/components.md` is the catalogue.
 
 ### Colour
 
 | Token | Light | Dark | Use |
 |---|---|---|---|
 | `paper` | `#F8F3EC` | `#171210` | screen background |
-| `card` | `#FFFFFF` | `#221B18` | cards, sheets |
-| `ink` | `#241A16` | `#F4ECE4` | primary text |
-| `inkSoft` | `#6F625B` | `#B5A79D` | secondary text |
-| `line` | `#E8DFD5` | `#3A302B` | hairlines, dividers |
-| `lacquer` | `#C8323A` | `#E2504F` | primary action, the one accent |
-| `lacquerSoft` | `#F6DEDC` | `#4A2626` | accent tint backgrounds |
-| `honey` | `#E9B96A` | `#E9B96A` | stars |
-| `success` | `#3E7A5A` | `#6FBF8F` | confirmed, paid |
-| `warn` | `#B9741F` | `#E6A44C` | pending, waiting |
+| `card` | `#FFFFFF` | `#221B18` | retired for new screens; old sheets only |
+| `ink` | `#241A16` | `#F4ECE4` | primary text, the default action colour, the global tint |
+| `inkSoft` | `#6F625B` | `#B5A79D` | secondary text (the lightest text colour) |
+| `inkFaint` | `#948880` | `#7D726B` | glyphs, hairlines, disabled fills. Never text |
+| `line` | `#E8DFD5` | `#3A302B` | quiet dividers, field rules, option borders |
+| `lineStrong` | `#DDD2C5` | `#3A302B` | hairlines between data rows |
+| `lacquer` | `#C8323A` | `#E2504F` | dots and strokes: unread, active tab, the check |
+| `lacquerFill` | `#C8323A` | `#C8323A` | the Pay / Request button fill |
+| `onLacquer` | `#FBF7F2` | `#FBF7F2` | label on `lacquerFill` (4.96:1) |
+| `lacquerSoft` | `#F6DEDC` | `#4A2626` | the offline bar, nothing else |
+| `inkGround` | `#241A16` | `#2E231E` | ink moments: ticket, Next up, Book bar |
+| `inkRaised` | `#2E2521` | `#3A2E28` | a surface on the ink ground |
+| `onInk` / `onInkSoft` / `inkLine` | `#F4ECE4` / 62% / 14% | same | type and hairlines on ink |
+| `honey` | `#E9B96A` | `#E9B96A` | the rating picker's stars |
+| `success` | `#3E7A5A` | `#6FBF8F` | status dot: confirmed, paid |
+| `warn` | `#B9741F` | `#E6A44C` | status dot and field rule: pending, a problem |
 
-Category tints (used on tiles and chips, light mode; darken 60% for dark):
-Hair `#EAD9CB`, Nails `#F3D0CB`, Makeup `#E8D2DF`, Lashes `#D8D4E5`,
-Brows `#D9DED0`, The lot `#EFE3C8`.
+Category tints are retired from the UI. Photos carry the colour.
 
 ### Type
 
-- Display: system serif (`.fontDesign(.serif)`), e.g. `Font.system(.largeTitle, design: .serif)` with `.fontWeight(.medium)`; italic for one word of emphasis.
-- Body: SF Pro default. Numbers in prices use `.monospacedDigit()`.
-- Scale: `hero` 40/44 serif · `title` 28/32 serif · `heading` 20/24 serif medium · `body` 17/22 · `sub` 15/20 · `caption` 13/16 · `label` 12/14 uppercase tracked 0.08em (used sparingly).
+- Display: New York (`.serif`) in **regular** weight. Never medium, never bold. Italic for one word of emphasis.
+- Body: SF Pro. Money is always SF with `.monospacedDigit()`, never serif.
+- Serif scale: `display` 40 (tab-root titles, "You're booked.") · `title` 34 (step and detail titles) · `titleSmall` 28 (sheet titles, confirm questions, empty states) · `section` 26 · `name` 22 · `nameBar` 21 · `nameSmall` 19 · `quote` 19 · `categoryWord` 16 · `heroName` 48 on a photo.
+- Sans scale: `body` 17 · `sub` 15 · `caption` 13 · `eyebrow` 12 medium uppercase tracked 1.0 (sparingly).
+- Money: `price` 17 · `priceSmall` 15 · `priceLarge` 22 · `priceTotal` 28 · `priceDisplay` 36 (one per screen) · `priceHero` 56 light.
+- Every size scales with Dynamic Type.
 
 ### Shape and space
 
-- Spacing unit 4. Screen gutter 20. Card padding 16. Section gap 32.
-- Radius: cards 20, tiles 16, buttons full pill (height 52), chips pill (height 36), inputs 14.
-- Shadows: none on paper; cards use a 1px `line` hairline in light and a slightly lighter surface in dark. One soft shadow only on floating CTAs: `ink` at 12% opacity, y 8, blur 24.
-- Hairlines over boxes. Air over borders.
+- Spacing unit 4. Screen gutter 20. Block padding 16. Section gap 32.
+- Radius: blocks and buttons 6, photos 2. No pills and no capsules anywhere: not on buttons, chips, tags or photos.
+- Buttons: squared, at least 52pt tall (44 when two sit side by side). `InkButton` (ink fill, paper label) is the default action. `OutlineButton` (1pt ink border) is the quiet one. Lacquer `PrimaryButton` is only for `Pay $X` and `Request · $X`.
+- Inputs are underline fields (`HDTextField`), not boxes.
+- Choices are `OptionBox` (6pt, 1pt line border, ink when picked) or `TextTabs` (underlined text). Tags are text eyebrows.
+- No white cards on paper. Hairline rows (`HairlineRow`, 0.5pt `lineStrong`) straight on paper.
+- Shadows: none on paper. One soft shadow only on floating bars: `ink` at 12% opacity, y 8, blur 24.
+- Ink blocks on paper get a 0.5pt `onInk` 10% hairline so they keep an edge in dark mode.
+
+### Chrome
+
+- Custom tab bar with outline glyphs and labels, a 4pt lacquer dot under the active tab and a lacquer dot for unread. No counters, no system red.
+- Pro mode is ink chrome on paper content: the pro tab bar is a solid ink bar (paper bar with ink icons in dark mode), every pro tab root carries a `PRO · KIARA M.` eyebrow, and switching sides passes through an ink frame that says "Pro mode." or "Booking mode.".
+- Pushed screens hide the system nav bar and use `HDNavHeader` (bare chevron, serif 17 title).
+- No `confirmationDialog`, `.alert` or swipe-to-delete: they're system red. Use `ConfirmSheet`.
+- Stock `Toggle`, `Stepper` and segmented `Picker` are styled or replaced: `HDSwitch`, `HDStepper`, `TextTabs`.
 
 ### Motion and feel
 
 - Springs: `.spring(response: 0.35, dampingFraction: 0.85)` default.
-- Haptics: `.light` on selection, `.medium` on primary actions, `.success` notification on booked/paid.
+- Haptics: `.light` on selection, `.medium` on primary actions and switching sides, `.success` notification on booked/paid.
 - One delightful moment per flow, not five: the lacquer check that draws itself on "You're booked", the star that fills with honey when you rate, the pro card that lifts slightly on press.
-- Images: placeholders are a warm procedural gradient with a soft grain overlay, tinted by category. Never a grey box, never a broken-image icon.
+- Under Reduce Motion, every transition is a plain cross-fade.
+- Images: placeholders are a warm procedural gradient with a soft grain overlay. Never a grey box, never a broken-image icon, never someone else's photo standing in for hers.
 
 ## 5. Product scope (v1, in this repo)
 

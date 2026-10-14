@@ -57,18 +57,16 @@ struct WorkTile: View {
                     art(colors: colors, r: r, w: w, h: h)
                 }
                 if showCaption {
+                    // No capsule on the photo: a soft bottom scrim and paper type, as on the work viewer.
                     VStack {
                         Spacer()
-                        HStack {
-                            Text(item.caption)
-                                .font(HDFont.caption.weight(.medium))
-                                .foregroundStyle(.white)
-                                .lineLimit(1)
-                                .padding(.horizontal, 10).padding(.vertical, 6)
-                                .background(Color.black.opacity(0.28), in: Capsule())
-                            Spacer()
-                        }
-                        .padding(10)
+                        Text(item.caption)
+                            .font(HDFont.caption)
+                            .foregroundStyle(Palette.onPhoto)
+                            .lineLimit(1)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(10)
+                            .background(LinearGradient(colors: [Color.black.opacity(0), Color.black.opacity(0.35)], startPoint: .top, endPoint: .bottom))
                     }
                 }
             }

@@ -97,24 +97,35 @@ Rules:
 
 Tokens are in the brief, section 4. Rules for using them:
 
-1. One accent. `lacquer` goes on the primary button, the selected chip, the active tab, a link in body copy. If two things on one screen are lacquer, one of them is wrong.
-2. `paper` is the background. Not white. `card` (white) is for cards and sheets sitting on paper, and for nothing else.
-3. Text is `ink` or `inkSoft`. Never lacquer body text. Never `inkSoft` on `lacquerSoft`, the contrast fails.
-4. `honey` is stars. Only stars. Not warnings, not highlights, not a third accent.
-5. `success` and `warn` are for status and nothing else. Confirmed, done and paid are `success`. Requested and pending are `warn`. Cancelled and declined are `inkSoft`. A cancelled booking isn't an emergency and shouldn't be red.
-6. `lacquerSoft` sits behind lacquer text or icons: the Instant book chip, a selected category. Small areas only.
-7. Category tints go on tiles and chips as backgrounds. Text on them is `ink`. A category tint is never a button and never a status.
-8. Dark mode swaps the tokens and changes nothing else. No pure black, no pure white.
-9. Contrast: `ink` on `paper` is about 15:1, `inkSoft` on `paper` about 5.3:1, `paper` on `lacquer` about 4.7:1. All pass AA at body size. Don't go smaller than `sub` on a lacquer button.
+1. Ink is the action colour. Buttons, links, selection, checks, toggles, the global tint: all `ink`.
+2. One accent, and it's rare. `lacquer` goes on the Pay or Request button, the unread dot, the dot under the active tab, and the check that draws itself. Nothing else: not Save, not Next, not Decline, not a link, not a selected chip, not an icon. If two things on one screen are lacquer, one of them is wrong.
+3. Destructive isn't red. Cancel, delete, log out and block are `ink` like any other action, asked first in a `ConfirmSheet`. There is no system red anywhere in the app.
+4. `paper` is the background. Not white. Lists are hairline rows straight on paper; `card` (white) is retired from new screens.
+5. Text is `ink` or `inkSoft`. Never lacquer text, never `inkFaint` text (it's for glyphs and hairlines), never `inkSoft` on `lacquerSoft`.
+6. `honey` is the rating picker's stars. A rating shown as a fact is an outline star in `inkSoft`.
+7. `success` and `warn` are status dots and nothing else. Confirmed, done and paid get a `success` dot. Requested and pending get a `warn` dot. Cancelled and declined get no dot and sit in `inkSoft`. The words beside the dot are `ink`: as text, `warn` fails contrast. Tips, "Free" and "Default" are `ink`, not green.
+8. A problem with something she typed: a `warn` rule under the field and an `ink` sentence with a 6pt `warn` dot. Never lacquer, never red.
+9. `lacquerSoft` is the offline bar and nothing else. Category tints are retired from the UI: the photos carry the colour.
+10. Ink moments (the booking ticket, Next up, the Book bar, the pro tab bar) use `inkGround` with `onInk` type. In dark mode `inkGround` is a raised ink a step lighter than the ground, with a hairline, so the moment still reads.
+11. Dark mode swaps the tokens and changes nothing else. No pure black, no pure white. A filled lacquer button stays `#C8323A` in dark, with a `#FBF7F2` label.
+12. Contrast: `ink` on `paper` 15.4:1, `inkSoft` on `paper` 5.3:1, `#FBF7F2` on `lacquerFill` 4.96:1 (both modes), `onInk` on `inkGround` 14.6:1. All pass AA at body size. `inkFaint` is 3.1:1: fine for a glyph, never for words.
+
+## Shape
+
+1. Blocks and buttons are squared at 6pt. Photos are 2pt. There are no pills and no capsules: not on buttons, chips, tags, toasts or photos.
+2. Nothing sits on a photo except a typographic cover line on the Home and profile heroes. No tags, badges, prices or capsules on photos.
+3. Hairlines over boxes. A list is rows with a 0.5pt `lineStrong` hairline, not a stack of cards.
+4. Glyphs are outline SF Symbols at `.light` (17 to 21pt) or `.regular` (13 to 15pt), in `ink` or `inkSoft`, with no disc behind them. Selection is an ink `checkmark`, never a filled circle.
+5. Avatars (a circle) only where you're talking to a person: Inbox and the thread header. Everywhere else, her cover photo at 2pt.
 
 ## Type
 
-- Two faces. Serif for display (`hero`, `title`, `heading`). SF Pro for everything else. There is no third.
+- Two faces. Serif (New York, regular weight) for display: `display`, `title`, `titleSmall`, `section`, names and quotes. SF Pro for everything else. There is no third.
 - Serif is for words a person would say out loud: greetings, pro names, "You're booked.", the wordmark. Not labels, not prices, not buttons, not table headers.
 - Buttons: `body` 17, semibold, SF. Never serif on a button.
-- Prices: `.monospacedDigit()`, `ink`. Dollar sign always. No cents on whole dollars ($180, not $180.00). Cents when they exist ($47.50). Totals at `title`, line items at `body`.
+- Prices: SF with `.monospacedDigit()`, `ink`, never serif and never bold in a list. Dollar sign always. No cents on whole dollars ($180, not $180.00). Cents when they exist ($47.50). Totals at `priceTotal` (28) or, once per screen, `priceDisplay` (36); line items at `price` (17).
 - One italic word per screen, at most, inside a serif headline, on the word you'd lean on if you said it. "Kiara does a *very* good French tip."
-- `label` (12, uppercase, tracked 0.08em) is for section eyebrows only: NEAR YOU, THIS WEEK. If it's tempting on a button or a chip, no.
+- The eyebrow (12 medium, uppercase, tracked 1.0, `labelStyle()`) is for section markers, status and text tags only: NEAR YOU, THIS WEEK, CONFIRMED, POPULAR. If it's tempting on a button, no.
 - Sentence case everywhere. Full stops on sentences, none on labels or buttons.
 - Never letterspace the serif. Never fake-bold it. Never set it in all caps.
 - Dynamic Type stays on. The serif scales; give it room rather than clamping it.

@@ -1,26 +1,74 @@
 import SwiftUI
 
-/// Every colour in the app comes from here. See docs/build-brief.md §4.
+/// Every colour in the app comes from here. See docs/build-brief.md §4 and docs/design/components.md.
 /// Light and dark values are paired so a screen never has to think about scheme.
+///
+/// Contrast (WCAG 2.1, worked out with the sRGB luminance formula; re-run if a value changes):
+/// - ink on paper 15.4:1 · inkSoft on paper 5.3:1 (dark 7.9:1)
+/// - paper #FBF7F2 on lacquerFill #C8323A 4.96:1, light and dark (AA for body text)
+/// - white on the old dark lacquer #E2504F was 3.8:1, which failed AA (audit M23). Filled
+///   lacquer now stays #C8323A in dark; #E2504F is kept for dots and strokes only (4.9:1 on dark paper).
+/// - onInk on inkGround 14.6:1 light, 13.1:1 dark · onInk at 55% on #241A16 5.3:1
+/// - inkFaint on paper 3.1:1 light, 4.0:1 dark: enough for a glyph or hairline (3:1), not for text.
 enum Palette {
+    // MARK: Ground and type
+
     static let paper       = dyn(light: 0xF8F3EC, dark: 0x171210)
+    /// White surface. Retired for new screens (luxe: paper and hairlines, not cards). Kept for sheets
+    /// that still sit on it.
     static let card        = dyn(light: 0xFFFFFF, dark: 0x221B18)
     static let cardRaised  = dyn(light: 0xFFFFFF, dark: 0x2A2220)
     static let ink         = dyn(light: 0x241A16, dark: 0xF4ECE4)
+    /// Secondary text. The lightest colour any text may use.
     static let inkSoft     = dyn(light: 0x6F625B, dark: 0xB5A79D)
-    static let inkFaint    = dyn(light: 0xA69B93, dark: 0x7D726B)
+    /// Hairlines, decorative glyphs (chevrons), disabled fills. **Never text**: 3.1:1 on paper
+    /// passes for a glyph and fails for words. Use `inkSoft` for any text.
+    static let inkFaint    = dyn(light: 0x948880, dark: 0x7D726B)
     static let line        = dyn(light: 0xE8DFD5, dark: 0x3A302B)
+    /// The hairline between data rows (price lists, receipts, settings). Visible on paper, unlike `line`.
+    static let lineStrong  = dyn(light: 0xDDD2C5, dark: 0x3A302B)
+
+    // MARK: Lacquer: Pay, Request, the unread dot, the active-tab dot, the check. Nothing else.
+
+    /// Dots, strokes and the drawn check. Brighter in dark so a 4pt dot still reads.
     static let lacquer     = dyn(light: 0xC8323A, dark: 0xE2504F)
+    /// Filled lacquer surfaces (the Pay button). Fixed in both modes so its label passes AA.
+    static let lacquerFill = Color(hex: 0xC8323A)
     static let lacquerDeep = dyn(light: 0xA3252C, dark: 0xC9403F)
+    /// Small tinted areas only (the offline bar). Text on it is `ink`, never `inkSoft`.
     static let lacquerSoft = dyn(light: 0xF6DEDC, dark: 0x4A2626)
+    /// Label on `lacquerFill`. Warm paper, not pure white (brand rule 8).
+    static let onLacquer   = Color(hex: 0xFBF7F2)
+
+    // MARK: Ink moments: the booking ticket, Next up, the Book bar, the pro tab bar
+
+    /// The ink ground. Fixed #241A16 in light. In dark it is a raised ink, a step lighter than
+    /// dark paper, so an ink block still has an edge; pair it with `inkBlock()` for the hairline.
+    static let inkGround   = dyn(light: 0x241A16, dark: 0x2E231E)
+    /// A surface on the ink ground (a card on the ticket, a selected row).
+    static let inkRaised   = dyn(light: 0x2E2521, dark: 0x3A2E28)
+    /// Paper type and glyphs on `inkGround`. Fixed: the ground is dark in both modes.
+    static let onInk       = Color(hex: 0xF4ECE4)
+    /// Secondary type on ink. 6.3:1 on #241A16.
+    static let onInkSoft   = Color(hex: 0xF4ECE4).opacity(0.62)
+    /// Hairlines on ink.
+    static let inkLine     = Color(hex: 0xF4ECE4).opacity(0.14)
+    /// Type set on a photo (the hero name). Fixed.
+    static let onPhoto     = Color(hex: 0xFBF7F2)
+    /// Behind a photo that hasn't loaded.
+    static let photoGround = dyn(light: 0xCBBFB2, dark: 0x2E2622)
+
+    // MARK: Status and stars
+
     static let honey       = dyn(light: 0xE9B96A, dark: 0xE9B96A)
+    /// Status dots only. Not for text, money or tips.
     static let success     = dyn(light: 0x3E7A5A, dark: 0x6FBF8F)
     static let successSoft = dyn(light: 0xDDEBE2, dark: 0x213A2C)
+    /// Status dots and warning rules only. As text it fails AA (3.4:1); set the words in ink with a warn dot.
     static let warn        = dyn(light: 0xB9741F, dark: 0xE6A44C)
     static let warnSoft    = dyn(light: 0xF6E7D0, dark: 0x3E2E17)
-    static let onLacquer   = Color.white
 
-    /// Category tints used on tiles, chips and placeholder art.
+    /// Category tints. Retired from UI (benchmark §4): kept only for placeholder art and old call sites.
     static func tint(_ category: Category) -> Color {
         switch category {
         case .hair:   return dyn(light: 0xE3D6C8, dark: 0x3E332C)
@@ -32,7 +80,7 @@ enum Palette {
         }
     }
 
-    /// A deeper companion to each tint, for ink on top of a tinted surface.
+    /// A deeper companion to each tint, for ink on top of a tinted surface. Retired with `tint`.
     static func tintInk(_ category: Category) -> Color {
         switch category {
         case .hair:   return dyn(light: 0x6B4A33, dark: 0xE7CDB8)

@@ -1,6 +1,8 @@
 import SwiftUI
 
-/// Pill filter chip. Selected = ink fill.
+/// Deprecated: the pill chip is gone. Now draws a compact `OptionBox` (6pt, 1pt line border,
+/// ink fill when selected). `symbol` and `tint` are ignored: no icons, no category tints.
+/// Replace with `TextTabs` (a filter or segment), `OptionBox` (a choice) or a text link (an action).
 struct Chip: View {
     var title: String
     var symbol: String? = nil
@@ -9,71 +11,69 @@ struct Chip: View {
     var action: () -> Void
 
     var body: some View {
-        Button {
-            Haptics.selection()
-            action()
-        } label: {
-            HStack(spacing: 6) {
-                if let symbol { Image(systemName: symbol).font(.system(size: 13, weight: .medium)) }
-                Text(title).font(HDFont.subStrong)
-            }
-            .padding(.horizontal, 14)
-            .frame(height: 36)
-            .foregroundStyle(isSelected ? Palette.paper : Palette.ink)
-            .background(isSelected ? Palette.ink : (tint ?? Palette.card), in: Capsule())
-            .overlay(Capsule().strokeBorder(isSelected ? Color.clear : Palette.line, lineWidth: 1))
-        }
-        .buttonStyle(PressLift(scale: 0.95))
-        .accessibilityAddTraits(isSelected ? .isSelected : [])
+        OptionBox(title: title, isSelected: isSelected, action: action)
+            .fixedSize()
     }
 }
 
-/// Status for bookings: a small dot in the status colour and tracked text. Cancelled has no dot.
+/// Booking status as an eyebrow: a 6pt dot in the status colour, then tracked caps in ink.
+/// Cancelled and declined have no dot and sit in inkSoft. No pill, no fill.
 struct StatusBadge: View {
     var status: BookingStatus
     var body: some View {
         HStack(spacing: 6) {
             if !status.isCancelled {
-                Circle().fill(status.color).frame(width: 5, height: 5)
+                Circle().fill(status.color).frame(width: 6, height: 6)
             }
             Text(status.label)
-                .font(HDFont.label)
-                .textCase(.uppercase)
-                .tracking(1.2)
+                .eyebrowStyle(color: status.isCancelled ? Palette.inkSoft : Palette.ink)
                 .lineLimit(1)
                 .fixedSize()
         }
-        .foregroundStyle(status.isCancelled ? Palette.inkSoft : Palette.ink)
+        .accessibilityElement(children: .ignore)
         .accessibilityLabel("Status: \(status.label)")
     }
 }
 
-/// Small "ID checked" mark next to a name.
+/// "ID checked", in plain inkSoft text. No seal, no green.
 struct VerifiedBadge: View {
+    /// Kept for old call sites; both forms say "ID checked", compact in caption size.
     var compact = false
     var body: some View {
-        HStack(spacing: 3) {
-            Image(systemName: "checkmark.seal.fill").font(.system(size: compact ? 12 : 13, weight: .semibold))
-            if !compact { Text("ID checked").font(HDFont.label) }
-        }
-        .foregroundStyle(Palette.success)
-        .accessibilityLabel("ID checked")
+        Text("ID checked")
+            .font(compact ? HDFont.caption : HDFont.sub)
+            .foregroundStyle(Palette.inkSoft)
+            .lineLimit(1)
+            .fixedSize()
+            .accessibilityLabel("ID checked")
     }
 }
 
-/// Tiny tag: "Instant book", "Popular", "Pinned".
+/// A tag is text: "POPULAR", "DEFAULT", "PINNED" as a 12pt tracked eyebrow in inkSoft, beside or
+/// above the thing. Never on a photo, never in a pill. `color` and `background` are ignored
+/// (kept so old call sites compile).
 struct Tag: View {
     var text: String
     var color: Color = Palette.inkSoft
     var background: Color = Palette.line
     var body: some View {
         Text(text)
-            .font(HDFont.label)
-            .foregroundStyle(color)
+            .eyebrowStyle()
             .lineLimit(1)
             .fixedSize()
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .background(background, in: Capsule())
     }
+}
+
+#Preview("Tags and status") {
+    VStack(alignment: .leading, spacing: 16) {
+        StatusBadge(status: .confirmed)
+        StatusBadge(status: .requested)
+        StatusBadge(status: .cancelledByClient)
+        HStack { Text("BIAB overlay").font(HDFont.body); Tag(text: "Popular") }
+        HStack { Text("Kiara M.").font(HDFont.name); VerifiedBadge(compact: true) }
+        HStack { Chip(title: "15 km", isSelected: true) {}; Chip(title: "25 km") {} }
+    }
+    .padding(20)
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .paperBackground()
 }

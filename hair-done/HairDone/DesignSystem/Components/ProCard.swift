@@ -1,73 +1,64 @@
 import SwiftUI
 import CoreLocation
 
-/// The pro card used on Home and in lists: cover work, avatar, name, specialty, stars, distance, from-price.
+/// A pro, the luxe way: her cover at 4:5 and 2pt corners, then her name in serif 22, one fact line
+/// in SF 15 inkSoft, and the price right-aligned in SF monospaced. No white card, no avatar, no
+/// capsule on the photo, no three-photo strip. Prefer Home's `HomeProRow` and `HomePortraitTile`
+/// where they fit; this is the full-width version.
 struct ProCard: View {
     var pro: Pro
     var distanceKm: Double? = nil
+    /// "Free from 5 pm": an eyebrow above her name, never on the photo.
     var nextFree: String? = nil
+    /// 3:2 instead of 4:5, for tighter lists.
     var compact = false
     var onTap: () -> Void
 
     var body: some View {
         Button(action: { Haptics.light(); onTap() }) {
             VStack(alignment: .leading, spacing: 0) {
-                HStack(spacing: 2) {
-                    ForEach(Array(pro.work.prefix(compact ? 2 : 3)), id: \.id) { item in
-                        // Share the width equally. An `.aspectRatio(.fill)` here made the row wider than
-                        // the screen, which pushed the whole Home page off its left edge.
-                        WorkTile(item: item, cornerRadius: 0)
-                            .frame(maxWidth: .infinity)
-                    }
-                }
-                .frame(height: compact ? 130 : 176)
-                .clipped()
-                .clipShape(UnevenRoundedRectangle(topLeadingRadius: Radius.card, bottomLeadingRadius: 0, bottomTrailingRadius: 0, topTrailingRadius: Radius.card, style: .continuous))
-                .overlay(alignment: .topLeading) {
-                    if let nextFree {
-                        Text(nextFree)
-                            .font(HDFont.label)
-                            .foregroundStyle(Palette.ink)
-                            .padding(.horizontal, 10).padding(.vertical, 6)
-                            .background(Palette.paper.opacity(0.92), in: Capsule())
-                            .padding(10)
-                    }
-                }
-
-                HStack(alignment: .top, spacing: 12) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        HStack(spacing: 6) {
-                            Text(pro.displayName).font(HDFont.name).foregroundStyle(Palette.ink)
-                            if pro.isVerified { VerifiedBadge(compact: true) }
-                        }
-                        Text(pro.specialtyLine).font(HDFont.sub).foregroundStyle(Palette.inkSoft).lineLimit(1)
-                        HStack(spacing: 8) {
-                            RatingLine(rating: pro.rating, count: pro.reviewCount)
-                            if let distanceKm {
-                                Text("·").foregroundStyle(Palette.inkFaint)
-                                Text(distanceKm.distanceLabel).font(HDFont.sub).foregroundStyle(Palette.inkSoft)
-                            }
+                Color.clear
+                    .aspectRatio(compact ? 3.0 / 2.0 : 4.0 / 5.0, contentMode: .fit)
+                    .overlay {
+                        if let cover = pro.work.first(where: { $0.isPinned }) ?? pro.work.first {
+                            WorkTile(item: cover, cornerRadius: 0)
+                        } else {
+                            Palette.photoGround
                         }
                     }
-                    Spacer(minLength: 0)
-                    VStack(alignment: .trailing, spacing: 2) {
-                        Text("from").font(HDFont.caption).foregroundStyle(Palette.inkSoft)
-                        Text(Money.format(pro.cheapestServiceCents)).font(HDFont.priceLarge).foregroundStyle(Palette.ink)
+                    .photoShape()
+                if let nextFree {
+                    Text(nextFree).eyebrowStyle().padding(.top, Space.m)
+                }
+                HStack(alignment: .firstTextBaseline, spacing: Space.s) {
+                    Text(pro.displayName).font(HDFont.name).foregroundStyle(Palette.ink).lineLimit(1)
+                    Spacer(minLength: Space.xs)
+                    if pro.cheapestServiceCents > 0 {
+                        Text("from \(Money.format(pro.cheapestServiceCents))").font(HDFont.priceSmall).foregroundStyle(Palette.ink)
                     }
                 }
-                .padding(Space.cardPadding)
+                .padding(.top, nextFree == nil ? Space.m : Space.xs)
+                Text(factLine).font(HDFont.sub).foregroundStyle(Palette.inkSoft).lineLimit(1).padding(.top, 2)
             }
-            .background(Palette.card, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: Radius.card, style: .continuous).strokeBorder(Palette.line, lineWidth: 1))
+            .contentShape(Rectangle())
         }
         .buttonStyle(PressLift(scale: 0.985))
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(pro.displayName), \(pro.specialtyLine), rated \(pro.rating.ratingLabel), from \(Money.format(pro.cheapestServiceCents))")
         .accessibilityHint("Opens her profile")
     }
+
+    /// "Nail tech · Brunswick · 2.9 km · ★ 4.9 (86)"
+    private var factLine: String {
+        var parts = [pro.specialtyLine]
+        if let distanceKm { parts.append(distanceKm.distanceLabel) }
+        if pro.reviewCount > 0 { parts.append("★ \(pro.rating.ratingLabel) (\(pro.reviewCount))") }
+        return parts.joined(separator: " · ")
+    }
 }
 
-/// Small horizontal pro tile for the "Who's free" strip.
+/// A 150pt portrait tile for a rail: her photo at 4:5 and 2pt corners, first name in serif 19,
+/// one SF 13 inkSoft line. Same object as Home's `HomePortraitTile`.
 struct ProMiniTile: View {
     var pro: Pro
     var line: String
@@ -75,19 +66,19 @@ struct ProMiniTile: View {
 
     var body: some View {
         Button(action: { Haptics.light(); onTap() }) {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 0) {
                 Group {
-                    if let first = pro.work.first { WorkTile(item: first, cornerRadius: Radius.tile) }
-                    else { Palette.tint(pro.primaryCategory) }
+                    if let first = pro.work.first(where: { $0.isPinned }) ?? pro.work.first { WorkTile(item: first, cornerRadius: 0) }
+                    else { Palette.photoGround }
                 }
                 .frame(width: 150, height: 188)
-                .clipShape(RoundedRectangle(cornerRadius: Radius.tile, style: .continuous))
-                Text(pro.firstName).font(HDFont.name).foregroundStyle(Palette.ink)
-                Text(line).font(HDFont.caption).foregroundStyle(Palette.inkSoft).lineLimit(2)
+                .photoShape()
+                Text(pro.firstName).font(HDFont.nameSmall).foregroundStyle(Palette.ink).lineLimit(1).padding(.top, 10)
+                Text(line).font(HDFont.caption).foregroundStyle(Palette.inkSoft).lineLimit(2).padding(.top, 2)
             }
             .frame(width: 150, alignment: .leading)
         }
-        .buttonStyle(PressLift())
+        .buttonStyle(PressLift(scale: 0.98))
         .accessibilityLabel("\(pro.firstName), \(line)")
     }
 }
