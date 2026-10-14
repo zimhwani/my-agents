@@ -1,11 +1,13 @@
 import SwiftUI
 import MapKit
 
-/// One job, from her side. Where, when, what she gets, and the one button for what's next.
+/// One job, from her side. Who and when as a headline, where on a map, what she gets as a receipt,
+/// and the one button for what's next.
 struct ProBookingDetailView: View {
     @Environment(AppState.self) private var app
     var bookingID: String
     @State private var declining: Booking? = nil
+    @State private var accepting = false
     @State private var confirmCancel = false
     @State private var cancelling = false
 
@@ -15,202 +17,224 @@ struct ProBookingDetailView: View {
         Group {
             if let b = booking {
                 content(b)
+            } else if app.proSideLoadFailed {
+                ScrollView { ErrorState { Task { await app.loadProSide() } } }
             } else {
-                EmptyState(symbol: "calendar.badge.exclamationmark", title: "We couldn't find that one.", message: "Pull down on Today to refresh.")
-                    .paperBackground()
+                ScrollView {
+                    EmptyState(title: "We couldn't find that one.", message: "It may have been cancelled. Pull down on Today to refresh.")
+                }
             }
         }
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbarBackground(Palette.paper, for: .navigationBar)
+        .paperBackground()
+        .hdNavHeader()
     }
 
     private func content(_ b: Booking) -> some View {
         let client = app.clientName(b.clientID)
         let addressShown = b.status != .requested
         return ScrollView {
-            VStack(alignment: .leading, spacing: Space.section) {
-                // Who and what state
-                VStack(alignment: .leading, spacing: Space.m) {
-                    HStack(alignment: .top, spacing: Space.m) {
-                        Avatar(name: client, seed: ProFlow.seed(for: b.clientID), size: 56)
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(client).font(HDFont.title).foregroundStyle(Palette.ink)
-                            Text(b.reference).font(HDFont.caption).foregroundStyle(Palette.inkSoft).monospacedDigit()
-                        }
-                        Spacer()
-                        StatusBadge(status: b.status)
-                    }
-                    Text(b.status.proLine(client: client)).font(HDFont.body).foregroundStyle(Palette.ink)
+            VStack(alignment: .leading, spacing: 0) {
+                if app.isOffline { OfflineBar().padding(.horizontal, -Space.gutter) }
+
+                // Who, when, what state
+                VStack(alignment: .leading, spacing: Space.s) {
+                    StatusBadge(status: b.status, forPro: true)
+                    Text("\(client), \(b.start.clock).")
+                        .font(HDFont.title).foregroundStyle(Palette.ink)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityAddTraits(.isHeader)
+                    Text("\(ProFlow.longDay(b.start)) · \(b.minutes.minutesLabel), till \(b.end.clock)")
+                        .font(HDFont.quote).foregroundStyle(Palette.ink)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text(b.status.proLine(client: client)).font(HDFont.sub).foregroundStyle(Palette.inkSoft)
                     if let reason = b.declineReason, b.status == .declined {
                         Text("You said: \(reason)").font(HDFont.sub).foregroundStyle(Palette.inkSoft)
                     }
+                    Text(b.reference).font(HDFont.caption).foregroundStyle(Palette.inkSoft).monospacedDigit()
                 }
+                .padding(.top, Space.l)
 
                 // The one button
-                if b.status == .requested {
-                    VStack(alignment: .leading, spacing: Space.s) {
+                VStack(alignment: .leading, spacing: Space.s) {
+                    if b.status == .requested {
                         HStack(spacing: Space.s) {
-                            PrimaryButton(title: "Accept") { Task { await accept(b) } }
-                            SecondaryButton(title: "Decline") { declining = b }
+                            InkButton(title: "Accept", isLoading: accepting, isEnabled: !app.isOffline) { Task { await accept(b) } }
+                            OutlineButton(title: "Decline", isEnabled: !app.isOffline) { declining = b }
                         }
-                        Text(ProFlow.autoDeclineLine(for: b)).font(HDFont.caption).foregroundStyle(Palette.warn)
-                    }
-                } else {
-                    StatusActionButton(booking: b, clientName: client)
-                }
-
-                // When
-                section("When") {
-                    HStack(alignment: .firstTextBaseline) {
-                        Text(b.start.friendlyDayTime).font(HDFont.heading).foregroundStyle(Palette.ink)
-                        Spacer()
-                        Text("\(b.minutes.minutesLabel) · till \(b.end.clock)").font(HDFont.sub).foregroundStyle(Palette.inkSoft)
+                        WarnDotLine(text: "\(ProFlow.timeLeft(b)). After that it goes to someone else and counts against you.", font: HDFont.caption)
+                    } else {
+                        StatusActionButton(booking: b, clientName: client)
                     }
                 }
+                .padding(.top, Space.xl)
 
                 // Where
                 section("Where") {
-                    VStack(alignment: .leading, spacing: Space.m) {
-                        if addressShown {
-                            Text(b.address.full).font(HDFont.body).foregroundStyle(Palette.ink)
-                            if !b.address.instructions.isEmpty {
-                                Text(b.address.instructions).font(HDFont.sub).foregroundStyle(Palette.inkSoft)
-                            }
-                            mapCard(b, client: client)
-                        } else {
-                            Text(b.address.suburb).font(HDFont.body).foregroundStyle(Palette.ink)
-                            Text("Full address once you accept.").font(HDFont.sub).foregroundStyle(Palette.inkSoft)
+                    if addressShown {
+                        Text(b.address.full).font(HDFont.body).foregroundStyle(Palette.ink)
+                            .fixedSize(horizontal: false, vertical: true)
+                        if !b.address.instructions.isEmpty {
+                            Text(b.address.instructions).font(HDFont.sub).foregroundStyle(Palette.inkSoft)
                         }
+                        map(b, client: client).padding(.top, Space.xs)
+                        Button {
+                            Haptics.light()
+                            openDirections(to: b.address)
+                        } label: {
+                            HStack(spacing: 6) {
+                                Text("Directions")
+                                Image(systemName: "arrow.up.right").font(.system(size: 13, weight: .regular))
+                            }
+                            .font(HDFont.subMedium).foregroundStyle(Palette.ink)
+                            .frame(minHeight: 44)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityHint("Opens Maps")
+                    } else {
+                        Text(b.address.suburb).font(HDFont.body).foregroundStyle(Palette.ink)
+                        Text("Full address once you accept.").font(HDFont.sub).foregroundStyle(Palette.inkSoft)
                     }
                 }
 
-                // What and money
-                section("What") {
-                    VStack(alignment: .leading, spacing: Space.s) {
+                // What she gets
+                section("What and what you get") {
+                    VStack(spacing: 0) {
                         ForEach(b.services) { s in
-                            HStack(alignment: .firstTextBaseline) {
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(s.name).font(HDFont.body).foregroundStyle(Palette.ink)
-                                    Text(s.durationLabel).font(HDFont.caption).foregroundStyle(Palette.inkSoft)
-                                }
-                                Spacer()
-                                Text(s.priceLabel).font(HDFont.price).foregroundStyle(Palette.ink)
-                            }
-                            .accessibilityElement(children: .combine)
+                            receiptRow(s.name, sub: s.durationLabel, value: s.priceLabel)
                         }
-                        PriceRow(label: "Travel fee", cents: b.price.travelFeeCents)
-                        Hairline().padding(.vertical, 4)
-                        Text("Your payout").labelStyle()
-                        HStack {
-                            Text("Hair Done fee, 12%").font(HDFont.body).foregroundStyle(Palette.ink)
-                            Spacer()
-                            Text("−" + Money.format(b.price.platformFeeCents)).font(HDFont.price).foregroundStyle(Palette.inkSoft)
+                        if b.price.travelFeeCents > 0 {
+                            receiptRow("Travel fee", value: Money.format(b.price.travelFeeCents))
                         }
-                        .accessibilityElement(children: .combine)
+                        receiptRow("Hair Done's 12%", value: "−" + Money.format(b.price.platformFeeCents), soft: true)
                         if b.price.tipCents > 0 {
-                            HStack {
-                                Text("Tip").font(HDFont.body).foregroundStyle(Palette.ink)
-                                Spacer()
-                                Text("+" + Money.format(b.price.tipCents)).font(HDFont.price).foregroundStyle(Palette.success)
-                            }
-                            .accessibilityElement(children: .combine)
+                            receiptRow("Tip", sub: "All yours, no fee.", value: "+" + Money.format(b.price.tipCents))
                         }
-                        PriceRow(label: "To you", cents: b.price.proPayoutCents, emphasis: true)
-                        Text("The $3 booking fee is paid by the client, not you.").font(HDFont.caption).foregroundStyle(Palette.inkSoft)
+                        HStack(alignment: .firstTextBaseline) {
+                            Text("To you").font(HDFont.bodyStrong).foregroundStyle(Palette.ink)
+                            Spacer()
+                            Text(Money.format(b.price.proPayoutCents)).font(HDFont.priceTotal).foregroundStyle(Palette.ink)
+                        }
+                        .padding(.top, Space.m)
+                        .accessibilityElement(children: .combine)
                     }
+                    Text("The $3 booking fee is paid by the client, not you.")
+                        .font(HDFont.caption).foregroundStyle(Palette.inkSoft)
                 }
 
                 // Notes and inspo
-                if !b.notes.isEmpty || !b.inspoSeeds.isEmpty {
+                if !b.notes.isEmpty || !b.inspoSeeds.isEmpty || !b.inspoURLs.isEmpty {
                     section("Her notes") {
-                        VStack(alignment: .leading, spacing: Space.m) {
-                            if !b.notes.isEmpty { Text(b.notes).font(HDFont.body).foregroundStyle(Palette.ink) }
-                            if !b.inspoSeeds.isEmpty {
-                                HStack(spacing: Space.s) {
-                                    ForEach(Array(b.inspoSeeds.prefix(3).enumerated()), id: \.offset) { i, seed in
-                                        WorkTile(item: WorkItem(id: "inspo_\(b.id)_\(i)", category: b.primaryCategory, caption: "Inspo photo \(i + 1)", seed: seed))
-                                            .aspectRatio(1, contentMode: .fit)
-                                    }
-                                }
-                            }
+                        if !b.notes.isEmpty {
+                            Text("“\(b.notes)”").font(HDFont.quote).italic().foregroundStyle(Palette.ink)
+                                .fixedSize(horizontal: false, vertical: true)
                         }
+                        inspo(b)
                     }
                 }
 
-                // Message
-                if let thread = app.thread(for: b) {
-                    NavigationLink(value: Route.thread(thread.id)) {
-                        HStack(spacing: 8) {
-                            Image(systemName: "bubble.left")
+                // Message and cancel
+                VStack(alignment: .leading, spacing: Space.s) {
+                    if let thread = app.thread(for: b) {
+                        NavigationLink(value: Route.thread(thread.id)) {
                             Text("Message \(client)")
+                                .font(HDFont.bodyStrong).foregroundStyle(Palette.ink)
+                                .frame(maxWidth: .infinity, minHeight: 52)
+                                .overlay(RoundedRectangle(cornerRadius: Radius.button, style: .continuous).strokeBorder(Palette.ink, lineWidth: 1))
+                                .contentShape(Rectangle())
                         }
-                        .font(HDFont.bodyStrong)
-                        .foregroundStyle(Palette.ink)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 52)
-                        .background(Palette.card, in: Capsule())
-                        .overlay(Capsule().strokeBorder(Palette.line, lineWidth: 1))
+                        .buttonStyle(PressLift())
                     }
-                    .buttonStyle(PressLift())
-                }
-
-                // Cancel, quietly
-                if [.confirmed, .onHerWay, .arrived].contains(b.status) {
-                    VStack(spacing: 2) {
+                    if [.confirmed, .onHerWay, .arrived].contains(b.status) {
                         TertiaryButton(title: cancelling ? "Cancelling" : "Cancel this booking") { confirmCancel = true }
-                        Text("She gets a full refund and your reliability drops.").font(HDFont.caption).foregroundStyle(Palette.inkSoft)
-                    }
-                    .frame(maxWidth: .infinity)
-                    .confirmationDialog("Cancel on \(client)?", isPresented: $confirmCancel, titleVisibility: .visible) {
-                        Button("Cancel the booking", role: .destructive) { Task { await cancel(b) } }
-                        Button("Keep it", role: .cancel) {}
-                    } message: {
-                        Text("\(client) is refunded in full and told straight away. Your reliability score drops. We see it, clients don't.")
+                            .padding(.leading, -8)
+                            .disabled(app.isOffline || cancelling)
+                        Text("\(client) gets a full refund and your reliability drops.")
+                            .font(HDFont.caption).foregroundStyle(Palette.inkSoft)
                     }
                 }
+                .padding(.top, Space.section)
             }
             .screenGutter()
-            .padding(.vertical, Space.l)
+            .padding(.bottom, Space.section)
         }
-        .paperBackground()
+        .refreshable { await app.loadProSide() }
         .sheet(item: $declining) { b in DeclineSheet(booking: b, clientName: client) }
+        .confirmSheet(isPresented: $confirmCancel,
+                      title: "Cancel on \(client)?",
+                      message: "\(client) is refunded in full and told straight away. Your reliability drops. We see it, clients don't.",
+                      confirmTitle: "Cancel the booking",
+                      cancelTitle: "Keep it") {
+            Task { await cancel(b) }
+        }
     }
 
+    // MARK: Pieces
+
     private func section<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: Space.m) {
+        VStack(alignment: .leading, spacing: Space.s) {
             Text(title).labelStyle()
             content()
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.top, Space.section)
     }
 
-    private func mapCard(_ b: Booking, client: String) -> some View {
-        let coordinate = CLLocationCoordinate2D(latitude: b.address.latitude, longitude: b.address.longitude)
-        let region = MKCoordinateRegion(center: coordinate, span: MKCoordinateSpan(latitudeDelta: 0.012, longitudeDelta: 0.012))
-        return Button {
-            Haptics.light()
-            openDirections(to: b.address)
-        } label: {
-            Map(initialPosition: .region(region)) {
-                Marker(client, coordinate: coordinate).tint(Palette.lacquer)
+    private func receiptRow(_ label: String, sub: String? = nil, value: String, soft: Bool = false) -> some View {
+        HStack(alignment: .firstTextBaseline) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(label).font(HDFont.body).foregroundStyle(Palette.ink)
+                if let sub { Text(sub).font(HDFont.caption).foregroundStyle(Palette.inkSoft) }
             }
-            .allowsHitTesting(false)
-            .frame(height: 170)
-            .clipShape(RoundedRectangle(cornerRadius: Radius.tile, style: .continuous))
-            .overlay(alignment: .bottomTrailing) {
-                HStack(spacing: 6) {
-                    Image(systemName: "arrow.triangle.turn.up.right.diamond")
-                    Text("Directions")
+            Spacer()
+            Text(value).font(HDFont.price).foregroundStyle(soft ? Palette.inkSoft : Palette.ink)
+        }
+        .padding(.vertical, Space.m)
+        .overlay(alignment: .bottom) { Rectangle().fill(Palette.lineStrong).frame(height: 0.5) }
+        .accessibilityElement(children: .combine)
+    }
+
+    @ViewBuilder
+    private func inspo(_ b: Booking) -> some View {
+        if !b.inspoURLs.isEmpty {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: Space.s) {
+                    ForEach(Array(b.inspoURLs.enumerated()), id: \.offset) { i, url in
+                        AsyncImage(url: url) { image in
+                            image.resizable().scaledToFill()
+                        } placeholder: {
+                            Palette.photoGround
+                        }
+                        .frame(width: 104, height: 130)
+                        .clipped()
+                        .photoShape()
+                        .accessibilityLabel("Inspo photo \(i + 1)")
+                    }
                 }
-                .font(HDFont.subStrong)
-                .foregroundStyle(Palette.ink)
-                .padding(.horizontal, 12).padding(.vertical, 8)
-                .background(Palette.paper.opacity(0.94), in: Capsule())
-                .padding(10)
+            }
+        } else if !b.inspoSeeds.isEmpty {
+            HStack(spacing: Space.s) {
+                ForEach(Array(b.inspoSeeds.prefix(3).enumerated()), id: \.offset) { i, seed in
+                    WorkTile(item: WorkItem(id: "inspo_\(b.id)_\(i)", category: b.primaryCategory, caption: "Inspo photo \(i + 1)", seed: seed), cornerRadius: Radius.photo)
+                        .frame(width: 104, height: 130)
+                }
             }
         }
-        .buttonStyle(PressLift(scale: 0.985))
-        .accessibilityLabel("Directions to \(b.address.short)")
-        .accessibilityHint("Opens Maps")
+    }
+
+    private func map(_ b: Booking, client: String) -> some View {
+        let coordinate = CLLocationCoordinate2D(latitude: b.address.latitude, longitude: b.address.longitude)
+        let region = MKCoordinateRegion(center: coordinate, span: MKCoordinateSpan(latitudeDelta: 0.012, longitudeDelta: 0.012))
+        return Map(initialPosition: .region(region), interactionModes: []) {
+            Annotation("", coordinate: coordinate) {
+                Circle().fill(Palette.ink).frame(width: 10, height: 10)
+                    .overlay(Circle().strokeBorder(Palette.paper, lineWidth: 1.5))
+            }
+        }
+        .frame(height: 170)
+        .photoShape()
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Map of \(b.address.short)")
     }
 
     private func openDirections(to address: Address) {
@@ -221,9 +245,11 @@ struct ProBookingDetailView: View {
     }
 
     private func accept(_ b: Booking) async {
+        accepting = true
+        defer { accepting = false }
         if await app.update(b, to: .confirmed) != nil {
             Haptics.success()
-            app.show("Confirmed. She's been told.")
+            app.show("Booked. \(app.clientName(b.clientID))'s \(b.start.friendlyDay) at \(b.start.clock).")
         }
     }
 
@@ -231,7 +257,7 @@ struct ProBookingDetailView: View {
         cancelling = true
         defer { cancelling = false }
         if await app.update(b, to: .cancelledByPro) != nil {
-            app.show("Cancelled. She's been refunded in full.")
+            app.show("Cancelled. \(app.clientName(b.clientID))'s been refunded in full.")
         }
     }
 }

@@ -1,7 +1,7 @@
 import SwiftUI
-import UserNotifications
 
-/// The You tab: who you are, where she comes to, how you pay, who you'd book again, and the switch to Pro mode.
+/// The You tab: who you are, the way into Pro mode (right under your name), where she comes to,
+/// how you pay, who you'd book again, and the quiet bits at the bottom.
 struct AccountView: View {
     @Environment(AppState.self) private var app
     @State private var path = NavigationPath()
@@ -13,10 +13,19 @@ struct AccountView: View {
     @State private var showHelp = false
     @State private var showLegal = false
     @State private var showProOnboarding = false
+    @State private var reopening = false
     @State private var confirmLogout = false
     @State private var confirmDelete = false
     @State private var deleting = false
-    @State private var deleteProblem: String? = nil
+    @State private var refusal: DeleteRefusal? = nil
+
+    /// Why delete didn't go through, and the booking that's in the way if we can tell which.
+    struct DeleteRefusal: Identifiable {
+        let id = UUID()
+        var line: String
+        var booking: Booking?
+        var isProSide: Bool
+    }
 
     private var version: String {
         (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "1.0"
@@ -25,634 +34,331 @@ struct AccountView: View {
     var body: some View {
         NavigationStack(path: $path) {
             ScrollView {
-                VStack(alignment: .leading, spacing: Space.xl) {
-                    Text("You")
-                        .font(HDFont.hero)
-                        .foregroundStyle(Palette.ink)
-                        .padding(.top, Space.s)
-                        .accessibilityAddTraits(.isHeader)
-
+                VStack(alignment: .leading, spacing: 0) {
                     if let client = app.client {
-                        profileHeader(client)
-                        settingsCard(client)
-                        favouritesCard
-                        aboutCard
-                        proModeCard
+                        header(client)
+                            .screenGutter()
+                            .padding(.top, Space.s)
+                        if app.isOffline { OfflineBar().padding(.top, Space.l) }
+                        proModeBlock
+                            .screenGutter()
+                            .padding(.top, Space.xl)
+                        settings(client)
+                            .screenGutter()
+                            .padding(.top, Space.section)
+                        favourites
+                            .padding(.top, Space.section)
+                        about
+                            .screenGutter()
+                            .padding(.top, Space.section)
                     }
-
-                    VStack(spacing: 0) {
-                        TertiaryButton(title: "Log out") { confirmLogout = true }
-                        if deleting {
-                            ProgressView().frame(minHeight: 44)
-                        } else {
-                            TertiaryButton(title: "Delete account", tint: Palette.inkFaint) { confirmDelete = true }
-                        }
-                    }
-                    .frame(maxWidth: .infinity)
+                    quietActions
+                        .screenGutter()
+                        .padding(.top, Space.xl)
                 }
-                .screenGutter()
                 .padding(.bottom, Space.section)
             }
             .paperBackground()
             .toolbar(.hidden, for: .navigationBar)
             .hdDestinations()
-            .confirmationDialog("Log out?", isPresented: $confirmLogout, titleVisibility: .visible) {
-                Button("Log out", role: .destructive) { app.signOut() }
-                Button("Stay", role: .cancel) {}
-            } message: {
-                Text("Your bookings stay put. You'll need a new code to get back in.")
-            }
-            .confirmationDialog("Delete your account?", isPresented: $confirmDelete, titleVisibility: .visible) {
-                Button("Delete", role: .destructive) { deleteAccount() }
-                Button("Keep it", role: .cancel) {}
-            } message: {
-                Text("Profile, addresses and cards go. Past receipts stay in your email. Can't be undone.")
-            }
-            .alert("Not yet", isPresented: Binding(get: { deleteProblem != nil }, set: { if !$0 { deleteProblem = nil } })) {
-                Button("OK", role: .cancel) { deleteProblem = nil }
-            } message: {
-                Text(deleteProblem ?? "")
-            }
-            .sheet(isPresented: $showDetails) { AccountDetailsSheet().presentationDragIndicator(.visible) }
-            .sheet(isPresented: $showAddresses) { AccountAddressesSheet().presentationDragIndicator(.visible) }
-            .sheet(isPresented: $showPayments) { AccountPaymentsSheet().presentationDragIndicator(.visible) }
-            .sheet(isPresented: $showNotifications) { AccountNotificationsSheet().presentationDetents([.medium, .large]).presentationDragIndicator(.visible) }
-            .sheet(isPresented: $showHelp) { AccountHelpSheet().presentationDragIndicator(.visible) }
-            .sheet(isPresented: $showLegal) { AccountLegalSheet().presentationDetents([.medium, .large]).presentationDragIndicator(.visible) }
+            .animation(Motion.gentle, value: app.isOffline)
+            .confirmSheet(isPresented: $confirmLogout,
+                          title: "Log out?",
+                          message: "Your bookings stay put. You'll need a new code to get back in.",
+                          confirmTitle: "Log out",
+                          cancelTitle: "Stay") { app.signOut() }
+            .confirmSheet(isPresented: $confirmDelete,
+                          title: "Delete your account?",
+                          message: deleteMessage,
+                          confirmTitle: "Delete",
+                          cancelTitle: "Keep it") { deleteAccount() }
+            .sheet(item: $refusal) { r in refusalSheet(r) }
+            .sheet(isPresented: $showDetails) { AccountDetailsSheet() }
+            .sheet(isPresented: $showAddresses) { AccountAddressesSheet() }
+            .sheet(isPresented: $showPayments) { AccountPaymentsSheet() }
+            .sheet(isPresented: $showNotifications) { AccountNotificationsSheet() }
+            .sheet(isPresented: $showHelp) { AccountHelpSheet() }
+            .sheet(isPresented: $showLegal) { AccountLegalSheet() }
             .fullScreenCover(isPresented: $showProOnboarding) {
                 ProOnboardingFlow {
                     showProOnboarding = false
                     app.switchMode(.pro)
                 }
             }
-        }
-    }
-
-    private func deleteAccount() {
-        deleting = true
-        Task {
-            let gone = await app.deleteAccount()
-            deleting = false
-            if !gone { deleteProblem = app.lastError ?? "That didn't work. Try again." }
+            .onAppear { takeProIntent() }
+            .onChange(of: app.wantsProOnboarding) { _, _ in takeProIntent() }
         }
     }
 
     // MARK: Header
 
-    private func profileHeader(_ client: Client) -> some View {
-        HStack(spacing: Space.l) {
-            Avatar(name: client.fullName, seed: client.seed, size: 72)
-            VStack(alignment: .leading, spacing: 3) {
-                Text(client.fullName).font(HDFont.heading).foregroundStyle(Palette.ink)
-                // Email sign-in has no mobile until she adds one.
-                Text(client.phone.isEmpty ? client.email : client.phone).font(HDFont.sub).foregroundStyle(Palette.inkSoft)
-                Text("Booking since \(client.joined.monthShort) \(String(client.joined.yearNumber))")
-                    .font(HDFont.caption)
-                    .foregroundStyle(Palette.inkFaint)
+    private func header(_ client: Client) -> some View {
+        VStack(alignment: .leading, spacing: Space.xs) {
+            Text("Booking since \(client.joined.hdMonthYear)").labelStyle()
+            Text(client.firstName.isEmpty ? "You." : "\(client.firstName).")
+                .font(HDFont.display)
+                .foregroundStyle(Palette.ink)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityAddTraits(.isHeader)
+            // Phone first; Apple and email sign-ins show the email, or ask for a mobile.
+            if !client.phone.isEmpty {
+                Text(client.phone).font(HDFont.sub.monospacedDigit()).foregroundStyle(Palette.inkSoft)
+            } else if !client.email.isEmpty {
+                Text(client.email).font(HDFont.sub).foregroundStyle(Palette.inkSoft)
+            } else {
+                TertiaryButton(title: "Add your mobile", tint: Palette.ink) { showDetails = true }
+                    .padding(.leading, -8)
             }
-            Spacer(minLength: 0)
         }
-        .accessibilityElement(children: .combine)
+    }
+
+    // MARK: Pro mode
+
+    private var waitingLine: String? {
+        let requests = app.openRequests.count
+        let messages = app.mode == .client ? app.otherSideUnreadCount : 0
+        var parts: [String] = []
+        if requests > 0 { parts.append(requests == 1 ? "1 request waiting" : "\(requests) requests waiting") }
+        if messages > 0 { parts.append(messages == 1 ? "1 message" : "\(messages) messages") }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
+    private enum ProState { case notPro, closed, draft, open }
+
+    /// The onboarding step she got to on this phone, if she's left it part way.
+    private var draftStep: Int? {
+        guard let id = app.client?.id else { return nil }
+        return ProOnboardingDraft.stepReached(userID: id)
+    }
+
+    private var proState: ProState {
+        guard let pro = app.proSelf else { return draftStep == nil ? .notPro : .draft }
+        if pro.isClosed { return .closed }
+        if !pro.isOnboarded { return .draft }
+        return .open
+    }
+
+    /// The ink row that previews Pro mode's ink: what she gets, what's waiting, and the switch.
+    private var proModeBlock: some View {
+        let state = proState
+        let title: String
+        let line: String
+        let button: String
+        switch state {
+        case .notPro:
+            title = "Get booked."
+            line = "Do hair, nails, makeup, lashes or brows? Set up takes about ten minutes."
+            button = "Set up Pro mode"
+        case .closed:
+            title = "Get booked."
+            line = "Welcome back. We kept your work and prices."
+            button = "Set up Pro mode"
+        case .draft:
+            title = "Pro mode"
+            line = draftStep.map { "Pick up where you left off. Step \($0) of 7." }
+                ?? "Pick up where you left off. Clients can't see you until it's done."
+            button = "Keep going"
+        case .open:
+            title = "Pro mode"
+            line = app.proSelf?.displayName ?? ""
+            button = "Switch to Pro mode"
+        }
+        return VStack(alignment: .leading, spacing: Space.s) {
+            if state == .notPro || state == .closed {
+                Text("Pro mode").eyebrowStyle(color: Palette.onInkSoft)
+            }
+            Text(title)
+                .font(HDFont.name)
+                .foregroundStyle(Palette.onInk)
+                .accessibilityAddTraits(.isHeader)
+            Text(line)
+                .font(HDFont.sub)
+                .foregroundStyle(Palette.onInkSoft)
+                .fixedSize(horizontal: false, vertical: true)
+            if let waitingLine, state != .notPro {
+                HStack(alignment: .firstTextBaseline, spacing: Space.s) {
+                    Circle().fill(Palette.warn).frame(width: 6, height: 6)
+                        .alignmentGuide(.firstTextBaseline) { d in d[.bottom] - 1 }
+                        .accessibilityHidden(true)
+                    Text(waitingLine)
+                        .font(HDFont.subMedium)
+                        .foregroundStyle(Palette.onInk)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(.top, Space.xs)
+            }
+            InkButton(title: button, isLoading: reopening, isEnabled: state == .open || !app.isOffline, tone: .onInk, compact: true) {
+                proAction(state)
+            }
+            .padding(.top, Space.s)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .inkBlock(padding: Space.l + 4)
+        .accessibilityElement(children: .contain)
+    }
+
+    private func proAction(_ state: ProState) {
+        switch state {
+        case .notPro, .draft:
+            showProOnboarding = true
+        case .open:
+            app.switchMode(.pro)
+        case .closed:
+            reopening = true
+            Task { @MainActor in
+                let back = await app.reopenProProfile()
+                reopening = false
+                if back { app.switchMode(.pro) }
+            }
+        }
+    }
+
+    /// Welcome's "Get booked here." link: once she's signed in and on You, start pro setup.
+    private func takeProIntent() {
+        guard app.wantsProOnboarding, app.stage == .ready, app.client != nil else { return }
+        app.wantsProOnboarding = false
+        Task { @MainActor in
+            // Let the shell finish arriving before a cover goes up over it.
+            try? await Task.sleep(for: .milliseconds(600))
+            switch proState {
+            case .open: app.switchMode(.pro)
+            case .closed: proAction(.closed)
+            case .notPro, .draft: showProOnboarding = true
+            }
+        }
     }
 
     // MARK: Settings
 
-    private func settingsCard(_ client: Client) -> some View {
+    private func settings(_ client: Client) -> some View {
         VStack(spacing: 0) {
-            NavRow(symbol: "person", title: "Your details", value: client.firstName) { showDetails = true }
-            Hairline()
-            NavRow(symbol: "house", title: "Addresses", value: "\(client.addresses.count)") { showAddresses = true }
-            Hairline()
-            NavRow(symbol: "creditcard", title: "Payment methods", value: client.defaultPayment?.label) { showPayments = true }
-            Hairline()
-            NavRow(symbol: "bell", title: "Notifications", value: client.notificationsOn ? "On" : "Off") { showNotifications = true }
-            Hairline()
-            NavRow(symbol: "questionmark.circle", title: "Help") { showHelp = true }
+            Hairline(strong: true)
+            HairlineRow(title: "Your details", value: client.firstName) { showDetails = true }
+            HairlineRow(title: "Addresses", value: client.addresses.isEmpty ? "None yet" : "\(client.addresses.count)") { showAddresses = true }
+            HairlineRow(title: "Payment methods", value: client.defaultPayment?.label ?? "None yet") { showPayments = true }
+            HairlineRow(title: "Notifications") { showNotifications = true }
+            HairlineRow(title: "Help", subtitle: "A person replies, usually the same day.") { showHelp = true }
         }
-        .card(padding: Space.cardPadding)
     }
 
     // MARK: Favourites
 
-    private var favouritesCard: some View {
+    private var favourites: some View {
         VStack(alignment: .leading, spacing: Space.m) {
-            SectionHeader(title: "Favourites", subtitle: app.favouritePros.isEmpty ? nil : "Tap to book her again")
+            SectionHeader(title: "Favourites").screenGutter()
             if app.favouritePros.isEmpty {
                 Text("No favourites yet. Tap Save on a pro you'd book again.")
                     .font(HDFont.sub)
                     .foregroundStyle(Palette.inkSoft)
                     .fixedSize(horizontal: false, vertical: true)
+                    .screenGutter()
             } else {
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: Space.m, alignment: .top)], alignment: .leading, spacing: Space.l) {
-                    ForEach(app.favouritePros) { pro in
-                        ProMiniTile(pro: pro, line: pro.specialtyLine) { path.append(Route.pro(pro)) }
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(alignment: .top, spacing: Space.m) {
+                        ForEach(app.favouritePros) { pro in
+                            PortraitTile(item: pro.work.first(where: { $0.isPinned }) ?? pro.work.first,
+                                         width: 120, title: pro.firstName, line: pro.specialtyLine) {
+                                path.append(Route.pro(pro))
+                            }
+                        }
                     }
+                    .padding(.horizontal, Space.gutter)
                 }
             }
         }
-        .card()
     }
 
     // MARK: About
 
-    private var aboutCard: some View {
-        VStack(spacing: 0) {
-            NavRow(symbol: "doc.text", title: "Terms and privacy") { showLegal = true }
-            Hairline()
-            HStack {
-                Text("Hair Done \(version)").font(HDFont.caption).foregroundStyle(Palette.inkSoft)
-                Spacer()
-            }
-            .frame(minHeight: 44)
-        }
-        .card()
-    }
-
-    // MARK: Pro mode
-
-    private var proModeCard: some View {
-        VStack(alignment: .leading, spacing: Space.m) {
-            HStack(spacing: Space.s) {
-                DropMark(size: 22)
-                Text("Pro mode").font(HDFont.heading).foregroundStyle(Palette.ink)
-            }
-            Text("For hair stylists, nail techs, makeup artists, lash and brow artists.")
-                .font(HDFont.sub)
+    private var about: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Hairline(strong: true)
+            HairlineRow(title: "Terms and privacy") { showLegal = true }
+            Text("Hair Done \(version)")
+                .font(HDFont.caption)
                 .foregroundStyle(Palette.inkSoft)
-                .fixedSize(horizontal: false, vertical: true)
-            if app.proSelf != nil {
-                SecondaryButton(title: "Switch to Pro mode", symbol: "arrow.left.arrow.right") { app.switchMode(.pro) }
+                .padding(.top, Space.m)
+        }
+    }
+
+    // MARK: Log out, delete
+
+    private var quietActions: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            TertiaryButton(title: "Log out", tint: Palette.ink) { confirmLogout = true }
+            if deleting {
+                ProgressView().frame(minHeight: 44).padding(.horizontal, 8)
             } else {
-                SecondaryButton(title: "Set up Pro mode", symbol: "sparkles") { showProOnboarding = true }
+                TertiaryButton(title: "Delete account") { confirmDelete = true }
+                    .disabled(app.isOffline)
             }
         }
-        .padding(Space.cardPadding)
-        .background(Palette.lacquerSoft.opacity(0.55), in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: Radius.card, style: .continuous).strokeBorder(Palette.lacquer.opacity(0.25), lineWidth: 1))
-    }
-}
-
-// MARK: - Your details
-
-/// First name, last name, email, mobile.
-struct AccountDetailsSheet: View {
-    @Environment(AppState.self) private var app
-    @Environment(\.dismiss) private var dismiss
-    @State private var first = ""
-    @State private var last = ""
-    @State private var email = ""
-    @State private var phone = ""
-    @State private var saving = false
-    @State private var problem: String? = nil
-
-    private var canSave: Bool { !first.trimmingCharacters(in: .whitespaces).isEmpty }
-
-    var body: some View {
-        VStack(spacing: 0) {
-            SheetHeader(title: "Your details", onClose: { dismiss() })
-            ScrollView {
-                VStack(spacing: Space.l) {
-                    HStack(spacing: Space.m) {
-                        HDTextField(label: "First name", text: $first, contentType: .givenName)
-                        HDTextField(label: "Last name", text: $last, contentType: .familyName)
-                    }
-                    HDTextField(label: "Mobile", text: $phone, keyboard: .phonePad, contentType: .telephoneNumber)
-                    VStack(alignment: .leading, spacing: 6) {
-                        HDTextField(label: "Email", text: $email, keyboard: .emailAddress, contentType: .emailAddress)
-                        Text("Receipts go here.").font(HDFont.caption).foregroundStyle(Palette.inkSoft)
-                    }
-                    if let problem { InlineNote(text: problem, tone: .warn) }
-                }
-                .screenGutter()
-                .padding(.top, Space.s)
-                .padding(.bottom, Space.section)
-            }
-            .scrollDismissesKeyboard(.interactively)
-            PrimaryButton(title: "Save", isLoading: saving, isEnabled: canSave) { save() }
-                .screenGutter()
-                .padding(.bottom, Space.l)
-        }
-        .paperBackground()
-        .holdsPushRoutes()
-        .onAppear {
-            guard let c = app.client else { return }
-            first = c.firstName; last = c.lastName; email = c.email; phone = c.phone
-        }
+        .padding(.leading, -8)
     }
 
-    private func save() {
-        guard var c = app.client else { return }
-        c.firstName = first.trimmingCharacters(in: .whitespaces)
-        c.lastName = last.trimmingCharacters(in: .whitespaces)
-        c.email = email.trimmingCharacters(in: .whitespaces)
-        c.phone = phone.trimmingCharacters(in: .whitespaces)
-        saving = true
-        problem = nil
+    private var deleteMessage: String {
+        if app.proSelf != nil {
+            return "Your bookings, your pro profile, your work photos and your payout link all go. Money already on its way still lands. Can't be undone."
+        }
+        return "Profile, addresses and cards go. Past receipts stay in your email. Can't be undone."
+    }
+
+    private func deleteAccount() {
+        deleting = true
         Task { @MainActor in
-            do {
-                try await app.data.updateClient(c)
-                app.client = c
-                saving = false
-                dismiss()
-            } catch {
-                // Was swallowed before: the sheet closed as if it had saved.
-                saving = false
-                withAnimation(Motion.gentle) { problem = error.localizedDescription }
-            }
-        }
-    }
-}
-
-// MARK: - Addresses
-
-/// Where she comes to. Add, edit, swipe to delete.
-struct AccountAddressesSheet: View {
-    @Environment(AppState.self) private var app
-    @Environment(\.dismiss) private var dismiss
-    @State private var editing: Address? = nil
-    @State private var adding = false
-
-    private var addresses: [Address] { app.client?.addresses ?? [] }
-
-    var body: some View {
-        VStack(spacing: 0) {
-            SheetHeader(title: "Addresses", subtitle: addresses.isEmpty ? nil : "First one's your default.", onClose: { dismiss() })
-            if addresses.isEmpty {
-                EmptyState(symbol: "house", title: "No saved addresses.", message: "Add one and booking's two taps quicker.")
-                Spacer()
-            } else {
-                List {
-                    ForEach(addresses) { address in
-                        Button { editing = address } label: {
-                            HStack(alignment: .top, spacing: Space.m) {
-                                Image(systemName: address.label.lowercased() == "work" ? "building.2" : "house")
-                                    .font(.system(size: 16, weight: .medium))
-                                    .foregroundStyle(Palette.ink)
-                                    .frame(width: 28)
-                                VStack(alignment: .leading, spacing: 2) {
-                                    HStack(spacing: 6) {
-                                        Text(address.label).font(HDFont.bodyStrong).foregroundStyle(Palette.ink)
-                                        if address.id == addresses.first?.id { Tag(text: "Default") }
-                                    }
-                                    Text(address.full).font(HDFont.sub).foregroundStyle(Palette.inkSoft)
-                                    if !address.instructions.isEmpty {
-                                        Text(address.instructions).font(HDFont.caption).foregroundStyle(Palette.inkFaint).lineLimit(1)
-                                    }
-                                }
-                                Spacer(minLength: 0)
-                                Image(systemName: "chevron.right").font(.system(size: 13, weight: .semibold)).foregroundStyle(Palette.inkFaint)
-                            }
-                            .padding(.vertical, 6)
-                            .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                        .listRowBackground(Palette.card)
-                        .listRowSeparatorTint(Palette.line)
-                        .accessibilityElement(children: .combine)
-                        .accessibilityHint("Edits this address")
-                    }
-                    .onDelete { offsets in remove(at: offsets) }
-                }
-                .listStyle(.insetGrouped)
-                .scrollContentBackground(.hidden)
-            }
-            SecondaryButton(title: "Add an address", symbol: "plus") { adding = true }
-                .screenGutter()
-                .padding(.bottom, Space.l)
-        }
-        .paperBackground()
-        .sheet(item: $editing) { address in
-            AddressEditor(address: address) { saved in upsert(saved); editing = nil }
-        }
-        .sheet(isPresented: $adding) {
-            AddressEditor(address: nil) { saved in upsert(saved); adding = false }
+            let gone = await app.deleteAccount()
+            deleting = false
+            if !gone { refusal = whyNot() }
         }
     }
 
-    private func upsert(_ address: Address) {
-        guard var c = app.client else { return }
-        if let i = c.addresses.firstIndex(where: { $0.id == address.id }) { c.addresses[i] = address } else { c.addresses.append(address) }
-        app.client = c
-        Task { try? await app.data.updateClient(c) }
-    }
-
-    private func remove(at offsets: IndexSet) {
-        guard var c = app.client else { return }
-        c.addresses.remove(atOffsets: offsets)
-        Haptics.light()
-        app.client = c
-        Task { try? await app.data.updateClient(c) }
-    }
-}
-
-// MARK: - Payment methods
-
-/// Cards and Apple Pay. One's the default.
-struct AccountPaymentsSheet: View {
-    @Environment(AppState.self) private var app
-    @Environment(\.dismiss) private var dismiss
-    @State private var adding = false
-    @State private var removing: PaymentMethod? = nil
-
-    private var methods: [PaymentMethod] { app.client?.paymentMethods ?? [] }
-
-    var body: some View {
-        VStack(spacing: 0) {
-            SheetHeader(title: "Payment methods", subtitle: "We hold the amount when you book and charge it when she's done.", onClose: { dismiss() })
-            if methods.isEmpty {
-                EmptyState(symbol: "creditcard", title: "No cards yet.", message: "Apple Pay works without one.")
-                Spacer()
-            } else {
-                List {
-                    ForEach(methods) { method in
-                        HStack(spacing: Space.m) {
-                            Image(systemName: method.kind == .applePay ? "apple.logo" : "creditcard")
-                                .font(.system(size: 16, weight: .medium))
-                                .foregroundStyle(Palette.ink)
-                                .frame(width: 28)
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(method.label).font(HDFont.bodyStrong).foregroundStyle(Palette.ink)
-                                if method.kind == .card, !method.expiry.isEmpty {
-                                    Text("Expires \(method.expiry)").font(HDFont.caption).foregroundStyle(Palette.inkSoft)
-                                }
-                            }
-                            Spacer(minLength: 0)
-                            if method.isDefault {
-                                Tag(text: "Default", color: Palette.success, background: Palette.successSoft)
-                            } else {
-                                Button { makeDefault(method) } label: {
-                                    Text("Make default").font(HDFont.subStrong).foregroundStyle(Palette.lacquer)
-                                }
-                                .buttonStyle(.plain)
-                            }
-                        }
-                        .padding(.vertical, 6)
-                        .listRowBackground(Palette.card)
-                        .listRowSeparatorTint(Palette.line)
-                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                            if method.kind == .card {
-                                Button(role: .destructive) { removing = method } label: { Label("Remove", systemImage: "trash") }
-                            }
-                        }
-                        .accessibilityElement(children: .combine)
-                        .accessibilityLabel("\(method.label)\(method.isDefault ? ", default" : "")")
-                    }
-                }
-                .listStyle(.insetGrouped)
-                .scrollContentBackground(.hidden)
-            }
-            if app.payments.checkoutCard == nil {
-                SecondaryButton(title: "Add a card", symbol: "plus") { adding = true }
-                    .screenGutter()
-                    .padding(.bottom, Space.l)
-            } else {
-                // With Stripe, a card goes in the first time you pay with it, then it's kept here.
-                Text("You add a card when you book. It's kept here for next time.")
-                    .font(HDFont.caption)
-                    .foregroundStyle(Palette.inkSoft)
-                    .multilineTextAlignment(.center)
-                    .frame(maxWidth: .infinity)
-                    .screenGutter()
-                    .padding(.bottom, Space.l)
-            }
+    /// The booking that's in the way, soonest first, on either side.
+    private func whyNot() -> DeleteRefusal {
+        let mine = app.bookings.filter(\.isUnfinished).map { ($0, false) }
+        let hers = app.proBookings.filter(\.isUnfinished).map { ($0, true) }
+        guard let pick = (mine + hers).min(by: { $0.0.start < $1.0.start }) else {
+            return DeleteRefusal(line: app.lastError ?? "That didn't go through. Nothing's been deleted. Try again.", booking: nil, isProSide: false)
         }
-        .paperBackground()
-        .sheet(isPresented: $adding) {
-            AddCardSheet { added in
-                guard var c = app.client else { return }
-                var new = added
-                if c.paymentMethods.isEmpty { new.isDefault = true }
-                c.paymentMethods.append(new)
-                app.client = c
-                Task { try? await app.data.updateClient(c) }
-                adding = false
-            }
+        let (b, proSide) = pick
+        let line: String
+        if proSide {
+            line = "You've got \(app.clientName(b.clientID)) \(b.start.hdSpokenDay) in Pro mode. Finish or cancel it, then try again."
+        } else {
+            let name = app.pro(b.proID)?.firstName ?? "a booking"
+            line = "You've got \(name) \(b.start.hdSpokenDay). Finish or cancel it, then try again."
         }
-        .confirmationDialog(
-            "Remove \(removing?.brand ?? "card") ending \(removing?.last4 ?? "")?",
-            isPresented: Binding(get: { removing != nil }, set: { if !$0 { removing = nil } }),
-            titleVisibility: .visible
-        ) {
-            Button("Remove", role: .destructive) { if let m = removing { remove(m) } }
-            Button("Cancel", role: .cancel) { removing = nil }
+        return DeleteRefusal(line: line, booking: b, isProSide: proSide)
+    }
+
+    private func refusalSheet(_ r: DeleteRefusal) -> some View {
+        ConfirmSheet(title: "Not yet.",
+                     message: r.line,
+                     confirmTitle: r.booking == nil ? "OK" : "Open it",
+                     cancelTitle: r.booking == nil ? "Close" : "Not now",
+                     onConfirm: {
+                         refusal = nil
+                         guard let b = r.booking else { return }
+                         Task { @MainActor in
+                             try? await Task.sleep(for: .milliseconds(450))
+                             openBooking(b, proSide: r.isProSide)
+                         }
+                     },
+                     onCancel: { refusal = nil }) { EmptyView() }
+            .confirmSheetPresentation()
+    }
+
+    private func openBooking(_ b: Booking, proSide: Bool) {
+        if proSide {
+            app.switchMode(.pro)
+            app.selectedProTab = .today
+            app.pendingRoute = .proBooking(b.id)
+        } else {
+            app.selectedTab = .bookings
+            app.pendingRoute = .booking(b.id)
         }
-    }
-
-    private func makeDefault(_ method: PaymentMethod) {
-        guard var c = app.client else { return }
-        for i in c.paymentMethods.indices { c.paymentMethods[i].isDefault = c.paymentMethods[i].id == method.id }
-        Haptics.light()
-        app.client = c
-        Task { try? await app.data.updateClient(c) }
-    }
-
-    private func remove(_ method: PaymentMethod) {
-        guard var c = app.client else { return }
-        c.paymentMethods.removeAll { $0.id == method.id }
-        if method.isDefault, !c.paymentMethods.isEmpty { c.paymentMethods[0].isDefault = true }
-        app.client = c
-        removing = nil
-        Task { try? await app.data.updateClient(c) }
-    }
-}
-
-// MARK: - Notifications
-
-/// What we'll tell you about. Booking updates stay on; they're the useful ones.
-struct AccountNotificationsSheet: View {
-    @Environment(AppState.self) private var app
-    @Environment(\.dismiss) private var dismiss
-    @AppStorage("notify.messages") private var messages = true
-    @AppStorage("notify.reminders") private var reminders = true
-    @AppStorage("notify.whosFree") private var whosFree = false
-    /// What iOS says. The toggles below only matter once this is on.
-    @State private var system: UNAuthorizationStatus = .authorized
-
-    var body: some View {
-        VStack(spacing: 0) {
-            SheetHeader(title: "Notifications", onClose: { dismiss() })
-            ScrollView {
-                if system == .denied || system == .notDetermined {
-                    VStack(alignment: .leading, spacing: Space.xs) {
-                        InlineNote(text: system == .denied
-                                   ? "Notifications are off for Hair Done in Settings, so none of these come through."
-                                   : "Notifications aren't on yet, so none of these come through.",
-                                   tone: .warn)
-                        TertiaryButton(title: system == .denied ? "Open Settings" : "Turn on", tint: Palette.lacquer) {
-                            Task { @MainActor in await turnOn() }
-                        }
-                        .padding(.horizontal, -8)
-                    }
-                    .screenGutter()
-                    .padding(.top, Space.s)
-                }
-                VStack(spacing: 0) {
-                    toggleRow("Booking updates", sub: "Can't turn these off, sorry. They're the useful ones.", isOn: .constant(true), locked: true)
-                    Hairline()
-                    toggleRow("Messages", isOn: $messages)
-                    Hairline()
-                    toggleRow("Day-before reminders", isOn: $reminders)
-                    Hairline()
-                    toggleRow("Who's free near you", sub: "Now and then. Never before 9 am.", isOn: $whosFree)
-                }
-                .card()
-                .screenGutter()
-                .padding(.top, Space.s)
-            }
-        }
-        .paperBackground()
-        .task { system = await PushCenter.shared.status() }
-        .onChange(of: messages) { _, _ in syncMaster() }
-        .onChange(of: reminders) { _, _ in syncMaster() }
-        .onChange(of: whosFree) { _, _ in syncMaster() }
-    }
-
-    private func toggleRow(_ title: String, sub: String? = nil, isOn: Binding<Bool>, locked: Bool = false) -> some View {
-        Toggle(isOn: isOn) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title).font(HDFont.body).foregroundStyle(Palette.ink)
-                if let sub { Text(sub).font(HDFont.caption).foregroundStyle(Palette.inkSoft).fixedSize(horizontal: false, vertical: true) }
-            }
-        }
-        .tint(Palette.lacquer)
-        .disabled(locked)
-        .padding(.vertical, Space.m)
-        .onChange(of: isOn.wrappedValue) { _, _ in Haptics.selection() }
-    }
-
-    @MainActor
-    private func turnOn() async {
-        if system == .denied {
-            if let url = URL(string: UIApplication.openSettingsURLString) { _ = await UIApplication.shared.open(url) }
-            return
-        }
-        PushCenter.shared.markAsked(.client)
-        await PushCenter.shared.requestPermission()
-        system = await PushCenter.shared.status()
-    }
-
-    /// `client.notificationsOn` mirrors the optional ones: on if any of them is.
-    private func syncMaster() {
-        guard var c = app.client else { return }
-        let on = messages || reminders || whosFree
-        guard c.notificationsOn != on else { return }
-        c.notificationsOn = on
-        app.client = c
-        Task { try? await app.data.updateClient(c) }
-    }
-}
-
-// MARK: - Help
-
-/// A few answers, and a person if they're not enough.
-struct AccountHelpSheet: View {
-    @Environment(\.dismiss) private var dismiss
-    @State private var open: Set<String> = []
-
-    private let faqs: [(String, String)] = [
-        ("How holds and charges work", "When you book, we hold the total on your card. Nothing's taken until she marks the booking done, then it's charged and the receipt lands in your inbox. If the booking doesn't happen, the hold drops off in a few days."),
-        ("Cancelling and rescheduling", "Cancel with more than 24 hours' notice and it's free. Less than that and she keeps half. She's already turned down other work for you. Rescheduling with more than 24 hours' notice is free too; inside that, it counts as a cancel."),
-        ("What if she's late", "She'll message you from the thread if she's running behind. If she's more than 20 minutes late with no word, message us from here and a person will sort it, usually the same day."),
-        ("Safety", "Every pro has had her ID checked before she's listed, and reviews only come from finished, paid bookings. Phone numbers stay hidden until she's confirmed. If anything feels off, report the pro from her profile or the conversation and we'll look at it."),
-        ("Reporting a pro", "Open her profile or the conversation and tap Report. Tell us what happened in a line or two. A person reads every one."),
-        ("Deleting your account", "Tap Delete account at the bottom of You. Profile, addresses and cards go. Past receipts stay in your email. It can't be undone, and it has to wait until any booking you've got on is finished.")
-    ]
-
-    var body: some View {
-        VStack(spacing: 0) {
-            SheetHeader(title: "Help", subtitle: "A person replies, usually the same day.", onClose: { dismiss() })
-            ScrollView {
-                VStack(spacing: Space.l) {
-                    VStack(spacing: 0) {
-                        ForEach(Array(faqs.enumerated()), id: \.offset) { i, faq in
-                            faqRow(faq.0, answer: faq.1)
-                            if i < faqs.count - 1 { Hairline() }
-                        }
-                    }
-                    .card()
-                    SecondaryButton(title: "Message us", symbol: "bubble.left") {
-                        if let url = URL(string: "mailto:hello@hairdone.app?subject=Help") { UIApplication.shared.open(url) }
-                    }
-                }
-                .screenGutter()
-                .padding(.top, Space.s)
-                .padding(.bottom, Space.section)
-            }
-        }
-        .paperBackground()
-    }
-
-    private func faqRow(_ title: String, answer: String) -> some View {
-        let isOpen = open.contains(title)
-        return VStack(alignment: .leading, spacing: Space.s) {
-            Button {
-                Haptics.light()
-                withAnimation(Motion.spring) {
-                    if isOpen { open.remove(title) } else { open.insert(title) }
-                }
-            } label: {
-                HStack {
-                    Text(title).font(HDFont.body).foregroundStyle(Palette.ink).multilineTextAlignment(.leading)
-                    Spacer()
-                    Image(systemName: "chevron.down")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(Palette.inkFaint)
-                        .rotationEffect(.degrees(isOpen ? 180 : 0))
-                }
-                .frame(minHeight: 48)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityAddTraits(isOpen ? [.isButton, .isSelected] : .isButton)
-            .accessibilityHint(isOpen ? "Hides the answer" : "Shows the answer")
-            if isOpen {
-                Text(answer)
-                    .font(HDFont.sub)
-                    .foregroundStyle(Palette.inkSoft)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(.bottom, Space.m)
-                    .transition(.opacity.combined(with: .move(edge: .top)))
-            }
-        }
-    }
-}
-
-// MARK: - Terms and privacy
-
-struct AccountLegalSheet: View {
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        VStack(spacing: 0) {
-            SheetHeader(title: "Terms and privacy", onClose: { dismiss() })
-            ScrollView {
-                VStack(alignment: .leading, spacing: Space.l) {
-                    Text("The short version").font(HDFont.heading).foregroundStyle(Palette.ink)
-                    Text("Hair Done connects you with a mobile pro and takes payment for the booking. The pro is her own business; the work is hers, the booking terms are ours. We charge you what's on the review screen and nothing else.")
-                        .font(HDFont.body).foregroundStyle(Palette.ink).fixedSize(horizontal: false, vertical: true)
-                    Text("Your data").font(HDFont.heading).foregroundStyle(Palette.ink)
-                    Text("We keep your name, mobile, email, addresses and bookings so the app works. Your address goes to a pro only once she's confirmed. Your card details go to Stripe, not to us. Location is used only while you're in the app, to show who's near.")
-                        .font(HDFont.body).foregroundStyle(Palette.ink).fixedSize(horizontal: false, vertical: true)
-                    Text("The full terms and privacy policy are on hairdone.app. Questions go to Help.")
-                        .font(HDFont.sub).foregroundStyle(Palette.inkSoft).fixedSize(horizontal: false, vertical: true)
-                }
-                .screenGutter()
-                .padding(.top, Space.s)
-                .padding(.bottom, Space.section)
-            }
-        }
-        .paperBackground()
     }
 }
 
 #Preview("You") {
     AccountView().environment(previewApp())
-}
-
-#Preview("Addresses") {
-    AccountAddressesSheet().environment(previewApp())
-}
-
-#Preview("Payment methods") {
-    AccountPaymentsSheet().environment(previewApp())
 }

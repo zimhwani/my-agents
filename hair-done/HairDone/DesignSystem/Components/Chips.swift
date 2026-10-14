@@ -20,18 +20,21 @@ struct Chip: View {
 /// Cancelled and declined have no dot and sit in inkSoft. No pill, no fill.
 struct StatusBadge: View {
     var status: BookingStatus
+    /// True on the pro side: the pro's words ("Waiting on you", "Client cancelled").
+    var forPro: Bool = false
+    private var text: String { forPro ? status.proLabel : status.label }
     var body: some View {
         HStack(spacing: 6) {
             if !status.isCancelled {
                 Circle().fill(status.color).frame(width: 6, height: 6)
             }
-            Text(status.label)
+            Text(text)
                 .eyebrowStyle(color: status.isCancelled ? Palette.inkSoft : Palette.ink)
                 .lineLimit(1)
                 .fixedSize()
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Status: \(status.label)")
+        .accessibilityLabel("Status: \(text)")
     }
 }
 

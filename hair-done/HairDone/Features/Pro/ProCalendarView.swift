@@ -1,10 +1,11 @@
 import SwiftUI
 
-/// Week view of her bookings, and the usual week she works. Days off live here too.
+/// Her week, and the hours she works. Blocking a day saves at once (with Undo); changes to her
+/// usual hours wait for Save, which slides up only once something's changed.
 struct ProCalendarView: View {
     @Environment(AppState.self) private var app
 
-    private enum Segment: String, CaseIterable { case week = "Week", availability = "Availability" }
+    private enum Segment: String, CaseIterable { case week = "Week", hours = "Hours" }
     private enum DayItem: Identifiable {
         case booking(Booking)
         case free(Int, Int)
@@ -25,58 +26,133 @@ struct ProCalendarView: View {
     @State private var segment: Segment = .week
     @State private var weekStart: Date = ProWeek.monday(of: Date())
     @State private var selectedDay: Date = Date().startOfDay
-    @State private var draft: WeeklyAvailability = .standard
-    @State private var loaded = false
-    @State private var saving = false
-    @State private var dayOffPick: Date = Date().adding(days: 1).startOfDay
+    @State private var path = NavigationPath()
+    @State private var blocking = false
+    @State private var hoursDraft = HoursDraft()
+    @State private var hoursLoaded = false
+    @State private var savingHours = false
+    @State private var hoursFailed = false
+    private let unsavedID = "calendar.hours"
+    private var savedHours: HoursDraft { HoursDraft(app.proSelf) }
+    private var hoursDirty: Bool { hoursLoaded && hoursDraft != savedHours }
+    /// The day just blocked or unblocked, for Undo.
+    @State private var undo: UndoDay? = nil
+
+    private struct UndoDay: Equatable {
+        let day: Date
+        let wasBlocked: Bool
+        let line: String
+    }
 
     private var availability: WeeklyAvailability { app.proSelf?.availability ?? .standard }
     private var isCurrentWeek: Bool { weekStart == ProWeek.monday(of: Date()) }
-    private var isDirty: Bool { draft != availability }
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $path) {
             ScrollView {
-                VStack(alignment: .leading, spacing: Space.xl) {
-                    Text("Calendar").font(HDFont.hero).foregroundStyle(Palette.ink)
-                    Picker("Section", selection: $segment) {
-                        ForEach(Segment.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                VStack(alignment: .leading, spacing: 0) {
+                    if app.isOffline { OfflineBar().padding(.horizontal, -Space.gutter) }
+                    ProTabHeader("Calendar.") {
+                        TextTabs(selection: $segment, options: Segment.allCases) { $0.rawValue }
                     }
-                    .pickerStyle(.segmented)
-                    switch segment {
-                    case .week: weekView
-                    case .availability: availabilityView
+                    .padding(.top, Space.s)
+                    if app.proSideLoadFailed && app.proBookings.isEmpty && segment == .week {
+                        ErrorState { Task { await app.loadProSide() } }
+                            .padding(.horizontal, -Space.gutter)
+                    } else {
+                        switch segment {
+                        case .week: weekView.padding(.top, Space.xl)
+                        case .hours: ProHoursPanel(draft: $hoursDraft).padding(.top, Space.xl)
+                        }
                     }
                 }
                 .screenGutter()
-                .padding(.top, Space.s)
-                .padding(.bottom, Space.section)
+                .padding(.bottom, Space.section + 60)
             }
             .paperBackground()
             .refreshable { await app.loadProSide() }
             .toolbar(.hidden, for: .navigationBar)
             .hdDestinations()
-            .onAppear { if !loaded { draft = availability; loaded = true } }
+            .overlay(alignment: .bottom) { undoBar }
+            .safeAreaInset(edge: .bottom, spacing: 0) { hoursSaveBar }
+            .animation(Motion.spring, value: hoursDirty)
+            .proSideBanner()
         }
+        .onAppear {
+            if !hoursLoaded { hoursDraft = savedHours; hoursLoaded = true }
+        }
+        .onChange(of: hoursDirty) { _, dirty in
+            ProUnsavedWork.shared.update(unsavedID, dirty: dirty, save: { await saveHours() }, discard: { discardHours() })
+        }
+        // Her saved hours changed underneath (a refresh, another device) and she hadn't touched them here.
+        .onChange(of: savedHours) { old, new in
+            if hoursDraft == old { hoursDraft = new }
+        }
+    }
+
+    // MARK: Hours save
+
+    /// Slides up only once her hours have changed, on either segment, so it can't be missed.
+    @ViewBuilder
+    private var hoursSaveBar: some View {
+        if hoursDirty {
+            VStack(alignment: .leading, spacing: Space.s) {
+                if hoursFailed { FieldMessage(text: "Didn't save. Your changes are still here. Try again.") }
+                HStack(spacing: Space.s) {
+                    InkButton(title: "Save hours", isLoading: savingHours, isEnabled: !app.isOffline) { Task { _ = await saveHours() } }
+                    OutlineButton(title: "Discard") { discardHours() }
+                        .frame(maxWidth: 140)
+                }
+            }
+            .padding(.horizontal, Space.gutter)
+            .padding(.vertical, Space.m)
+            .background(Palette.paper)
+            .overlay(alignment: .top) { Rectangle().fill(Palette.lineStrong).frame(height: 0.5) }
+            .transition(.move(edge: .bottom).combined(with: .opacity))
+        }
+    }
+
+    private func discardHours() {
+        withAnimation(Motion.spring) { hoursDraft = savedHours; hoursFailed = false }
+        ProUnsavedWork.shared.clear(unsavedID)
+    }
+
+    @MainActor
+    private func saveHours() async -> Bool {
+        guard var p = app.proSelf else { return false }
+        savingHours = true
+        defer { savingHours = false }
+        hoursFailed = false
+        hoursDraft.apply(to: &p)
+        guard await app.saveProSelf(p) else {
+            hoursFailed = true
+            return false
+        }
+        Haptics.success()
+        app.show("Saved.")
+        ProUnsavedWork.shared.clear(unsavedID)
+        return true
     }
 
     // MARK: Week
 
     private var weekView: some View {
         VStack(alignment: .leading, spacing: Space.l) {
-            HStack {
+            HStack(spacing: 0) {
                 IconButton(symbol: "chevron.left", label: "Previous week") { move(by: -7) }
+                    .padding(.leading, -12)
                 Spacer()
-                VStack(spacing: 2) {
-                    Text("Week of \(weekStart.shortDay)").font(HDFont.heading).foregroundStyle(Palette.ink)
+                VStack(spacing: 0) {
+                    Text("Week of \(weekStart.shortDay)").font(HDFont.sub).foregroundStyle(Palette.ink)
                     if !isCurrentWeek {
-                        TertiaryButton(title: "Today", tint: Palette.lacquer) {
+                        TertiaryButton(title: "Today", tint: Palette.ink) {
                             withAnimation(Motion.spring) { weekStart = ProWeek.monday(of: Date()); selectedDay = Date().startOfDay }
                         }
                     }
                 }
                 Spacer()
                 IconButton(symbol: "chevron.right", label: "Next week") { move(by: 7) }
+                    .padding(.trailing, -12)
             }
             dayStrip
             dayDetail
@@ -84,7 +160,7 @@ struct ProCalendarView: View {
     }
 
     private var dayStrip: some View {
-        HStack(spacing: 4) {
+        HStack(spacing: 2) {
             ForEach(ProWeek.days(from: weekStart), id: \.self) { day in
                 let count = bookings(on: day).count
                 let isSelected = Calendar.current.isDate(day, inSameDayAs: selectedDay)
@@ -94,48 +170,51 @@ struct ProCalendarView: View {
                     Haptics.selection()
                     withAnimation(Motion.spring) { selectedDay = day }
                 } label: {
-                    VStack(spacing: 6) {
-                        Text(day.weekday.short).font(HDFont.caption).foregroundStyle(isSelected ? Palette.paper : Palette.inkSoft)
+                    VStack(spacing: 4) {
+                        Text(day.weekday.short).font(HDFont.caption)
+                            .foregroundStyle(isSelected ? Palette.paper : Palette.inkSoft)
                         Text(day.dayNumber)
-                            .font(isToday ? HDFont.bodyStrong : HDFont.body)
-                            .foregroundStyle(isSelected ? Palette.paper : (isToday ? Palette.lacquer : (off ? Palette.inkFaint : Palette.ink)))
-                            .monospacedDigit()
+                            .font(HDFont.sans(20, relativeTo: .title3).monospacedDigit())
+                            .foregroundStyle(isSelected ? Palette.paper : Palette.ink)
+                            .opacity(off && !isSelected ? 0.45 : 1)
+                            .padding(.bottom, 2)
+                            .overlay(alignment: .bottom) {
+                                if isToday && !isSelected { Rectangle().fill(Palette.ink).frame(height: 1) }
+                            }
                         HStack(spacing: 2) {
                             ForEach(0..<min(count, 3), id: \.self) { _ in
-                                Circle().fill(isSelected ? Palette.paper : Palette.lacquer).frame(width: 4, height: 4)
+                                Circle().fill(isSelected ? Palette.paper : Palette.inkSoft).frame(width: 4, height: 4)
                             }
                         }
                         .frame(height: 4)
                     }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 10)
-                    .background(isSelected ? Palette.ink : Color.clear, in: RoundedRectangle(cornerRadius: Radius.input, style: .continuous))
+                    .frame(maxWidth: .infinity, minHeight: 44)
+                    .padding(.vertical, Space.s)
+                    .background(isSelected ? Palette.ink : Color.clear, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+                    .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("\(day.friendlyDay), \(count == 1 ? "1 booking" : "\(count) bookings")\(off ? ", off" : "")")
-                .accessibilityAddTraits(isSelected ? .isSelected : [])
+                .accessibilityLabel("\(day.friendlyDay), \(ProFlow.count(count, "booking", "bookings"))\(off ? ", off" : "")")
+                .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
             }
         }
-        .padding(6)
-        .background(Palette.card, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: Radius.card, style: .continuous).strokeBorder(Palette.line, lineWidth: 1))
     }
 
     @ViewBuilder
     private var dayDetail: some View {
         let items = dayItems(for: selectedDay)
+        let blocked = availability.isOff(selectedDay)
         let off = availability.ranges(on: selectedDay).isEmpty
-        VStack(alignment: .leading, spacing: Space.s) {
+        VStack(alignment: .leading, spacing: 0) {
             HStack(alignment: .firstTextBaseline) {
-                Text(selectedDay.friendlyDay).font(HDFont.heading).foregroundStyle(Palette.ink)
-                if selectedDay.friendlyDay != selectedDay.shortDay {
-                    Text(selectedDay.shortDay).font(HDFont.sub).foregroundStyle(Palette.inkSoft)
-                }
+                Text(selectedDay.weekday.long).font(HDFont.titleSmall).foregroundStyle(Palette.ink)
+                Text(selectedDay.shortDay).font(HDFont.sub).foregroundStyle(Palette.inkSoft)
                 Spacer()
-                if off { Tag(text: "Off") }
+                if blocked { Tag(text: "Blocked") } else if off { Tag(text: "Off") }
             }
+            .padding(.bottom, Space.xs)
             if items.isEmpty {
-                Text(off ? "Off. Nothing booked." : "Free all day.")
+                Text(blocked ? "Blocked. Nobody can book you." : (off ? "Off. Nothing booked." : "Free all day."))
                     .font(HDFont.sub).foregroundStyle(Palette.inkSoft)
                     .padding(.vertical, Space.m)
             } else {
@@ -147,16 +226,40 @@ struct ProCalendarView: View {
                         }
                         .buttonStyle(.plain)
                     case .free(let a, let z):
-                        HStack(spacing: Space.m) {
-                            Text("Free").font(HDFont.caption).foregroundStyle(Palette.inkFaint).frame(width: 66, alignment: .trailing)
-                            Rectangle().fill(Palette.line).frame(width: 3, height: 18).clipShape(Capsule())
-                            Text(TimeRange(startMinutes: a, endMinutes: z).label).font(HDFont.caption).foregroundStyle(Palette.inkFaint)
-                            Spacer()
-                        }
-                        .padding(.vertical, 2)
-                        .accessibilityElement(children: .combine)
+                        Text("Free \(TimeRange(startMinutes: a, endMinutes: z).label)")
+                            .font(HDFont.caption).foregroundStyle(Palette.inkSoft)
+                            .padding(.vertical, Space.m)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .overlay(alignment: .bottom) { Rectangle().fill(Palette.lineStrong).frame(height: 0.5) }
                     }
-                    Hairline()
+                }
+            }
+            blockControl.padding(.top, Space.l)
+        }
+    }
+
+    @ViewBuilder
+    private var blockControl: some View {
+        let day = selectedDay.startOfDay
+        let blocked = availability.isOff(day)
+        let isPast = day < Date().startOfDay
+        if !isPast {
+            VStack(alignment: .leading, spacing: Space.s) {
+                if blocked {
+                    OutlineButton(title: "Unblock \(day.shortDay)", isLoading: blocking, isEnabled: !app.isOffline, compact: true) {
+                        Task { await setBlocked(day, false) }
+                    }
+                } else {
+                    let clash = bookings(on: day).first { $0.status.isUpcoming }
+                    OutlineButton(title: clash == nil ? "Block \(day.shortDay)" : "Block anyway", isLoading: blocking, isEnabled: !app.isOffline, compact: true) {
+                        Task { await setBlocked(day, true) }
+                    }
+                    if let clash {
+                        WarnDotLine(text: "You've got \(app.clientName(clash.clientID)) at \(clash.start.clock). Blocking won't cancel her.", font: HDFont.caption)
+                    } else {
+                        Text("Nobody can book you that day. Bookings you've got still stand.")
+                            .font(HDFont.caption).foregroundStyle(Palette.inkSoft)
+                    }
                 }
             }
         }
@@ -193,81 +296,206 @@ struct ProCalendarView: View {
         return (booked.map { DayItem.booking($0) } + free).sorted { $0.startMinute < $1.startMinute }
     }
 
-    // MARK: Availability
+    // MARK: Blocking, saved at once
 
-    private var availabilityView: some View {
-        VStack(alignment: .leading, spacing: Space.xl) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Your usual week").font(HDFont.heading).foregroundStyle(Palette.ink)
-                Text("Clients only see slots inside these hours. Block a day below for one-offs.")
-                    .font(HDFont.sub).foregroundStyle(Palette.inkSoft)
-                if app.proSelf?.instantBook == true {
-                    Text("Instant book is on. Anything you leave open can be booked without asking you.")
-                        .font(HDFont.caption).foregroundStyle(Palette.warn).padding(.top, 2)
-                }
-            }
-
-            AvailabilityEditor(hours: $draft.hours)
-                .card()
-
-            VStack(alignment: .leading, spacing: Space.s) {
-                HStack {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Between jobs").font(HDFont.body).foregroundStyle(Palette.ink)
-                        Text("\(draft.bufferMinutes) min to pack up and drive.").font(HDFont.caption).foregroundStyle(Palette.inkSoft)
-                    }
-                    Spacer()
-                    Stepper("Between jobs", value: $draft.bufferMinutes, in: 0...60, step: 15).labelsHidden()
-                }
-            }
-            .card()
-
-            VStack(alignment: .leading, spacing: Space.m) {
-                Text("Block a day off").font(HDFont.heading).foregroundStyle(Palette.ink)
-                DatePicker("Day", selection: $dayOffPick, in: Date().startOfDay..., displayedComponents: .date)
-                    .tint(Palette.lacquer)
-                    .font(HDFont.body)
-                SecondaryButton(title: "Block it", symbol: "moon.zzz") { block(dayOffPick) }
-                let clash = bookings(on: dayOffPick).first { $0.status.isUpcoming }
-                if let clash {
-                    Text("You've got \(app.clientName(clash.clientID)) at \(clash.start.clock) in there. Move her first.")
-                        .font(HDFont.caption).foregroundStyle(Palette.warn)
-                }
-                let upcoming = draft.daysOff.filter { $0 >= Date().startOfDay }.sorted()
-                if !upcoming.isEmpty {
-                    Hairline()
-                    ForEach(upcoming, id: \.self) { day in
-                        HStack {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(day.friendlyDay).font(HDFont.body).foregroundStyle(Palette.ink)
-                                Text(day.longDate).font(HDFont.caption).foregroundStyle(Palette.inkSoft)
-                            }
-                            Spacer()
-                            TertiaryButton(title: "Unblock") {
-                                withAnimation(Motion.spring) { draft.daysOff.removeAll { Calendar.current.isDate($0, inSameDayAs: day) } }
-                            }
-                        }
-                    }
-                }
-            }
-            .card()
-
-            PrimaryButton(title: "Save", isLoading: saving, isEnabled: isDirty) { Task { await save() } }
+    private func setBlocked(_ day: Date, _ on: Bool, isUndo: Bool = false) async {
+        guard var p = app.proSelf else { return }
+        blocking = true
+        defer { blocking = false }
+        if on {
+            guard !p.availability.isOff(day) else { return }
+            p.availability.daysOff.append(day)
+        } else {
+            p.availability.daysOff.removeAll { Calendar.current.isDate($0, inSameDayAs: day) }
+        }
+        guard await app.saveProSelf(p) else { return }
+        Haptics.success()
+        if isUndo {
+            withAnimation(Motion.gentle) { undo = nil }
+            app.show(on ? "Blocked again." : "Unblocked.")
+        } else {
+            showUndo(UndoDay(day: day, wasBlocked: on, line: on ? "Blocked \(day.shortDay)." : "Unblocked \(day.shortDay)."))
         }
     }
 
-    private func block(_ day: Date) {
-        let start = day.startOfDay
-        guard !draft.isOff(start) else { return }
-        withAnimation(Motion.spring) { draft.daysOff.append(start) }
+    private func showUndo(_ u: UndoDay) {
+        withAnimation(Motion.spring) { undo = u }
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(5))
+            if undo == u { withAnimation(Motion.gentle) { undo = nil } }
+        }
     }
 
-    private func save() async {
-        guard var pro = app.proSelf else { return }
+    @ViewBuilder
+    private var undoBar: some View {
+        if let u = undo {
+            HStack(spacing: Space.m) {
+                Text(u.line).font(HDFont.sub).foregroundStyle(Palette.paper)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Button {
+                    Task { await setBlocked(u.day, !u.wasBlocked, isUndo: true) }
+                } label: {
+                    Text("Undo").font(HDFont.subMedium).foregroundStyle(Palette.paper).underline()
+                        .frame(minWidth: 44, minHeight: 44)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.leading, Space.l)
+            .padding(.trailing, Space.s)
+            .background(Palette.ink, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+            .padding(.horizontal, Space.gutter)
+            .padding(.bottom, Space.l)
+            .transition(.move(edge: .bottom).combined(with: .opacity))
+            .accessibilityElement(children: .combine)
+        }
+    }
+}
+
+// MARK: - Hours
+
+/// Her usual week, buffer and notice, and the days she's blocked. The draft and its Save live in
+/// `ProCalendarView`, so Save can sit pinned at the bottom.
+struct ProHoursPanel: View {
+    @Environment(AppState.self) private var app
+    @Binding var draft: HoursDraft
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Space.xl) {
+            VStack(alignment: .leading, spacing: Space.xs) {
+                Text("Your usual week").font(HDFont.section).foregroundStyle(Palette.ink)
+                Text("Clients only see times inside these hours. Block a one-off day from Week.")
+                    .font(HDFont.sub).foregroundStyle(Palette.inkSoft)
+                    .fixedSize(horizontal: false, vertical: true)
+                if app.proSelf?.instantBook == true {
+                    WarnDotLine(text: "Instant book is on. Anything you leave open can be booked without asking you.", font: HDFont.caption)
+                        .padding(.top, Space.xs)
+                }
+            }
+            ProHoursForm(hours: $draft.hours, bufferMinutes: $draft.bufferMinutes, noticeMinutes: $draft.noticeMinutes)
+            daysOff
+        }
+    }
+
+    @ViewBuilder
+    private var daysOff: some View {
+        let upcoming = (app.proSelf?.availability.daysOff ?? []).filter { $0 >= Date().startOfDay }.sorted()
+        if !upcoming.isEmpty {
+            VStack(alignment: .leading, spacing: 0) {
+                Text("Days blocked").labelStyle().padding(.bottom, Space.xs)
+                ForEach(upcoming, id: \.self) { day in
+                    HairlineRow(title: day.friendlyDay, subtitle: day.longDate, chevron: false,
+                                trailing: TertiaryButton(title: "Unblock", tint: Palette.ink) { Task { await unblock(day) } })
+                }
+            }
+        }
+    }
+
+    private func unblock(_ day: Date) async {
+        guard var p = app.proSelf else { return }
+        p.availability.daysOff.removeAll { Calendar.current.isDate($0, inSameDayAs: day) }
+        if await app.saveProSelf(p) { app.show("Unblocked \(day.shortDay).") }
+    }
+}
+
+/// The hours she can change in one go (days off save on their own).
+struct HoursDraft: Equatable {
+    var hours: [Weekday: [TimeRange]] = WeeklyAvailability.standard.hours
+    var bufferMinutes: Int = 30
+    var noticeMinutes: Int = 90
+
+    init() {}
+
+    init(_ pro: Pro?) {
+        guard let pro else { return }
+        hours = pro.availability.hours
+        bufferMinutes = pro.availability.bufferMinutes
+        noticeMinutes = pro.noticeMinutes
+    }
+
+    func apply(to pro: inout Pro) {
+        pro.availability.hours = hours
+        pro.availability.bufferMinutes = bufferMinutes
+        pro.noticeMinutes = noticeMinutes
+    }
+}
+
+/// The same hours, pushed on their own (from Profile, or Today's checklist), with Save in the header
+/// and a question on Back if she hasn't saved.
+struct ProHoursScreen: View {
+    @Environment(AppState.self) private var app
+    @Environment(\.dismiss) private var dismiss
+    @State private var draft = HoursDraft()
+    @State private var loaded = false
+    @State private var saving = false
+    @State private var failed = false
+    @State private var confirmLeave = false
+
+    private let unsavedID = "profile.hours"
+    private var saved: HoursDraft { HoursDraft(app.proSelf) }
+    private var isDirty: Bool { loaded && draft != saved }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: Space.xl) {
+                if app.isOffline { OfflineBar().padding(.horizontal, -Space.gutter) }
+                VStack(alignment: .leading, spacing: Space.xs) {
+                    Text("Hours.").font(HDFont.title).foregroundStyle(Palette.ink)
+                    Text("Your usual week. Clients only see times inside it.")
+                        .font(HDFont.sub).foregroundStyle(Palette.inkSoft)
+                }
+                if failed { FieldMessage(text: "Didn't save. Your changes are still here. Try again.") }
+                ProHoursForm(hours: $draft.hours, bufferMinutes: $draft.bufferMinutes, noticeMinutes: $draft.noticeMinutes)
+            }
+            .screenGutter()
+            .padding(.bottom, Space.section)
+        }
+        .paperBackground()
+        .hdNavHeader(nil, onBack: back) {
+            Button {
+                Task { if await save() { dismiss() } }
+            } label: {
+                Group {
+                    if saving { ProgressView().tint(Palette.ink) } else { Text("Save").font(HDFont.subMedium) }
+                }
+                .foregroundStyle(isDirty && !app.isOffline ? Palette.ink : Palette.inkSoft)
+                .frame(minWidth: 44, minHeight: 44)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(!isDirty || saving || app.isOffline)
+        }
+        .onAppear { if !loaded { draft = saved; loaded = true } }
+        .onChange(of: isDirty) { _, dirty in
+            ProUnsavedWork.shared.update(unsavedID, dirty: dirty, save: { await save() }, discard: { draft = saved })
+        }
+        .onDisappear { ProUnsavedWork.shared.clear(unsavedID) }
+        .confirmSheet(isPresented: $confirmLeave, title: "Leave without saving?", message: "Your changes to your hours go.",
+                      confirmTitle: "Leave", cancelTitle: "Keep editing") {
+            draft = saved
+            dismiss()
+        }
+    }
+
+    private func back() {
+        if isDirty { confirmLeave = true } else { dismiss() }
+    }
+
+    @MainActor
+    private func save() async -> Bool {
+        guard var p = app.proSelf else { return false }
         saving = true
         defer { saving = false }
-        pro.availability = draft
-        if await app.saveProSelf(pro) { app.show("Saved.") }
+        failed = false
+        draft.apply(to: &p)
+        guard await app.saveProSelf(p) else {
+            failed = true
+            return false
+        }
+        Haptics.success()
+        app.show("Saved.")
+        ProUnsavedWork.shared.clear(unsavedID)
+        return true
     }
 }
 

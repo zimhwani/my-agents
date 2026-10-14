@@ -275,7 +275,7 @@ Conventions:
 | booking.review.line.service | {service} | Price right, monospaced |
 | booking.review.line.travel | Travel fee | `{price}`. "Free" when $0 |
 | booking.review.line.travel.note | Set by {pro}. Flat, wherever you are in her area. | Caption under the line |
-| booking.review.line.fee | Hair Done fee | Always `$3`. Always its own line. Never folded into services or the total label |
+| booking.review.line.fee | Booking fee | Always `$3`. Always its own line. Never folded into services or the total label |
 | booking.review.line.fee.note | Covers payments and support. Her prices are all-in apart from this. | Caption |
 | booking.review.total | Total | `{price}`, `title` size |
 | booking.review.total.note | Held now, charged when she's done. | |
@@ -705,7 +705,7 @@ Conventions:
 | earnings.breakdown.title | How it breaks down | Sheet per booking |
 | earnings.breakdown.services | Services | `{price}` |
 | earnings.breakdown.travel | Travel fee | `{price}` |
-| earnings.breakdown.fee | Hair Done fee, 12% | `−{price}` |
+| earnings.breakdown.fee | Hair Done's 12% | `−{price}` |
 | earnings.breakdown.tip | Tip | `+{price}`, hidden if none |
 | earnings.breakdown.total | To you | `{payout}`, `title` size |
 | earnings.breakdown.note | The $3 booking fee is paid by the client, not you. | |

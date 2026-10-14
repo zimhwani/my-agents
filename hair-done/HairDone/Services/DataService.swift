@@ -51,6 +51,8 @@ protocol DataService: AnyObject {
     /// Pays for a done booking (with the tip) if it isn't paid yet, then leaves the review.
     /// If the payment goes through and the review doesn't, throws `DataError.paidReviewNotSaved`.
     func submitReview(bookingID: String, rating: Int, text: String, tipCents: Int) async throws -> Booking
+    /// Pays for a done booking, with the tip, and nothing else. The review is its own step afterwards.
+    func pay(bookingID: String, tipCents: Int) async throws -> Booking
     /// "Something wrong?" on a done booking: holds off the charge while a person looks.
     func flagBooking(bookingID: String, detail: String) async throws -> Booking
 
@@ -69,6 +71,29 @@ protocol DataService: AnyObject {
     func payouts(proID: String) async throws -> [Payout]
     /// Asks Stripe (through the server) whether payouts are on yet. The server records the answer too.
     func payoutStatus() async throws -> Bool
+    func closeProProfile() async throws
+    func reopenProProfile() async throws
+
+    // Photos and ID
+    /// Her work photo, uploaded. The public URL goes in `WorkItem.imageURL`, then `updatePro` saves it.
+    func uploadWorkPhoto(_ jpeg: Data) async throws -> URL
+    /// Her profile photo, uploaded and saved on her profile (both sides use it).
+    func uploadAvatar(_ jpeg: Data) async throws -> URL
+    /// Photo ID or a selfie, into her private folder. Sending one again replaces it.
+    func uploadIDDocument(_ jpeg: Data, kind: IDDocumentKind) async throws
+    /// Asks for a person to check her ID. Throws `DataError.idDocsMissing` until both photos are in.
+    func submitIDCheck() async throws
+
+    // Discovery, server side
+    /// Pro id → her first free start today, for pros who can come to you.
+    func whosFree(near coordinate: CLLocationCoordinate2D, category: Category?) async throws -> [String: Date]
+    /// Every bookable pro whose name, suburb, headline, services or specialty match. Two characters or more.
+    func searchPros(_ query: String, near coordinate: CLLocationCoordinate2D) async throws -> [Pro]
+
+    // Phone
+    /// Texts a code to the new number. Nothing changes until it's verified.
+    func changePhone(to phone: String) async throws
+    func verifyPhoneChange(phone: String, code: String) async throws -> Client
 }
 
 /// What the booking flow builds up before it's confirmed.
@@ -79,6 +104,8 @@ struct BookingDraft {
     var address: Address? = nil
     var notes: String = ""
     var inspoSeeds: [Int] = []
+    /// JPEGs picked at the notes step. Uploaded once the booking exists; one that fails doesn't stop it.
+    var inspoPhotos: [Data] = []
     var paymentMethod: PaymentMethod? = nil
 
     var minutes: Int { services.reduce(0) { $0 + $1.minutes } }
@@ -106,6 +133,11 @@ enum DataError: LocalizedError {
     case liveBooking
     case payFailed
     case paidReviewNotSaved
+    case tooLateToMove
+    case tooFarToMove
+    case idDocsMissing
+    case uploadFailed
+    case offline
 
     var errorDescription: String? {
         switch self {
@@ -127,6 +159,11 @@ enum DataError: LocalizedError {
         case .liveBooking: return "You've still got a booking that isn't finished. Nothing's been deleted. Once it's paid or cancelled, try again."
         case .payFailed: return "That didn't go through. Your card hasn't been charged. Try again in a minute."
         case .paidReviewNotSaved: return "Paid. Your review didn't save. Try again from the booking."
+        case .tooLateToMove: return "It's under 24 hours away, so it can't move now. Message her, or cancel."
+        case .tooFarToMove: return "That's too far out to move while your card's on hold. Pick a time in the next six days."
+        case .idDocsMissing: return "Add your photo ID and a selfie first."
+        case .uploadFailed: return "Didn't upload. Tap to try again."
+        case .offline: return "You're offline. Try again when you're back."
         }
     }
 }

@@ -11,6 +11,7 @@ struct DBProCard: Decodable {
     let id: String
     let firstName: String?
     let lastInitial: String?
+    let avatarUrl: String?
     let seed: Int?
     let specialties: [String]?
     let headline: String?
@@ -58,8 +59,12 @@ struct DBOwnPro: Decodable {
     let completedBookings: Int?
     let reliabilityScore: Int?
     let createdAt: Date?
+    let noticeMinutes: Int?
+    let onboardedAt: Date?
+    let closedAt: Date?
+    let idSubmittedAt: Date?
 
-    static let columns = "id,last_initial,specialties,headline,bio,suburb,lat,lng,travel_radius_km,travel_fee_cents,instant_book,years_experience,response_minutes,is_verified,abn,is_active,buffer_minutes,step_minutes,payouts_connected,rating,review_count,completed_bookings,reliability_score,created_at"
+    static let columns = "id,last_initial,specialties,headline,bio,suburb,lat,lng,travel_radius_km,travel_fee_cents,instant_book,years_experience,response_minutes,is_verified,abn,is_active,buffer_minutes,step_minutes,payouts_connected,rating,review_count,completed_bookings,reliability_score,created_at,notice_minutes,onboarded_at,closed_at,id_submitted_at"
 }
 
 struct DBService: Decodable {
@@ -119,6 +124,13 @@ struct DBProfile: Decodable {
     let seed: Int?
     let notificationsOn: Bool?
     let createdAt: Date?
+    let avatarUrl: String?
+}
+
+/// One line from `whos_free`.
+struct DBFree: Decodable {
+    let proId: String
+    let firstFree: Date
 }
 
 struct DBContact: Decodable {
@@ -181,6 +193,12 @@ struct DBReview: Decodable {
     let createdAt: Date?
 }
 
+/// An inspo photo on a booking: a path in the private `inspo` bucket.
+struct DBInspo: Decodable {
+    let imagePath: String
+    let createdAt: Date?
+}
+
 struct DBBooking: Decodable {
     let id: String
     let reference: String?
@@ -208,9 +226,10 @@ struct DBBooking: Decodable {
     let bookingServices: [DBBookingService]?
     let bookingEvents: [DBBookingEvent]?
     let reviews: OneOrMany<DBReview>?
+    let bookingInspo: [DBInspo]?
 
     /// Every column we read, plus the embeds. Leaves out the geography and Stripe ids.
-    static let select = "id,reference,pro_id,client_id,status,starts_at,created_at,address_label,address_line1,address_suburb,address_state,address_postcode,address_instructions,notes,services_cents,travel_fee_cents,booking_fee_cents,tip_cents,discount_cents,cancellation_charge_cents,decline_reason,payment_method_id,hold_state,booking_services(service_id,name,category,price_cents,minutes,sort_order),booking_events(id,status,at),reviews(id,rating,text,service_name,pro_reply,created_at)"
+    static let select = "id,reference,pro_id,client_id,status,starts_at,created_at,address_label,address_line1,address_suburb,address_state,address_postcode,address_instructions,notes,services_cents,travel_fee_cents,booking_fee_cents,tip_cents,discount_cents,cancellation_charge_cents,decline_reason,payment_method_id,hold_state,booking_services(service_id,name,category,price_cents,minutes,sort_order),booking_events(id,status,at),reviews(id,rating,text,service_name,pro_reply,created_at),booking_inspo(image_path,created_at)"
 
     /// Started but never paid for: checkout was left. The server lets these lapse.
     var isUnpaidRequest: Bool {
@@ -315,11 +334,18 @@ enum DBMap {
             seed: c.seed ?? c.id.hdSeed,
             isActive: true,
             completedBookings: c.completedBookings ?? 0,
-            reliabilityScore: (c.isReliable ?? true) ? 1.0 : 0.9
+            reliabilityScore: (c.isReliable ?? true) ? 1.0 : 0.9,
+            avatarURL: url(c.avatarUrl)
         )
     }
 
-    static func ownPro(_ r: DBOwnPro, firstName: String, seed: Int, services: [Service], work: [WorkItem],
+    /// A saved link, if it is one.
+    static func url(_ raw: String?) -> URL? {
+        guard let raw, !raw.isEmpty else { return nil }
+        return URL(string: raw)
+    }
+
+    static func ownPro(_ r: DBOwnPro, firstName: String, seed: Int, avatarURL: URL?, services: [Service], work: [WorkItem],
                        availability: WeeklyAvailability, reviews: [Review]) -> Pro {
         let specialties = categories(r.specialties)
         return Pro(
@@ -350,7 +376,12 @@ enum DBMap {
             completedBookings: r.completedBookings ?? 0,
             reliabilityScore: Double(r.reliabilityScore ?? 100) / 100,
             abn: r.abn ?? "",
-            payoutsConnected: r.payoutsConnected ?? false
+            payoutsConnected: r.payoutsConnected ?? false,
+            noticeMinutes: r.noticeMinutes ?? 90,
+            isOnboarded: r.onboardedAt != nil,
+            isClosed: r.closedAt != nil,
+            idSubmitted: r.idSubmittedAt != nil,
+            avatarURL: avatarURL
         )
     }
 

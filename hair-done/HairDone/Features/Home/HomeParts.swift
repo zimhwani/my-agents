@@ -1,63 +1,22 @@
 import SwiftUI
 
-// The pieces Home is built from, in the luxe language on the former layout.
+// The pieces Home is built from, in the luxe language on the former layout, with the shared tokens.
 // See docs/design/mockups/06-home-former-luxe.png and 07-home-former-luxe-scrolled.png.
-
-// MARK: - Type and colour
-
-/// Home's sizes, from the mockups. Serif is New York; sizes scale with Dynamic Type.
-enum HomeFont {
-    /// 40 serif: "Afternoon, Tash."
-    static var greeting: Font { scaledSerif(40, relativeTo: .largeTitle) }
-    /// 26 serif: "Who's free today", "Near you".
-    static var section: Font { scaledSerif(26, relativeTo: .title1) }
-    /// 19 serif: a name under a portrait photo.
-    static var railName: Font { scaledSerif(19, relativeTo: .title3) }
-    /// 22 serif: a name in a Near you row.
-    static var rowName: Font { scaledSerif(22, relativeTo: .title2) }
-    /// 21 serif: the booking on the Next up card.
-    static var nextUp: Font { scaledSerif(21, relativeTo: .title3) }
-    /// 16 serif: the word under a category photo.
-    static var category: Font { scaledSerif(16, relativeTo: .callout) }
-    /// 15 SF with even digits: "from $95".
-    static let price = Font.system(.subheadline).monospacedDigit()
-
-    private static func scaledSerif(_ size: CGFloat, relativeTo style: UIFont.TextStyle) -> Font {
-        Font.system(size: UIFontMetrics(forTextStyle: style).scaledValue(for: size), weight: .regular, design: .serif)
-    }
-}
-
-/// Fixed colours. The Next up card is ink in both light and dark mode, like the booking ticket.
-enum HomeInk {
-    static let ink = Color(hex: 0x241A16)
-    static let onInk = Color(hex: 0xF4ECE4)
-    static let confirmed = Color(hex: 0x7FA88A)
-    /// Behind a photo that hasn't loaded.
-    static let photoGround = Palette.dyn(light: 0xCBBFB2, dark: 0x2E2622)
-}
-
-/// The eyebrow style: small, medium weight, tracked capitals.
-extension View {
-    func homeEyebrow() -> some View {
-        self.font(HDFont.eyebrow)
-            .tracking(1)
-            .textCase(.uppercase)
-    }
-}
+// Other screens may reuse `HomePhoto`, `HomePortraitTile`, `HomeProRow` and `HomeNextUpCard`.
 
 // MARK: - Photo
 
-/// A work photo that fills its frame, cropped, with a small radius.
+/// A work photo that fills its frame, cropped, at the photo radius.
 struct HomePhoto: View {
     var item: WorkItem?
-    var cornerRadius: CGFloat = 2
+    var cornerRadius: CGFloat = Radius.photo
 
     var body: some View {
         Group {
             if let item {
                 WorkTile(item: item, cornerRadius: 0)
             } else {
-                HomeInk.photoGround
+                Palette.photoGround
             }
         }
         .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
@@ -92,14 +51,16 @@ struct HomePortraitTile: View {
                 HomePhoto(item: item)
                     .frame(width: width, height: (width * 1.25).rounded())
                 Text(title)
-                    .font(HomeFont.railName)
+                    .font(HDFont.nameSmall)
                     .foregroundStyle(Palette.ink)
-                    .lineLimit(1)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
                     .padding(.top, 10)
                 Text(line)
                     .font(HDFont.caption)
                     .foregroundStyle(Palette.inkSoft)
-                    .lineLimit(1)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
                     .padding(.top, 2)
             }
             .frame(width: width, alignment: .leading)
@@ -145,7 +106,7 @@ enum HomeCategoryPhoto {
 }
 
 /// A 104pt photo of that kind of work with the word under it in serif. No tint, no icon.
-/// Selected: the word is underlined and the others step back.
+/// Selected: the word is underlined and the others step back. That's the whole filter: no chips.
 struct HomeCategoryTile: View {
     var category: Category
     var isSelected: Bool
@@ -162,9 +123,9 @@ struct HomeCategoryTile: View {
                 HomePhoto(item: HomeCategoryPhoto.item(for: category), cornerRadius: 0)
                     .scaleEffect(zoom.scale, anchor: zoom.anchor)
                     .frame(width: 104, height: 130)
-                    .clipShape(RoundedRectangle(cornerRadius: 2, style: .continuous))
+                    .clipShape(RoundedRectangle(cornerRadius: Radius.photo, style: .continuous))
                 Text(category.label)
-                    .font(HomeFont.category)
+                    .font(HDFont.categoryWord)
                     .underline(isSelected)
                     .foregroundStyle(Palette.ink)
                     .lineLimit(1)
@@ -185,6 +146,7 @@ struct HomeCategoryTile: View {
 // MARK: - Near you row
 
 /// A 96 by 120 photo beside her name, what she does, where, and the price. A hairline under the words.
+/// Grows with the text: no fixed height.
 struct HomeProRow: View {
     var pro: Pro
     /// "Free from 5 pm", small above her name. Nil when she isn't free that day.
@@ -208,38 +170,39 @@ struct HomeProRow: View {
                 VStack(alignment: .leading, spacing: 0) {
                     if let eyebrow {
                         Text(eyebrow)
-                            .homeEyebrow()
-                            .foregroundStyle(Palette.inkSoft)
+                            .eyebrowStyle()
                             .padding(.bottom, 5)
                     }
                     HStack(alignment: .firstTextBaseline, spacing: Space.s) {
                         Text(pro.displayName)
-                            .font(HomeFont.rowName)
+                            .font(HDFont.name)
                             .foregroundStyle(Palette.ink)
-                            .lineLimit(1)
+                            .lineLimit(2)
+                            .fixedSize(horizontal: false, vertical: true)
                         Spacer(minLength: Space.xs)
                         if let price {
                             Text(price)
-                                .font(HomeFont.price)
+                                .font(HDFont.priceSmall)
                                 .foregroundStyle(Palette.ink)
+                                .fixedSize()
                         }
                     }
                     Text(pro.specialtyLine)
                         .font(HDFont.sub)
                         .foregroundStyle(Palette.ink)
-                        .lineLimit(1)
+                        .fixedSize(horizontal: false, vertical: true)
                         .padding(.top, 4)
                     factsText
                         .font(HDFont.caption)
                         .foregroundStyle(Palette.inkSoft)
-                        .lineLimit(1)
+                        .fixedSize(horizontal: false, vertical: true)
                         .padding(.top, 3)
-                    Spacer(minLength: 0)
-                    Rectangle()
-                        .fill(Palette.line)
-                        .frame(height: 0.5)
                 }
-                .frame(height: 131, alignment: .top)
+                .frame(maxWidth: .infinity, minHeight: 120, alignment: .topLeading)
+                .padding(.bottom, Space.m)
+                .overlay(alignment: .bottom) {
+                    Rectangle().fill(Palette.lineStrong).frame(height: 0.5)
+                }
             }
             .contentShape(Rectangle())
         }
@@ -250,11 +213,11 @@ struct HomeProRow: View {
         .accessibilityAddTraits(.isButton)
     }
 
-    /// "Brunswick · 2.9 km · ★ 4.9 (86)"
+    /// "Brunswick · 2.9 km · ☆ 4.9 (86)": an outline star in inkSoft, as on the profile.
     private var factsText: Text {
         let lead = Text(verbatim: "\(pro.suburb) · \(distanceKm.distanceLabel)")
         guard pro.reviewCount > 0 else { return lead }
-        let star = Text(Image(systemName: "star.fill")).font(.system(size: 10)).foregroundStyle(Palette.honey)
+        let star = Text(Image(systemName: "star")).font(.system(size: 10))
         let rating = Text(verbatim: " \(pro.rating.ratingLabel) (\(pro.reviewCount))")
         return lead + Text(verbatim: " · ") + star + rating
     }
@@ -267,5 +230,74 @@ struct HomeProRow: View {
         if pro.reviewCount > 0 { parts.append("rated \(pro.rating.ratingLabel) from \(pro.reviewCount) reviews") }
         if let price { parts.append(price) }
         return parts.joined(separator: ", ")
+    }
+}
+
+// MARK: - Next up
+
+/// Her next booking as an ink block: the pro's photo, status, what and when. Opens the booking.
+struct HomeNextUpCard: View {
+    var booking: Booking
+    var pro: Pro?
+    var action: () -> Void
+
+    private var title: String {
+        let first = booking.services.first?.name ?? "Booking"
+        let rest = booking.services.count - 1
+        let what = rest > 0 ? "\(first) and \(rest) more" : first
+        if let pro { return "\(what) with \(pro.firstName)" }
+        return what
+    }
+
+    var body: some View {
+        Button {
+            Haptics.light()
+            action()
+        } label: {
+            HStack(spacing: 0) {
+                HomePhoto(item: pro?.homeCover, cornerRadius: 0)
+                    .frame(width: 76)
+                    .frame(maxHeight: .infinity)
+                    .clipped()
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 7) {
+                        Circle()
+                            .fill(booking.status == .requested ? Palette.onInkSoft : Palette.onInk)
+                            .frame(width: 5, height: 5)
+                            .accessibilityHidden(true)
+                        Text("Next up · " + booking.status.label)
+                            .eyebrowStyle(color: Palette.onInkSoft)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    Text(title)
+                        .font(HDFont.nameBar)
+                        .foregroundStyle(Palette.onInk)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text(booking.start.friendlyDayTime)
+                        .font(HDFont.caption)
+                        .foregroundStyle(Palette.onInkSoft)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(.leading, 16)
+                .padding(.vertical, 14)
+                Spacer(minLength: Space.s)
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 13, weight: .regular))
+                    .foregroundStyle(Palette.onInkSoft)
+                    .padding(.trailing, 16)
+                    .accessibilityHidden(true)
+            }
+            .frame(minHeight: 96)
+            .background(Palette.inkGround)
+            .clipShape(RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: Radius.card, style: .continuous)
+                    .strokeBorder(Palette.onInk.opacity(0.10), lineWidth: 0.5)
+            )
+        }
+        .buttonStyle(PressLift(scale: 0.985))
+        .accessibilityElement(children: .combine)
+        .accessibilityHint("Opens the booking")
     }
 }

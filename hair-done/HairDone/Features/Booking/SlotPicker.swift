@@ -1,13 +1,15 @@
 import SwiftUI
 
 /// Day strip + real slots for one pro. Shared by the booking flow's time step and the reschedule sheet.
-/// Owns the day, the fetch, the loading dots and the "she's off Sundays" note; the caller owns the pick.
+/// Owns the day, the fetch, the loading state and the "she's off Sundays" note; the caller owns the pick.
+/// Change `reload` to fetch the day again (after "someone just took that time", say).
 struct SlotPicker: View {
     @Environment(AppState.self) private var app
     var pro: Pro
     var minutes: Int
     @Binding var selected: Date?
     var days: Int = 14
+    var reload: Int = 0
 
     @State private var day: Date
     @State private var slots: [TimeSlot] = []
@@ -15,13 +17,16 @@ struct SlotPicker: View {
     @State private var note: String? = nil
     @State private var loadFailed = false
 
-    init(pro: Pro, minutes: Int, selected: Binding<Date?>, days: Int = 14) {
+    init(pro: Pro, minutes: Int, selected: Binding<Date?>, days: Int = 14, reload: Int = 0) {
         self.pro = pro
         self.minutes = minutes
         self._selected = selected
         self.days = days
+        self.reload = reload
         _day = State(initialValue: (selected.wrappedValue ?? Date()).startOfDay)
     }
+
+    private struct LoadKey: Hashable { var day: Date; var reload: Int }
 
     var body: some View {
         VStack(alignment: .leading, spacing: Space.l) {
@@ -37,14 +42,14 @@ struct SlotPicker: View {
 
             Group {
                 if isLoading {
-                    LoadingDots()
-                        .frame(maxWidth: .infinity, minHeight: 120)
+                    SlotSkeleton()
+                        .screenGutter()
                 } else if loadFailed {
-                    EmptyState(symbol: "clock", title: "Couldn't load her times.", message: "Pull down to try again.", actionTitle: "Try again") {
+                    ErrorState(title: "Couldn't load her times.", message: nil, actionTitle: "Try again") {
                         Task { @MainActor in await load() }
                     }
                 } else if slots.isEmpty {
-                    EmptyState(symbol: "moon", title: day.nothingFreeLine, message: "Try another day. Her free days are the bright ones.")
+                    EmptyState(title: day.nothingFreeLine, message: "Try another day. The faded ones are days she's off.")
                 } else {
                     VStack(alignment: .leading, spacing: Space.l) {
                         if !slots.contains(where: \.isAvailable) {
@@ -59,7 +64,7 @@ struct SlotPicker: View {
             }
             .animation(Motion.gentle, value: isLoading)
         }
-        .task(id: day) { await load() }
+        .task(id: LoadKey(day: day, reload: reload)) { await load() }
         .onChange(of: day) { _, _ in withAnimation(Motion.gentle) { note = nil } }
     }
 
@@ -84,8 +89,8 @@ struct SlotPicker: View {
     }
 }
 
-/// The next N days as tappable cells: weekday letter over the day number.
-/// Days she doesn't work are dimmed; tapping one explains why instead of selecting it.
+/// The next N days as plain columns: weekday over the date. The picked day sits in an ink square.
+/// Days she doesn't work are faded; tapping one says why instead of selecting it.
 struct DayStrip: View {
     var pro: Pro
     @Binding var selected: Date
@@ -100,7 +105,7 @@ struct DayStrip: View {
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: Space.s) {
+                HStack(spacing: Space.xs) {
                     ForEach(dates, id: \.self) { date in
                         DayCell(
                             date: date,
@@ -117,7 +122,7 @@ struct DayStrip: View {
                         .id(date)
                     }
                 }
-                .screenGutter()
+                .padding(.horizontal, Space.gutter - 4)
                 .padding(.vertical, 2)
             }
             .onAppear { proxy.scrollTo(selected.startOfDay, anchor: .center) }
@@ -132,7 +137,7 @@ struct DayStrip: View {
     }
 }
 
-/// One cell in the day strip.
+/// One column in the day strip: weekday SF 13 over the date SF 20, no box until it's picked.
 struct DayCell: View {
     var date: Date
     var isSelected: Bool
@@ -142,24 +147,22 @@ struct DayCell: View {
     var body: some View {
         Button(action: action) {
             VStack(spacing: 4) {
-                Text(date.weekdayLetter)
+                Text(date.weekday.short)
                     .font(HDFont.caption)
-                    .foregroundStyle(isSelected ? Palette.paper.opacity(0.8) : Palette.inkSoft)
+                    .foregroundStyle(isSelected ? Palette.paper : Palette.inkSoft)
                 Text(date.dayNumber)
-                    .font(HDFont.bodyStrong.monospacedDigit())
+                    .font(HDFont.sans(20, relativeTo: .title3).monospacedDigit())
                     .foregroundStyle(isSelected ? Palette.paper : Palette.ink)
             }
-            .frame(width: 48, height: 64)
-            .background(isSelected ? Palette.ink : Palette.card, in: RoundedRectangle(cornerRadius: Radius.tile, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: Radius.tile, style: .continuous)
-                    .strokeBorder(isSelected ? Color.clear : Palette.line, lineWidth: 1)
-            )
-            .opacity(isOff ? 0.4 : 1)
+            .padding(.vertical, Space.s)
+            .frame(minWidth: 48, minHeight: 44)
+            .background(isSelected ? Palette.ink : Color.clear, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+            .opacity(isOff ? 0.35 : 1)
+            .contentShape(Rectangle())
         }
-        .buttonStyle(PressLift(scale: 0.94))
+        .buttonStyle(PressLift(scale: 0.95))
         .accessibilityLabel(accessibilityText)
-        .accessibilityAddTraits(isSelected ? .isSelected : [])
+        .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
     }
 
     private var accessibilityText: String {
@@ -168,14 +171,18 @@ struct DayCell: View {
     }
 }
 
-/// Slots grouped into Morning, Afternoon and Evening. Unavailable ones look faint and,
+/// Slots grouped into Morning, Afternoon and Evening, three to a row. Taken ones are faded and,
 /// when tapped, tell the caller why instead of selecting.
 struct SlotGrid: View {
     var slots: [TimeSlot]
     @Binding var selected: Date?
     var onUnavailable: ((String) -> Void)? = nil
 
-    private let columns = [GridItem(.adaptive(minimum: 88), spacing: Space.s)]
+    @Environment(\.dynamicTypeSize) private var typeSize
+
+    private var columns: [GridItem] {
+        Array(repeating: GridItem(.flexible(), spacing: Space.s), count: typeSize.isAccessibilitySize ? 2 : 3)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: Space.xl) {
@@ -184,6 +191,7 @@ struct SlotGrid: View {
                 if !group.isEmpty {
                     VStack(alignment: .leading, spacing: Space.m) {
                         Text(period.rawValue).labelStyle()
+                            .accessibilityAddTraits(.isHeader)
                         LazyVGrid(columns: columns, spacing: Space.s) {
                             ForEach(group) { slot in
                                 SlotChip(slot: slot, isSelected: selected == slot.start) {
@@ -203,42 +211,55 @@ struct SlotGrid: View {
     }
 }
 
-/// One time chip. Three looks: free, picked, and taken (faint, still tappable for the reason).
+/// One time, squared: a 6pt box with a 1pt line border, ink fill when picked, faded with no border
+/// when taken (still tappable, for the reason).
 struct SlotChip: View {
     var slot: TimeSlot
     var isSelected: Bool
     var action: () -> Void
 
+    private var shape: RoundedRectangle { RoundedRectangle(cornerRadius: Radius.card, style: .continuous) }
+
     var body: some View {
         Button(action: action) {
             Text(slot.start.clock)
-                .font(HDFont.subStrong.monospacedDigit())
-                .foregroundStyle(foreground)
-                .frame(maxWidth: .infinity)
-                .frame(height: 40)
-                .background(background, in: Capsule())
-                .overlay(Capsule().strokeBorder(isSelected ? Color.clear : Palette.line, lineWidth: 1))
+                .font(HDFont.price)
+                .foregroundStyle(isSelected ? Palette.paper : Palette.ink)
+                .lineLimit(1)
+                .minimumScaleFactor(0.9)
+                .padding(.vertical, 10)
+                .frame(maxWidth: .infinity, minHeight: 44)
+                .background(isSelected ? Palette.ink : Color.clear, in: shape)
+                .overlay(shape.strokeBorder(isSelected || !slot.isAvailable ? Color.clear : Palette.line, lineWidth: 1))
+                .opacity(slot.isAvailable ? 1 : 0.35)
+                .contentShape(shape)
         }
-        .buttonStyle(PressLift(scale: 0.95))
+        .buttonStyle(PressLift(scale: 0.96))
         .accessibilityLabel(accessibilityText)
         .accessibilityHint(slot.isAvailable ? "" : "Double tap to hear why")
-        .accessibilityAddTraits(isSelected ? .isSelected : [])
-    }
-
-    private var foreground: Color {
-        if isSelected { return Palette.paper }
-        return slot.isAvailable ? Palette.ink : Palette.inkFaint
-    }
-
-    private var background: Color {
-        if isSelected { return Palette.ink }
-        return slot.isAvailable ? Palette.card : Palette.paper
+        .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
     }
 
     private var accessibilityText: String {
         if slot.isAvailable { return "\(slot.start.clock), available" }
         let why = (slot.reason ?? "not available").lowercasedFirst
         return "\(slot.start.clock), \(why)"
+    }
+}
+
+/// The slot grid loading, at its real shape.
+private struct SlotSkeleton: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: Space.m) {
+            SkeletonBlock(width: 80, height: 10)
+            ForEach(0..<2, id: \.self) { _ in
+                HStack(spacing: Space.s) {
+                    ForEach(0..<3, id: \.self) { _ in SkeletonBlock(height: 44, radius: Radius.card) }
+                }
+            }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Loading her times")
     }
 }
 

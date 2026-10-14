@@ -1,44 +1,67 @@
 import SwiftUI
 import PhotosUI
 
-/// Seven short steps to a live pro profile. Presented full screen from the client side.
+/// Seven short steps to a pro profile. Presented full screen from the client side.
+///
+/// She can leave from any step (the xmark), and what she's done is kept: every step she leaves is
+/// saved on the phone (`ProOnboardingDraft`), and once there's enough for a row, as a draft pro
+/// (`isOnboarded = false`) that clients can't see. Finishing sends it (`isOnboarded = true`); she's
+/// live once payouts are on and a person has checked her ID.
 struct ProOnboardingFlow: View {
     @Environment(AppState.self) private var app
     @Environment(\.openURL) private var openURL
+    @Environment(\.dismiss) private var dismiss
     var onFinished: () -> Void
 
-    private enum IDState { case none, checking, checked }
-    private let totalSteps = 7
+    private let totalSteps = ProOnboardingDraft.totalSteps
+    private let doneStep = ProOnboardingDraft.totalSteps + 1
 
     @State private var step = 0
+    @State private var loaded = false
+    @State private var resumeStep: Int? = nil
+    @State private var wasOnboarded = false
+    @State private var draftID = "pro_\(UUID().uuidString.prefix(8).lowercased())"
+    @State private var seed = Int.random(in: 1...9_999)
+
     @State private var specialties: [Category] = []
     @State private var services: [Service] = []
     @State private var seededFor: Set<Category> = []
     @State private var editingService: Service? = nil
     @State private var addingService = false
     @State private var base = ""
+    @State private var latitude: Double = 0
+    @State private var longitude: Double = 0
     @State private var radiusKm: Double = 10
     @State private var feeText = "15"
-    @State private var hours: [Weekday: [TimeRange]] = WeeklyAvailability.standard.hours
+    @State private var hours = HoursDraft()
     @State private var work: [WorkItem] = []
+    @State private var uploads: [PickedWorkPhoto] = []
     @State private var picks: [PhotosPickerItem] = []
     @State private var abn = ""
-    @State private var idState: IDState = .none
     @State private var payoutsOn = false
     @State private var fetchingURL = false
     @State private var saving = false
     /// A save that didn't go through. Shown above the button; a toast would sit under this cover.
     @State private var problem: String? = nil
+    @State private var confirmLeave = false
 
+    private var userID: String { app.client?.id ?? "" }
     private var abnDigits: String { abn.filter(\.isNumber) }
     private var abnOK: Bool { abnDigits.isEmpty || abnDigits.count == 11 }
-    private var suburb: String { base.trimmingCharacters(in: .whitespaces).isEmpty ? app.location.suburbGuess : base.trimmingCharacters(in: .whitespaces) }
+    private var suburb: String {
+        let typed = base.trimmingCharacters(in: .whitespaces)
+        return typed.isEmpty ? app.location.suburbGuess : typed
+    }
+    private var idSent: Bool { app.proSelf?.idSubmitted == true || app.proSelf?.isVerified == true }
+    /// A specialty and a service: enough for a pro row.
+    private var enoughForRow: Bool { !specialties.isEmpty && !services.isEmpty }
+    private var hasAnswers: Bool { !specialties.isEmpty || !work.isEmpty || !abn.isEmpty || !base.isEmpty }
 
     private var canContinue: Bool {
         switch step {
         case 1: return !specialties.isEmpty
         case 2: return !services.isEmpty
-        case 4: return hours.values.contains { !$0.isEmpty }
+        case 4: return hours.hours.values.contains { !$0.isEmpty }
         case 5: return work.count >= 3
         case 6: return abnOK
         default: return true
@@ -47,7 +70,8 @@ struct ProOnboardingFlow: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            if step > 0 && step <= totalSteps { progress }
+            if step < doneStep { chrome }
+            if app.isOffline { OfflineBar() }
             ScrollView {
                 VStack(alignment: .leading, spacing: Space.xl) {
                     switch step {
@@ -55,15 +79,16 @@ struct ProOnboardingFlow: View {
                     case 1: specialtyStep
                     case 2: servicesStep
                     case 3: travelStep
-                    case 4: availabilityStep
+                    case 4: hoursStep
                     case 5: workStep
                     case 6: idStep
                     case 7: payoutsStep
-                    default: doneStep
+                    default: finishedStep
                     }
                 }
                 .screenGutter()
-                .padding(.vertical, Space.l)
+                .padding(.top, Space.l)
+                .padding(.bottom, Space.xl)
                 .id(step)
                 .transition(.asymmetric(insertion: .move(edge: .trailing).combined(with: .opacity), removal: .opacity))
             }
@@ -72,23 +97,31 @@ struct ProOnboardingFlow: View {
         }
         .paperBackground()
         .animation(Motion.spring, value: step)
+        .onAppear(perform: restore)
         // Stripe tells the server when payouts are on; the app hears about it on the way back.
         .onChange(of: app.proSelf?.payoutsConnected) { _, on in
             if on == true { withAnimation(Motion.spring) { payoutsOn = true } }
         }
         .onChange(of: picks) { _, new in
             guard !new.isEmpty else { return }
-            let category = specialties.first ?? .hair
-            withAnimation(Motion.spring) { work.append(contentsOf: new.map { _ in WorkItem.placeholder(category: category) }) }
+            let items = new
             picks = []
+            Task { await addPhotos(items) }
         }
         .sheet(isPresented: $addingService) {
             ServiceEditorSheet(categories: specialties) { s in withAnimation(Motion.spring) { services.append(s) } }
         }
         .sheet(item: $editingService) { s in
-            ServiceEditorSheet(existing: s, categories: specialties) { updated in
+            ServiceEditorSheet(existing: s, categories: specialties, onRemove: {
+                withAnimation(Motion.spring) { services.removeAll { $0.id == s.id } }
+            }) { updated in
                 if let i = services.firstIndex(where: { $0.id == s.id }) { services[i] = updated }
             }
+        }
+        .confirmSheet(isPresented: $confirmLeave, title: "Finish later?",
+                      message: "Everything so far is saved. Clients can't see you until it's done.",
+                      confirmTitle: "Finish later", cancelTitle: "Keep going") {
+            leave()
         }
         .onChange(of: step) { _, _ in problem = nil }
         .payoutNoticeAlert()
@@ -97,278 +130,443 @@ struct ProOnboardingFlow: View {
 
     // MARK: Chrome
 
-    private var progress: some View {
-        VStack(alignment: .leading, spacing: Space.s) {
-            HStack {
-                IconButton(symbol: "chevron.left", label: "Back") { withAnimation(Motion.spring) { step -= 1 } }
-                Spacer()
-                Text("\(step) of \(totalSteps)").labelStyle()
+    private var chrome: some View {
+        VStack(spacing: 0) {
+            ZStack {
+                if step >= 1 {
+                    Text("\(step) of \(totalSteps)").labelStyle()
+                        .accessibilityLabel("Step \(step) of \(totalSteps)")
+                }
+                HStack(spacing: 0) {
+                    if step >= 1 {
+                        IconButton(symbol: "chevron.left", label: "Back") { back() }
+                    }
+                    Spacer()
+                    IconButton(symbol: "xmark", label: "Close") { close() }
+                }
+                .padding(.horizontal, Space.gutter - 12)
             }
-            ProgressSegments(step: step, total: totalSteps)
+            .frame(minHeight: 44)
+            .padding(.top, Space.s)
+            ProgressLine(fraction: Double(step) / Double(totalSteps))
+                .opacity(step >= 1 ? 1 : 0)
         }
-        .screenGutter()
-        .padding(.top, Space.l)
     }
 
     @ViewBuilder
     private var footer: some View {
-        if step <= totalSteps {
-            VStack(spacing: Space.xs) {
-                if let problem { InlineNote(text: problem, tone: .warn).padding(.bottom, Space.xs) }
-                PrimaryButton(title: footerTitle, isLoading: saving, isEnabled: canContinue) { advance() }
-                if step == 6 && idState != .checked {
-                    TertiaryButton(title: "Do this later") { advance(skipping: true) }
+        if step < doneStep {
+            VStack(alignment: .leading, spacing: Space.xs) {
+                if let problem { FieldMessage(text: problem).padding(.bottom, Space.xs) }
+                InkButton(title: footerTitle, isLoading: saving || fetchingURL, isEnabled: canContinue && !(step == 7 && app.isOffline)) { primary() }
+                if step == 0 && resumeStep != nil {
+                    TertiaryButton(title: "Start from the top") { go(to: 1) }
+                        .frame(maxWidth: .infinity)
+                } else if step == 6 && !idSent {
+                    TertiaryButton(title: "Do this later") { go(to: 7) }
+                        .frame(maxWidth: .infinity)
                 } else if step == 7 && !payoutsOn {
-                    TertiaryButton(title: "Skip for now") { advance(skipping: true) }
+                    TertiaryButton(title: "Do this later") { Task { await finish() } }
+                        .frame(maxWidth: .infinity)
+                        .disabled(saving || app.isOffline)
                 }
             }
             .screenGutter()
             .padding(.vertical, Space.l)
             .background(Palette.paper)
+            .overlay(alignment: .top) { Rectangle().fill(Palette.lineStrong).frame(height: 0.5) }
         }
     }
 
     private var footerTitle: String {
         switch step {
-        case 0: return "Start"
+        case 0: return resumeStep == nil ? "Start" : "Keep going"
         case 5: return work.count >= 3 ? "Next" : "\(work.count) of 3"
         case 7: return payoutsOn ? "Finish" : "Set up payouts"
         default: return "Next"
         }
     }
 
-    private func advance(skipping: Bool = false) {
-        if step == 7 && !payoutsOn && !skipping {
-            Task { await setUpPayouts() }
-            return
+    private func primary() {
+        switch step {
+        case 0: go(to: resumeStep ?? 1)
+        case 7: Task { if payoutsOn { await finish() } else { await setUpPayouts() } }
+        default:
+            if step == 1 { seedServices() }
+            go(to: step + 1)
         }
-        if step == 1 { seedServices() }
-        withAnimation(Motion.spring) { step += 1 }
+    }
+
+    private func back() {
+        go(to: max(step - 1, 0))
+    }
+
+    /// Moves to a step, saving as she leaves this one.
+    private func go(to next: Int) {
+        withAnimation(Motion.spring) { step = next }
+        persist()
+    }
+
+    private func close() {
+        if hasAnswers && step < doneStep {
+            confirmLeave = true
+        } else {
+            dismiss()
+        }
+    }
+
+    private func leave() {
+        persist()
+        dismiss()
+    }
+
+    // MARK: Keeping her place
+
+    private func restore() {
+        guard !loaded else { return }
+        loaded = true
+        let existing = app.proSelf
+        wasOnboarded = existing?.isOnboarded ?? false
+        if let id = existing?.id { draftID = id } else if app.isLive, let id = app.client?.id { draftID = id }
+        if let s = existing?.seed { seed = s }
+        latitude = app.location.coordinate.latitude
+        longitude = app.location.coordinate.longitude
+        payoutsOn = existing?.payoutsConnected ?? false
+
+        if let d = ProOnboardingDraft.load(userID: userID) {
+            specialties = d.specialties
+            services = d.services
+            seededFor = Set(d.specialties)
+            base = d.base
+            if let lat = d.latitude, let lng = d.longitude { latitude = lat; longitude = lng }
+            radiusKm = d.radiusKm
+            feeText = d.feeText
+            hours.hours = d.hours
+            hours.bufferMinutes = d.bufferMinutes
+            hours.noticeMinutes = d.noticeMinutes
+            work = d.work
+            abn = d.abn
+            resumeStep = d.step >= 1 ? min(d.step, totalSteps) : nil
+        } else if let p = existing {
+            // A draft from another phone, or a closed profile coming back: start from what's kept.
+            specialties = p.specialties
+            services = p.services
+            seededFor = Set(p.specialties)
+            base = p.suburb
+            latitude = p.latitude
+            longitude = p.longitude
+            radiusKm = p.travelRadiusKm
+            feeText = ProMoney.dollarsText(p.travelFeeCents)
+            hours = HoursDraft(p)
+            work = p.work
+            abn = p.abn
+            if !p.isOnboarded || p.isClosed { resumeStep = firstUnfinished }
+        }
+    }
+
+    private var firstUnfinished: Int {
+        if specialties.isEmpty { return 1 }
+        if services.isEmpty { return 2 }
+        if work.count < 3 { return 5 }
+        return 7
+    }
+
+    /// On the phone always; as a draft pro once there's enough for a row. A failed draft save is
+    /// quiet: the phone copy has it, and the next step tries again.
+    private func persist() {
+        let reached = min(max(step, resumeStep ?? 0, 1), totalSteps)
+        if step < doneStep {
+            ProOnboardingDraft(step: reached, specialties: specialties, services: services, base: base,
+                               latitude: latitude, longitude: longitude, radiusKm: radiusKm, feeText: feeText,
+                               hours: hours.hours, bufferMinutes: hours.bufferMinutes, noticeMinutes: hours.noticeMinutes,
+                               work: work, abn: abnDigits).save(userID: userID)
+        }
+        guard enoughForRow, !app.isOffline else { return }
+        let pro = draftPro(onboarded: wasOnboarded)
+        Task { await quietSave(pro) }
+    }
+
+    private func quietSave(_ pro: Pro) async {
+        do {
+            let saved = try await app.data.updatePro(pro)
+            app.proSelf = saved
+        } catch {
+            // Kept on the phone; nothing to tell her yet.
+        }
+    }
+
+    /// The draft pro, saved and waited for (payouts and the ID check need a row to hang off).
+    private func saveDraftNow() async -> Bool {
+        guard enoughForRow else { return false }
+        return await app.saveProSelf(draftPro(onboarded: wasOnboarded))
     }
 
     // MARK: Steps
 
     private var intro: some View {
         VStack(alignment: .leading, spacing: Space.m) {
-            DropMark(size: 36).padding(.bottom, Space.s)
-            Text("Your pro side").font(HDFont.hero).foregroundStyle(Palette.ink)
-            Text("Seven short steps. You can come back to any of them, and take bookings before the last two are done.")
+            Text("Get booked.").font(HDFont.display).foregroundStyle(Palette.ink)
+                .accessibilityAddTraits(.isHeader)
+            if let resumeStep {
+                Text("Pick up where you left off. Step \(resumeStep) of \(totalSteps).")
+                    .font(HDFont.quote).foregroundStyle(Palette.ink)
+            }
+            Text("Seven short steps, about ten minutes. You'll need your ABN, a photo of your ID and three photos of your work.")
                 .font(HDFont.body).foregroundStyle(Palette.inkSoft)
+                .fixedSize(horizontal: false, vertical: true)
+            Text("Leave whenever you like. What you've done is kept, and clients can't see you until it's finished.")
+                .font(HDFont.body).foregroundStyle(Palette.inkSoft)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .padding(.top, Space.section)
     }
 
     private func title(_ t: String, _ sub: String) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: Space.s) {
             Text(t).font(HDFont.title).foregroundStyle(Palette.ink)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityAddTraits(.isHeader)
             Text(sub).font(HDFont.sub).foregroundStyle(Palette.inkSoft)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 
     private var specialtyStep: some View {
-        VStack(alignment: .leading, spacing: Space.l) {
-            title("Your specialty", "Pick everything you do. The first one's your main label.")
-            VStack(spacing: 0) {
+        VStack(alignment: .leading, spacing: Space.xl) {
+            title("What do you do?", "Pick everything you offer. The first one you pick is your main label.")
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: Space.m, alignment: .top), count: 3), spacing: Space.l) {
                 ForEach([Category.hair, .nails, .makeup, .lashes, .brows]) { c in
-                    let on = specialties.contains(c)
-                    Button {
-                        Haptics.selection()
-                        withAnimation(Motion.spring) {
-                            if let i = specialties.firstIndex(of: c) { specialties.remove(at: i) } else { specialties.append(c) }
-                        }
-                    } label: {
-                        HStack(spacing: Space.m) {
-                            Image(systemName: c.symbol).font(.system(size: 16, weight: .medium)).foregroundStyle(c.tintInk)
-                                .frame(width: 36, height: 36).background(c.tint, in: Circle())
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(c.specialtyTitle).font(HDFont.body).foregroundStyle(Palette.ink)
-                                Text(c.blurb).font(HDFont.caption).foregroundStyle(Palette.inkSoft)
-                            }
-                            Spacer()
-                            if on, specialties.first == c { Tag(text: "Main", color: Palette.lacquer, background: Palette.lacquerSoft) }
-                            Image(systemName: on ? "checkmark.circle.fill" : "circle")
-                                .font(.system(size: 22)).foregroundStyle(on ? Palette.lacquer : Palette.inkFaint)
-                        }
-                        .padding(.vertical, Space.m)
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityAddTraits(on ? .isSelected : [])
-                    if c != .brows { Hairline() }
+                    specialtyTile(c)
                 }
             }
-            .card(padding: Space.l)
+            if let main = specialties.first {
+                Text("Main label: \(main.specialtyTitle)").font(HDFont.caption).foregroundStyle(Palette.inkSoft)
+            }
         }
+    }
+
+    private func specialtyTile(_ c: Category) -> some View {
+        let on = specialties.contains(c)
+        return Button {
+            Haptics.selection()
+            withAnimation(Motion.spring) {
+                if let i = specialties.firstIndex(of: c) { specialties.remove(at: i) } else { specialties.append(c) }
+            }
+        } label: {
+            VStack(alignment: .leading, spacing: Space.s) {
+                WorkTile(item: WorkItem(id: "specialty_\(c.rawValue)", category: c, caption: c.label, seed: 11), cornerRadius: Radius.photo)
+                    .aspectRatio(4 / 5, contentMode: .fit)
+                    .opacity(on ? 1 : 0.45)
+                HStack(spacing: 4) {
+                    Text(c.specialtyTitle).font(HDFont.categoryWord).foregroundStyle(Palette.ink)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                    if on {
+                        Image(systemName: "checkmark").font(.system(size: 13, weight: .regular)).foregroundStyle(Palette.ink)
+                    }
+                }
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(PressLift(scale: 0.97))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(c.specialtyTitle)
+        .accessibilityAddTraits(on ? [.isButton, .isSelected] : .isButton)
     }
 
     private var servicesStep: some View {
         VStack(alignment: .leading, spacing: Space.l) {
-            title("Services and prices", "Your price is what she sees. Our 12% comes out of your side, and she pays a $3 booking fee on top.")
-            if services.isEmpty {
-                Text("Nothing yet. Your top three is enough to start.").font(HDFont.sub).foregroundStyle(Palette.inkSoft)
-            } else {
-                VStack(spacing: 0) {
-                    ForEach(services) { s in
-                        ServiceEditRow(service: s, onEdit: { editingService = s }, onRemove: {
-                            withAnimation(Motion.spring) { services.removeAll { $0.id == s.id } }
-                        })
-                        if s.id != services.last?.id { Hairline() }
-                    }
+            title("Services and prices", "Your price is what she sees. Hair Done's 12% comes out of your side, and she pays a $3 booking fee on top.")
+            VStack(spacing: 0) {
+                if services.isEmpty {
+                    Text("Nothing yet. Your top three is enough to start.").font(HDFont.sub).foregroundStyle(Palette.inkSoft)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .card(padding: Space.l)
+                ForEach(services) { s in
+                    ServiceEditRow(service: s) { editingService = s }
+                }
             }
-            SecondaryButton(title: "Add a service", symbol: "plus") { addingService = true }
+            OutlineButton(title: "Add a service", symbol: "plus", compact: true) { addingService = true }
             Text("We've started you with common ones for \(specialties.map { $0.specialtyTitle.lowercased() }.joined(separator: " and ")). Change anything.")
                 .font(HDFont.caption).foregroundStyle(Palette.inkSoft)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 
     private var travelStep: some View {
-        VStack(alignment: .leading, spacing: Space.l) {
-            title("Where you'll go", "Your base and how far from it you'll travel. Clients outside this won't see you.")
-            VStack(alignment: .leading, spacing: Space.l) {
-                HDTextField(label: "Your base", placeholder: app.location.suburbGuess, text: $base)
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack {
-                        Text("How far").font(HDFont.subStrong).foregroundStyle(Palette.ink)
-                        Spacer()
-                        Text("\(Int(radiusKm)) km").font(HDFont.price).foregroundStyle(Palette.ink)
-                    }
-                    Slider(value: $radiusKm, in: 2...25, step: 1).tint(Palette.lacquer)
-                        .accessibilityLabel("How far").accessibilityValue("\(Int(radiusKm)) kilometres")
-                    HStack(spacing: Space.s) {
-                        ForEach([5, 10, 15, 25], id: \.self) { km in
-                            Chip(title: "\(km) km", isSelected: Int(radiusKm) == km) { withAnimation(Motion.spring) { radiusKm = Double(km) } }
-                        }
-                    }
-                }
-                VStack(alignment: .leading, spacing: 4) {
-                    HDTextField(label: "Travel fee", placeholder: "15", text: $feeText, keyboard: .decimalPad)
-                    Text("Flat, per booking, shown on your profile. $0 is fine.").font(HDFont.caption).foregroundStyle(Palette.inkSoft)
-                }
-            }
-            .card(padding: Space.l)
+        VStack(alignment: .leading, spacing: Space.xl) {
+            title("Where you'll go", "Your base and how far from it you'll travel.")
+            ProTravelArea(base: $base, latitude: $latitude, longitude: $longitude, radiusKm: $radiusKm, placeholder: app.location.suburbGuess)
+            HDTextField(label: "Travel fee", placeholder: "15", text: $feeText, keyboard: .decimalPad,
+                        caption: "Flat, per booking, shown on your profile. $0 is fine.")
         }
     }
 
-    private var availabilityStep: some View {
-        VStack(alignment: .leading, spacing: Space.l) {
+    private var hoursStep: some View {
+        VStack(alignment: .leading, spacing: Space.xl) {
             title("When you work", "Your usual week. Change any day later from Calendar.")
-            AvailabilityEditor(hours: $hours).card(padding: Space.l)
-            HStack {
-                TertiaryButton(title: "Copy Monday to every day", tint: Palette.lacquer) {
-                    let monday = hours[.monday] ?? []
-                    withAnimation(Motion.spring) { for d in Weekday.week { hours[d] = monday } }
-                }
-                Spacer()
-            }
+            ProHoursForm(hours: $hours.hours, bufferMinutes: $hours.bufferMinutes, noticeMinutes: $hours.noticeMinutes, showsCopyMonday: true)
         }
     }
 
     private var workStep: some View {
         VStack(alignment: .leading, spacing: Space.l) {
-            title("Your work", "At least three. Your photos, your clients, natural light if you can get it. This is what gets you booked.")
-            if !work.isEmpty {
-                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 4), count: 3), spacing: 4) {
+            title("Show your work", "At least three. Your photos of your own work, close and in daylight if you can. No screenshots. This is what gets you booked.")
+            if !work.isEmpty || !uploads.isEmpty {
+                ProFlowLayout(spacing: Space.s) {
                     ForEach(work) { item in
-                        WorkTile(item: item)
-                            .aspectRatio(1, contentMode: .fit)
-                            .overlay(alignment: .topTrailing) {
-                                Button {
-                                    Haptics.light()
-                                    withAnimation(Motion.spring) { work.removeAll { $0.id == item.id } }
-                                } label: {
-                                    Image(systemName: "xmark").font(.system(size: 11, weight: .bold)).foregroundStyle(Palette.ink)
-                                        .frame(width: 26, height: 26).background(Palette.paper.opacity(0.92), in: Circle())
-                                }
-                                .buttonStyle(.plain)
-                                .padding(6)
-                                .accessibilityLabel("Remove photo")
-                            }
+                        UploadTile(state: .done, onRemove: {
+                            withAnimation(Motion.spring) { work.removeAll { $0.id == item.id } }
+                        }) {
+                            WorkTile(item: item, cornerRadius: 0)
+                        }
+                    }
+                    ForEach(uploads) { u in
+                        UploadTile(image: u.image, state: u.state, onRetry: { Task { await upload(u.id) } },
+                                   onRemove: u.state == .failed ? removeUpload(u.id) : nil)
                     }
                 }
             }
-            AddPhotosButton(selection: $picks, quiet: !work.isEmpty)
-            Text(work.count < 3 ? "\(work.count) of 3" : "\(work.count) photos. Tag each one from Work once you're on.")
+            PhotosPicker(selection: $picks, maxSelectionCount: 10, matching: .images) {
+                Text("Add photos")
+                    .font(HDFont.bodyStrong)
+                    .foregroundStyle(Palette.ink)
+                    .frame(maxWidth: .infinity, minHeight: 52)
+                    .overlay(RoundedRectangle(cornerRadius: Radius.button, style: .continuous).strokeBorder(Palette.ink, lineWidth: 1))
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(PressLift())
+            .disabled(app.isOffline)
+            Text(work.count < 3 ? "\(work.count) of 3 minimum" : "\(ProFlow.count(work.count, "photo", "photos")). Tag each one from Work once you're on.")
                 .font(HDFont.caption).foregroundStyle(Palette.inkSoft)
-            Text("Your own work only. Anyone else's and your profile comes down.").font(HDFont.caption).foregroundStyle(Palette.inkSoft)
+            Text("Your own work only. Anyone else's and your profile comes down.")
+                .font(HDFont.caption).foregroundStyle(Palette.inkSoft)
         }
     }
 
+    private func removeUpload(_ id: String) -> () -> Void {
+        { withAnimation(Motion.spring) { uploads.removeAll { $0.id == id } } }
+    }
+
     private var idStep: some View {
-        VStack(alignment: .leading, spacing: Space.l) {
-            title("ID and ABN", "Once, and you get the ID checked badge. Clients look for it.")
-            VStack(alignment: .leading, spacing: Space.l) {
-                VStack(alignment: .leading, spacing: 4) {
-                    HDTextField(label: "ABN", placeholder: "11 digits", text: $abn, keyboard: .numberPad)
-                    if !abnOK { Text("An ABN is 11 digits. Have another look.").font(HDFont.caption).foregroundStyle(Palette.warn) }
-                }
-                Hairline()
-                VStack(alignment: .leading, spacing: Space.s) {
-                    Text("Photo ID").font(HDFont.subStrong).foregroundStyle(Palette.ink)
-                    Text("Licence or passport, then a quick selfie.").font(HDFont.caption).foregroundStyle(Palette.inkSoft)
-                    switch idState {
-                    case .none:
-                        SecondaryButton(title: "Verify ID", symbol: "person.text.rectangle") { Task { await verifyID() } }
-                    case .checking:
-                        HStack(spacing: 8) {
-                            ProgressView().tint(Palette.warn)
-                            Text("Checking. Usually within a day.").font(HDFont.sub).foregroundStyle(Palette.warn)
-                        }
-                        .frame(minHeight: 44)
-                    case .checked:
-                        HStack(spacing: 8) {
-                            VerifiedBadge()
-                            Text("Checked").font(HDFont.sub).foregroundStyle(Palette.success)
-                        }
-                        .frame(minHeight: 44)
-                    }
-                }
-                Text("Your ID is checked, then deleted. Only the tick stays.").font(HDFont.caption).foregroundStyle(Palette.inkSoft)
-            }
-            .card(padding: Space.l)
+        VStack(alignment: .leading, spacing: Space.xl) {
+            title("Who you are", "Clients only book pros a person has checked. Someone from Hair Done does it by hand; nothing's automatic.")
+            ProIDCheckView(prepare: { await saveDraftNow() })
+            HDTextField(label: "ABN", placeholder: "11 digits", text: $abn, keyboard: .numberPad,
+                        caption: "Sole trader is fine.",
+                        error: abnOK ? nil : "An ABN is 11 digits. Have another look.")
         }
     }
 
     private var payoutsStep: some View {
-        VStack(alignment: .leading, spacing: Space.l) {
-            title("Getting paid", "Payouts go to your bank daily through Stripe. About two minutes to set up.")
-            VStack(alignment: .leading, spacing: Space.m) {
-                HStack(spacing: Space.m) {
-                    Image(systemName: payoutsOn ? "checkmark.seal.fill" : "building.columns")
-                        .font(.system(size: 20, weight: .medium))
-                        .foregroundStyle(payoutsOn ? Palette.success : Palette.inkSoft)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(payoutsOn ? "Payouts on" : "Stripe Express").font(HDFont.bodyStrong).foregroundStyle(Palette.ink)
-                        Text(payoutsOn ? "Daily, to your bank." : "Your bank details go to Stripe, not us. You'll land back here when you're done.")
-                            .font(HDFont.caption).foregroundStyle(Palette.inkSoft)
-                    }
-                }
-                if !payoutsOn {
-                    Hairline()
-                    Text("You can take bookings now. You'll need this before your first payout lands.")
-                        .font(HDFont.caption).foregroundStyle(Palette.inkSoft)
-                }
+        VStack(alignment: .leading, spacing: Space.xl) {
+            title("Getting paid", "Payouts go to your bank daily through Stripe. Stripe asks for your details on its own page; we never see your bank login.")
+            VStack(alignment: .leading, spacing: 0) {
+                row("Hair Done takes", "12% of what you charge")
+                row("Clients pay", "a $3 booking fee on top")
+                row("Tips", "all yours")
+                Text("A $150 set with a $15 travel fee pays you $145.20.")
+                    .font(HDFont.quote).foregroundStyle(Palette.ink)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, Space.l)
             }
-            .card(padding: Space.l)
-            if fetchingURL { HStack { Spacer(); LoadingDots(); Spacer() } }
+            VStack(alignment: .leading, spacing: Space.xs) {
+                Text(payoutsOn ? "Payouts on." : "Not set up yet.").font(HDFont.name).foregroundStyle(Palette.ink)
+                Text(payoutsOn ? "Daily, to your bank." : "About two minutes. Clients can't book you until it's done. You'll land back here when you're finished.")
+                    .font(HDFont.sub).foregroundStyle(Palette.inkSoft)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
     }
 
-    private var doneStep: some View {
-        VStack(spacing: Space.l) {
-            LacquerCheck().padding(.top, Space.section)
-            Text("You're on.").font(HDFont.hero).foregroundStyle(Palette.ink)
-            Text("Your profile's live in \(suburb). The first request could be today.")
-                .font(HDFont.body).foregroundStyle(Palette.inkSoft).multilineTextAlignment(.center)
-            if let problem { InlineNote(text: problem, tone: .warn).padding(.top, Space.l) }
-            PrimaryButton(title: "Go to Today", isLoading: saving) { Task { await finish() } }
-                .padding(.top, Space.l)
+    private func row(_ label: String, _ value: String) -> some View {
+        HStack(alignment: .firstTextBaseline) {
+            Text(label).font(HDFont.body).foregroundStyle(Palette.ink)
+            Spacer()
+            Text(value).font(HDFont.sub).foregroundStyle(Palette.inkSoft).multilineTextAlignment(.trailing)
         }
-        .frame(maxWidth: .infinity)
+        .padding(.vertical, Space.m)
+        .overlay(alignment: .bottom) { Rectangle().fill(Palette.lineStrong).frame(height: 0.5) }
+        .accessibilityElement(children: .combine)
     }
 
-    // MARK: Work
+    // MARK: Finished
+
+    private var finishedStep: some View {
+        let pro = app.proSelf
+        let payouts = pro?.payoutsConnected == true || payoutsOn
+        let id = pro?.idSubmitted == true || pro?.isVerified == true
+        let live = payouts && pro?.isVerified == true
+        let titleText: String
+        let line: String
+        if live {
+            titleText = "You're on."
+            line = "Your profile's live in \(suburb). The first request could be today."
+        } else if !payouts && !id {
+            titleText = "Sent."
+            line = "You're not live yet. Finish payouts and we'll check your ID, then clients can book you."
+        } else if !payouts {
+            titleText = "Sent."
+            line = "You're not live yet. Finish payouts, then clients can book you."
+        } else if !id {
+            titleText = "Sent."
+            line = "You're not live yet. Send your ID and we'll check it, then clients can book you."
+        } else {
+            titleText = "Sent."
+            line = "Someone from Hair Done checks your ID by hand, usually within a day. Then clients can book you."
+        }
+        return VStack(alignment: .leading, spacing: Space.l) {
+            if live { LacquerCheck(size: 56).padding(.top, Space.section) } else { Spacer().frame(height: Space.section) }
+            Text(titleText).font(HDFont.display).foregroundStyle(Palette.ink)
+                .accessibilityAddTraits(.isHeader)
+            Text(line).font(HDFont.body).foregroundStyle(Palette.inkSoft)
+                .fixedSize(horizontal: false, vertical: true)
+            if !live {
+                Text("Today shows what's left.").font(HDFont.sub).foregroundStyle(Palette.inkSoft)
+            }
+            InkButton(title: "Go to Today") {
+                Haptics.success()
+                onFinished()
+            }
+            .padding(.top, Space.l)
+        }
+    }
+
+    // MARK: Work photos
+
+    private func addPhotos(_ items: [PhotosPickerItem]) async {
+        var fresh: [PickedWorkPhoto] = []
+        for item in items {
+            guard let image = await PhotoData.image(from: item), let jpeg = PhotoData.jpeg(from: image) else { continue }
+            fresh.append(PickedWorkPhoto(image: image, jpeg: jpeg))
+        }
+        guard !fresh.isEmpty else {
+            problem = "Those photos couldn't be read. Try others."
+            return
+        }
+        withAnimation(Motion.spring) { uploads.append(contentsOf: fresh) }
+        for photo in fresh { await upload(photo.id) }
+    }
+
+    private func upload(_ id: String) async {
+        guard let i = uploads.firstIndex(where: { $0.id == id }) else { return }
+        withAnimation(Motion.gentle) { uploads[i].state = .uploading(0.4) }
+        let jpeg = uploads[i].jpeg
+        let url = await app.uploadWorkPhoto(jpeg)
+        guard let j = uploads.firstIndex(where: { $0.id == id }) else { return }
+        guard let url else {
+            withAnimation(Motion.gentle) { uploads[j].state = .failed }
+            return
+        }
+        let item = WorkItem(id: UUID().uuidString.lowercased(), category: specialties.first ?? .hair, caption: "",
+                            seed: Int.random(in: 1...9_999), imageURL: url)
+        withAnimation(Motion.spring) {
+            uploads.remove(at: j)
+            work.append(item)
+        }
+    }
+
+    // MARK: Saving
 
     private func seedServices() {
         for c in specialties where !seededFor.contains(c) {
@@ -378,24 +576,15 @@ struct ProOnboardingFlow: View {
         services.removeAll { !specialties.contains($0.category) }
     }
 
-    private func verifyID() async {
-        withAnimation(Motion.spring) { idState = .checking }
-        try? await Task.sleep(for: .seconds(1.4))
-        Haptics.success()
-        withAnimation(Motion.spring) { idState = .checked }
-    }
-
     private func setUpPayouts() async {
         guard !fetchingURL else { return }
         fetchingURL = true
         defer { fetchingURL = false }
         problem = nil
-        // The payout link belongs to a pro profile, so on the real backend she's saved as one first.
-        if app.isLive && app.proSelf == nil {
-            guard await app.saveProSelf(draftPro()) else {
-                withAnimation(Motion.gentle) { problem = app.lastError ?? "That didn't save. Try again." }
-                return
-            }
+        // The payout link belongs to a pro profile, so she's saved as a (hidden) draft first.
+        guard await saveDraftNow() else {
+            withAnimation(Motion.gentle) { problem = "Didn't save. Everything's still here. Try again." }
+            return
         }
         // A failure here puts up "Stripe didn't open" (PayoutNoticeAlert).
         guard let url = await app.payoutLink() else { return }
@@ -406,54 +595,79 @@ struct ProOnboardingFlow: View {
         if !app.isLive { withAnimation(Motion.spring) { payoutsOn = true } }
     }
 
+    /// Sends it: `isOnboarded = true`. Clients still can't see her until payouts are on and her ID's checked.
     private func finish() async {
         guard !saving else { return }
         saving = true
         defer { saving = false }
         problem = nil
-        guard await app.saveProSelf(draftPro()) else {
-            withAnimation(Motion.gentle) { problem = app.lastError ?? "That didn't save. Try again." }
+        if app.proSelf?.isClosed == true {
+            guard await app.reopenProProfile() else {
+                withAnimation(Motion.gentle) { problem = "Didn't send. Everything's saved. Try again." }
+                return
+            }
+        }
+        guard await app.saveProSelf(draftPro(onboarded: true)) else {
+            withAnimation(Motion.gentle) { problem = "Didn't send. Everything's saved. Try again." }
             return
         }
+        ProOnboardingDraft.clear(userID: userID)
         Haptics.success()
-        onFinished()
+        withAnimation(Motion.spring) { step = doneStep }
     }
 
-    /// Her profile as the steps have it so far.
-    private func draftPro() -> Pro {
+    /// Her profile as the steps have it so far. Fields set elsewhere (photo, ID, payouts, reviews) are kept.
+    private func draftPro(onboarded: Bool) -> Pro {
         let client = app.client
-        let coordinate = app.location.coordinate
-        var availability = WeeklyAvailability.standard
-        availability.hours = hours
-        let pro = Pro(
-            // On the real backend a pro's id is her account's id.
-            id: app.proSelf?.id ?? (app.isLive ? app.client?.id : nil) ?? "pro_\(UUID().uuidString.prefix(6))",
-            firstName: client?.firstName ?? "You",
-            lastInitial: String(client?.lastName.prefix(1) ?? "").uppercased(),
+        let existing = app.proSelf
+        var availability = existing?.availability ?? WeeklyAvailability.standard
+        hours.apply(to: &availability)
+        let firstName = existing.map(\.firstName).flatMap { $0.isEmpty ? nil : $0 } ?? client?.firstName ?? ""
+        let headline = existing.map(\.headline).flatMap { $0.isEmpty ? nil : $0 }
+            ?? "\(specialties.first?.specialtyTitle ?? "Pro") in \(suburb)."
+        var pro = Pro(
+            id: draftID,
+            firstName: firstName,
+            lastInitial: existing?.lastInitial ?? String(client?.lastName.prefix(1) ?? "").uppercased(),
             specialties: specialties,
-            headline: "\(specialties.first?.specialtyTitle ?? "Pro") in \(suburb).",
-            bio: "",
+            headline: headline,
+            bio: existing?.bio ?? "",
             suburb: suburb,
-            latitude: coordinate.latitude,
-            longitude: coordinate.longitude,
+            latitude: latitude,
+            longitude: longitude,
             travelRadiusKm: radiusKm,
             travelFeeCents: ProMoney.dollars(feeText),
-            rating: 0,
-            reviewCount: 0,
-            isVerified: idState == .checked,
-            instantBook: false,
-            yearsExperience: 0,
-            responseMinutes: 60,
-            joined: Date(),
+            rating: existing?.rating ?? 0,
+            reviewCount: existing?.reviewCount ?? 0,
+            isVerified: existing?.isVerified ?? false,
+            instantBook: existing?.instantBook ?? false,
+            yearsExperience: existing?.yearsExperience ?? 0,
+            responseMinutes: existing?.responseMinutes ?? 60,
+            joined: existing?.joined ?? Date(),
             services: services,
             work: work,
-            reviews: [],
+            reviews: existing?.reviews ?? [],
             availability: availability,
-            seed: Int.random(in: 1...9_999),
-            abn: abnDigits,
-            payoutsConnected: payoutsOn
+            seed: seed
         )
+        pro.isActive = existing?.isActive ?? true
+        pro.completedBookings = existing?.completedBookings ?? 0
+        pro.reliabilityScore = existing?.reliabilityScore ?? 1
+        pro.abn = abnDigits
+        pro.payoutsConnected = (existing?.payoutsConnected ?? false) || payoutsOn
+        pro.noticeMinutes = hours.noticeMinutes
+        pro.isOnboarded = onboarded
+        pro.isClosed = existing?.isClosed ?? false
+        pro.idSubmitted = existing?.idSubmitted ?? false
+        pro.avatarURL = existing?.avatarURL
         return pro
+    }
+}
+
+private extension HoursDraft {
+    func apply(to availability: inout WeeklyAvailability) {
+        availability.hours = hours
+        availability.bufferMinutes = bufferMinutes
     }
 }
 

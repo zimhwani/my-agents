@@ -1,52 +1,9 @@
 import SwiftUI
 
-// MARK: - The ink ground
+// "Check it over" and "You're booked." sit on ink in light and dark alike: `Palette.inkGround`,
+// `inkRaised`, `onInk`, `onInkSoft` and `inkLine`. Lacquer is only on Pay and the drawn check.
 
-/// Paper for browsing, ink for committing. "Check it over" and "You're booked." sit on ink in
-/// light and dark alike, so these are fixed values, not Palette tokens (which flip in dark mode).
-/// Lacquer stays `Palette.lacquer`, and only on Pay and the check.
-enum BookingInk {
-    static let inkGround = Color(hex: 0x241A16)
-    static let onInk = Color(hex: 0xF4ECE4)
-    static let onInkSoft = BookingInk.onInk.opacity(0.62)
-    static let inkLine = BookingInk.onInk.opacity(0.14)
-    static let inkCard = Color(hex: 0x2E2521)
-
-    // The record she keeps: paper on ink, ink type.
-    static let recordPaper = Color(hex: 0xF4ECE4)
-    static let recordInk = Color(hex: 0x241A16)
-    static let recordInkSoft = Color(hex: 0x6F625B)
-
-    /// New York at a fixed design size that still follows Dynamic Type.
-    static func serif(_ size: CGFloat, relativeTo style: UIFont.TextStyle = .body, weight: Font.Weight = .regular) -> Font {
-        Font.system(size: UIFontMetrics(forTextStyle: style).scaledValue(for: size), weight: weight, design: .serif)
-    }
-
-    /// SF Pro at a fixed design size that still follows Dynamic Type.
-    static func sans(_ size: CGFloat, relativeTo style: UIFont.TextStyle = .body, weight: Font.Weight = .regular) -> Font {
-        Font.system(size: UIFontMetrics(forTextStyle: style).scaledValue(for: size), weight: weight, design: .default)
-    }
-}
-
-/// A bare glyph button for ink chrome: no disc, no hairline.
-struct BookingInkIconButton: View {
-    var symbol: String
-    var label: String
-    var tint: Color = BookingInk.onInk
-    var action: () -> Void
-
-    var body: some View {
-        Button(action: { Haptics.light(); action() }) {
-            Image(systemName: symbol)
-                .font(.system(size: 19, weight: .regular))
-                .foregroundStyle(tint)
-                .frame(width: 44, height: 44)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(PressLift(scale: 0.92))
-        .accessibilityLabel(label)
-    }
-}
+// MARK: - The ticket's tear
 
 /// The tear across a ticket: a dashed line with a round notch cut from each edge.
 /// The notches are circles in the ground colour, half outside the card; the card's clip trims them.
@@ -93,14 +50,16 @@ struct TicketDashLine: Shape {
 // MARK: - Step 5: Check it over
 
 /// The ticket: her work, who's coming and when, every line of the price, and the policy in plain words.
-/// Ink, like a ticket. Pay in lacquer and Apple Pay side by side at the bottom.
+/// Ink, like a ticket. Pay in lacquer and Apple Pay side by side at the bottom (stacked at large text).
 struct ReviewStep: View {
     @Environment(AppState.self) private var app
+    @Environment(\.dynamicTypeSize) private var typeSize
     @Binding var draft: BookingDraft
     var error: BookingFlowError? = nil
     var onEdit: (BookingStep) -> Void
     var onPickAnotherTime: () -> Void
     var onTryAgain: () -> Void
+    var onSeeWhosFree: () -> Void = {}
     var isPaying: Bool = false
     var onPay: () -> Void = {}
 
@@ -133,8 +92,8 @@ struct ReviewStep: View {
                     ticket
 
                     Text(ReviewStep.policy)
-                        .font(BookingInk.sans(13, relativeTo: .footnote))
-                        .foregroundStyle(BookingInk.onInkSoft)
+                        .font(HDFont.caption)
+                        .foregroundStyle(Palette.onInkSoft)
                         .lineSpacing(3)
                         .fixedSize(horizontal: false, vertical: true)
                         .padding(.horizontal, 4)
@@ -176,14 +135,9 @@ struct ReviewStep: View {
 
     // MARK: The ticket
 
-    private var cover: WorkItem {
-        pro.work.first(where: { $0.isPinned }) ?? pro.work.first
-            ?? WorkItem(id: "cover_\(pro.id)", category: pro.primaryCategory, caption: pro.displayName, seed: pro.seed)
-    }
-
     private var ticket: some View {
         VStack(alignment: .leading, spacing: 0) {
-            WorkTile(item: cover, cornerRadius: 0)
+            WorkTile(item: pro.homeCover, cornerRadius: 0)
                 .frame(maxWidth: .infinity)
                 .frame(height: 150)
                 .clipped()
@@ -191,14 +145,15 @@ struct ReviewStep: View {
 
             VStack(alignment: .leading, spacing: Space.s) {
                 Text(verbatim: "\(pro.firstName) at yours.")
-                    .font(BookingInk.serif(30, relativeTo: .largeTitle))
+                    .font(HDFont.serif(30, relativeTo: .largeTitle))
                     .tracking(-0.3)
-                    .foregroundStyle(BookingInk.onInk)
+                    .foregroundStyle(Palette.onInk)
+                    .fixedSize(horizontal: false, vertical: true)
                     .accessibilityAddTraits(.isHeader)
 
                 VStack(spacing: 0) {
                     if let start = draft.start {
-                        detailRow("\(start.friendlyDayTime) · \(ReviewStep.shortDuration(draft.minutes))", changeLabel: "Change time") {
+                        detailRow("\(start.friendlyDayTime) · \(ShortDuration.label(draft.minutes))", changeLabel: "Change time") {
                             onEdit(.time)
                         }
                     }
@@ -218,7 +173,7 @@ struct ReviewStep: View {
             .padding(.top, 18)
             .padding(.bottom, 8)
 
-            TicketTear(notchColor: BookingInk.inkGround, lineColor: BookingInk.onInk.opacity(0.22))
+            TicketTear(notchColor: Palette.inkGround, lineColor: Palette.onInk.opacity(0.22))
 
             // The money. Every line, nothing folded into anything else.
             VStack(alignment: .leading, spacing: 14) {
@@ -230,29 +185,28 @@ struct ReviewStep: View {
                 } else {
                     lineItem("Travel fee", amount: "Free", note: "\(pro.firstName) doesn't charge one.")
                 }
-                lineItem("Hair Done fee", amount: Money.format(price.bookingFeeCents))
+                lineItem("Booking fee", amount: Money.format(price.bookingFeeCents))
 
                 Rectangle()
-                    .fill(BookingInk.inkLine)
+                    .fill(Palette.inkLine)
                     .frame(height: 1)
                     .padding(.top, 2)
 
                 VStack(alignment: .leading, spacing: 2) {
-                    HStack(alignment: .firstTextBaseline, spacing: Space.m) {
-                        Text("Total")
-                            .font(BookingInk.sans(17))
-                            .foregroundStyle(BookingInk.onInk)
-                        Spacer(minLength: 0)
-                        Text(Money.format(price.clientTotalCents))
-                            .font(BookingInk.sans(36, relativeTo: .largeTitle).monospacedDigit())
-                            .tracking(-0.6)
-                            .foregroundStyle(BookingInk.onInk)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.7)
+                    ViewThatFits(in: .horizontal) {
+                        HStack(alignment: .firstTextBaseline, spacing: Space.m) {
+                            totalLabel
+                            Spacer(minLength: 0)
+                            totalAmount
+                        }
+                        VStack(alignment: .leading, spacing: 2) {
+                            totalLabel
+                            totalAmount
+                        }
                     }
                     Text(isPaying ? "Sorting it." : "Held now, charged when she's done.")
-                        .font(BookingInk.sans(13, relativeTo: .footnote))
-                        .foregroundStyle(BookingInk.onInkSoft)
+                        .font(HDFont.caption)
+                        .foregroundStyle(Palette.onInkSoft)
                 }
                 .accessibilityElement(children: .combine)
             }
@@ -260,29 +214,44 @@ struct ReviewStep: View {
             .padding(.top, 8)
             .padding(.bottom, 20)
         }
-        .background(BookingInk.inkCard)
-        .clipShape(RoundedRectangle(cornerRadius: Radius.button, style: .continuous))
+        .background(Palette.inkRaised)
+        .clipShape(RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: Radius.button, style: .continuous)
-                .strokeBorder(BookingInk.onInk.opacity(0.10), lineWidth: 0.5)
+            RoundedRectangle(cornerRadius: Radius.card, style: .continuous)
+                .strokeBorder(Palette.onInk.opacity(0.10), lineWidth: 0.5)
         )
+    }
+
+    private var totalLabel: some View {
+        Text("Total")
+            .font(HDFont.body)
+            .foregroundStyle(Palette.onInk)
+    }
+
+    private var totalAmount: some View {
+        Text(Money.format(price.clientTotalCents))
+            .font(HDFont.priceDisplay)
+            .tracking(-0.6)
+            .foregroundStyle(Palette.onInk)
+            .fixedSize()
     }
 
     private func detailRow(_ text: String, changeLabel: String, action: @escaping () -> Void) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: Space.m) {
             Text(verbatim: text)
-                .font(BookingInk.sans(15, relativeTo: .subheadline))
-                .foregroundStyle(BookingInk.onInk.opacity(0.8))
-                .lineLimit(2)
+                .font(HDFont.sub)
+                .foregroundStyle(Palette.onInk.opacity(0.8))
+                .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 0)
             Button(action: { Haptics.light(); action() }) {
                 Text("Change")
-                    .font(BookingInk.sans(15, relativeTo: .subheadline))
-                    .foregroundStyle(BookingInk.onInk.opacity(0.5))
-                    .frame(minHeight: 34)
+                    .font(HDFont.sub)
+                    .foregroundStyle(Palette.onInkSoft)
+                    .frame(minHeight: 44)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .disabled(isPaying)
             .accessibilityLabel(changeLabel)
         }
     }
@@ -291,17 +260,20 @@ struct ReviewStep: View {
         VStack(alignment: .leading, spacing: 3) {
             HStack(alignment: .firstTextBaseline, spacing: Space.m) {
                 Text(verbatim: label)
-                    .font(BookingInk.sans(17))
-                    .foregroundStyle(BookingInk.onInk)
+                    .font(HDFont.body)
+                    .foregroundStyle(Palette.onInk)
+                    .fixedSize(horizontal: false, vertical: true)
                 Spacer(minLength: 0)
                 Text(verbatim: amount)
-                    .font(BookingInk.sans(17).monospacedDigit())
-                    .foregroundStyle(BookingInk.onInk)
+                    .font(HDFont.price)
+                    .foregroundStyle(Palette.onInk)
+                    .fixedSize()
             }
             if let note {
                 Text(verbatim: note)
-                    .font(BookingInk.sans(13, relativeTo: .footnote))
-                    .foregroundStyle(BookingInk.onInkSoft)
+                    .font(HDFont.caption)
+                    .foregroundStyle(Palette.onInkSoft)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
         .accessibilityElement(children: .combine)
@@ -314,7 +286,7 @@ struct ReviewStep: View {
         return pro.instantBook ? "Pay \(total)" : "Request · \(total)"
     }
 
-    private var canPay: Bool { draft.paymentMethod != nil }
+    private var canPay: Bool { draft.paymentMethod != nil && !app.isOffline }
 
     private var payingWithLabel: String {
         guard let method = draft.paymentMethod else { return "Add a way to pay" }
@@ -326,15 +298,22 @@ struct ReviewStep: View {
     private var payBar: some View {
         VStack(alignment: .leading, spacing: Space.s) {
             payingWithRow
-            HStack(spacing: 13) {
-                payButton
-                if applePay != nil { applePayButton }
+            if typeSize.isAccessibilitySize {
+                VStack(spacing: Space.m) {
+                    payButton
+                    if applePay != nil { applePayButton }
+                }
+            } else {
+                HStack(spacing: 13) {
+                    payButton
+                    if applePay != nil { applePayButton }
+                }
             }
         }
         .padding(.horizontal, Space.gutter)
         .padding(.top, Space.s)
         .padding(.bottom, Space.s)
-        .background(BookingInk.inkGround.ignoresSafeArea(.container, edges: .bottom))
+        .background(Palette.inkGround.ignoresSafeArea(.container, edges: .bottom))
     }
 
     /// "Paying with Apple Pay · Change". Opens the full list.
@@ -342,23 +321,18 @@ struct ReviewStep: View {
         Button(action: { Haptics.light(); showPicker = true }) {
             HStack(spacing: 6) {
                 if let method = draft.paymentMethod {
-                    Text(verbatim: "Paying with \(method.label)")
-                        .foregroundStyle(BookingInk.onInkSoft)
-                    Text(verbatim: "·")
-                        .foregroundStyle(BookingInk.onInkSoft)
-                    Text("Change")
-                        .fontWeight(.semibold)
-                        .foregroundStyle(BookingInk.onInk)
+                    (Text(verbatim: "Paying with \(method.label) · ").foregroundColor(Palette.onInkSoft)
+                        + Text("Change").fontWeight(.semibold).foregroundColor(Palette.onInk))
+                        .fixedSize(horizontal: false, vertical: true)
                 } else {
                     Text("Add a way to pay")
                         .fontWeight(.semibold)
-                        .foregroundStyle(BookingInk.onInk)
+                        .foregroundStyle(Palette.onInk)
                 }
                 Spacer(minLength: 0)
             }
-            .font(BookingInk.sans(13, relativeTo: .footnote))
-            .lineLimit(1)
-            .frame(minHeight: 36)
+            .font(HDFont.caption)
+            .frame(minHeight: 44)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -378,16 +352,15 @@ struct ReviewStep: View {
                     ProgressView().tint(Palette.onLacquer)
                 } else {
                     Text(verbatim: payTitle)
-                        .font(BookingInk.sans(17, weight: .semibold).monospacedDigit())
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.8)
+                        .font(HDFont.bodyStrong.monospacedDigit())
+                        .multilineTextAlignment(.center)
                 }
             }
-            .foregroundStyle(canPay ? Palette.onLacquer : BookingInk.onInkSoft)
+            .foregroundStyle(canPay ? Palette.onLacquer : Palette.onInkSoft)
             .padding(.horizontal, Space.s)
-            .frame(maxWidth: .infinity)
-            .frame(height: 56)
-            .background(canPay ? Palette.lacquer : BookingInk.inkLine, in: RoundedRectangle(cornerRadius: Radius.button, style: .continuous))
+            .padding(.vertical, 12)
+            .frame(maxWidth: .infinity, minHeight: 56)
+            .background(canPay ? Palette.lacquerFill : Palette.inkLine, in: RoundedRectangle(cornerRadius: Radius.button, style: .continuous))
             .contentShape(RoundedRectangle(cornerRadius: Radius.button, style: .continuous))
         }
         .buttonStyle(PressLift())
@@ -398,7 +371,7 @@ struct ReviewStep: View {
     /// Black with white type, as Apple's guidelines ask. Drawn by hand: PassKit's button needs entitlements.
     private var applePayButton: some View {
         Button {
-            guard let applePay, !isPaying else { return }
+            guard let applePay, !isPaying, !app.isOffline else { return }
             Haptics.medium()
             tappedApplePay = true
             draft.paymentMethod = applePay
@@ -410,25 +383,26 @@ struct ReviewStep: View {
                 } else {
                     HStack(spacing: 2) {
                         Image(systemName: "apple.logo")
-                            .font(BookingInk.sans(20, weight: .medium))
+                            .font(HDFont.sans(20, weight: .medium))
                             .offset(y: -1)
                         Text("Pay")
-                            .font(BookingInk.sans(22, weight: .medium))
+                            .font(HDFont.sans(22, weight: .medium))
                     }
                 }
             }
             .foregroundStyle(Color.white)
-            .frame(maxWidth: .infinity)
-            .frame(height: 56)
+            .padding(.vertical, 12)
+            .frame(maxWidth: .infinity, minHeight: 56)
             .background(Color.black, in: RoundedRectangle(cornerRadius: Radius.button, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: Radius.button, style: .continuous)
-                    .strokeBorder(BookingInk.onInkSoft, lineWidth: 1)
+                    .strokeBorder(Palette.onInkSoft, lineWidth: 1)
             )
+            .opacity(app.isOffline ? 0.5 : 1)
             .contentShape(RoundedRectangle(cornerRadius: Radius.button, style: .continuous))
         }
         .buttonStyle(PressLift())
-        .disabled(isPaying)
+        .disabled(isPaying || app.isOffline)
         .accessibilityLabel(applePayLabel)
     }
 
@@ -441,19 +415,11 @@ struct ReviewStep: View {
     }
 
     private var notesLine: String? {
-        let n = draft.inspoSeeds.count
+        let n = draft.inspoPhotos.count
         let photos: String? = n == 0 ? nil : (n == 1 ? "1 photo" : "\(n) photos")
         let notes: String? = draft.notes.isEmpty ? nil : "Notes added"
         let parts = [notes, photos].compactMap { $0 }
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
-    }
-
-    /// 75 → "1 h 15", 60 → "1 h", 45 → "45 min". The ticket's short form.
-    private static func shortDuration(_ minutes: Int) -> String {
-        let h = minutes / 60, m = minutes % 60
-        if h == 0 { return "\(m) min" }
-        if m == 0 { return "\(h) h" }
-        return "\(h) h \(m)"
     }
 
     private func pick(_ method: PaymentMethod) {
@@ -472,46 +438,34 @@ struct ReviewStep: View {
             }
         case .slotTaken:
             inkErrorCard(message: error.message, actionTitle: "Pick another", action: onPickAnotherTime)
+        case .proUnavailable:
+            inkErrorCard(message: error.message, actionTitle: "See who's free", action: onSeeWhosFree)
         case .other:
             inkErrorCard(message: error.message, actionTitle: "Try again", action: onTryAgain)
         }
     }
 
     private func inkErrorCard(message: String, actionTitle: String, action: @escaping () -> Void) -> some View {
-        VStack(alignment: .leading, spacing: Space.s) {
-            HStack(alignment: .firstTextBaseline, spacing: Space.s) {
-                Image(systemName: "exclamationmark.circle")
-                    .font(BookingInk.sans(15, relativeTo: .subheadline, weight: .medium))
-                    .accessibilityHidden(true)
-                Text(verbatim: message)
-                    .font(BookingInk.sans(15, relativeTo: .subheadline))
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .foregroundStyle(BookingInk.onInk)
-
-            Button(action: { Haptics.light(); action() }) {
-                Text(verbatim: actionTitle)
-                    .font(BookingInk.sans(15, relativeTo: .subheadline, weight: .semibold))
-                    .underline()
-                    .foregroundStyle(BookingInk.onInk)
-                    .frame(minHeight: 36)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .padding(.leading, 23)
+        VStack(alignment: .leading, spacing: Space.m) {
+            InkNote(text: message)
+            OutlineButton(title: actionTitle, tone: .onInk, compact: true, action: action)
+                .fixedSize()
         }
         .padding(Space.cardPadding)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(BookingInk.inkCard, in: RoundedRectangle(cornerRadius: Radius.button, style: .continuous))
+        .background(Palette.inkRaised, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: Radius.button, style: .continuous)
-                .strokeBorder(BookingInk.inkLine, lineWidth: 1)
+            RoundedRectangle(cornerRadius: Radius.card, style: .continuous)
+                .strokeBorder(Palette.inkLine, lineWidth: 1)
         )
         .accessibilityElement(children: .contain)
     }
 }
 
-/// The full list of ways to pay, behind "Change" on the ticket. Same choices as before, in a sheet.
+// MARK: - Pay with
+
+/// The full list of ways to pay, behind "Change" on the ticket. An ink sheet over the ink ticket:
+/// rows with paper hairlines and a paper check on the one she's paying with.
 private struct PaymentPickerSheet: View {
     @Environment(AppState.self) private var app
     @Environment(\.dismiss) private var dismiss
@@ -525,71 +479,71 @@ private struct PaymentPickerSheet: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            SheetHeader(title: "Pay with", onClose: { dismiss() })
+            InkSheetHeader(title: "Pay with", onClose: { dismiss() })
 
             ScrollView {
                 VStack(alignment: .leading, spacing: Space.l) {
                     VStack(spacing: 0) {
+                        Rectangle().fill(Palette.inkLine).frame(height: 0.5)
                         if let applePay {
-                            PaymentRow(isSelected: isPicked(applePay), action: { choose(applePay) }) {
-                                ApplePayPill(height: 30).accessibilityHidden(true)
-                                Text("Apple Pay").font(HDFont.body).foregroundStyle(Palette.ink)
-                            }
-                            if !cards.isEmpty {
-                                HStack(spacing: Space.m) {
-                                    Hairline()
-                                    Text("or a card").font(HDFont.caption).foregroundStyle(Palette.inkSoft).fixedSize()
-                                    Hairline()
-                                }
-                                .padding(.vertical, Space.xs)
+                            InkChoiceRow(isSelected: isPicked(applePay), action: { choose(applePay) }) {
+                                ApplePayPill(height: 28).accessibilityHidden(true)
+                                Text("Apple Pay").font(HDFont.body).foregroundStyle(Palette.onInk)
                             }
                         }
                         ForEach(cards) { card in
-                            PaymentRow(isSelected: isPicked(card), action: { choose(card) }) {
+                            InkChoiceRow(isSelected: isPicked(card), action: { choose(card) }) {
                                 Image(systemName: "creditcard")
-                                    .font(.system(size: 18, weight: .regular))
-                                    .foregroundStyle(Palette.ink)
+                                    .font(.system(size: 17, weight: .light))
+                                    .foregroundStyle(Palette.onInk)
                                     .frame(width: 28)
                                     .accessibilityHidden(true)
-                                Text("\(card.brand) ending \(card.last4)").font(HDFont.body).foregroundStyle(Palette.ink)
-                                if card.isDefault { Tag(text: "Default") }
+                                VStack(alignment: .leading, spacing: 2) {
+                                    if card.isDefault { Text("Default").eyebrowStyle(color: Palette.onInkSoft) }
+                                    Text("\(card.brand) ending \(card.last4)").font(HDFont.body).foregroundStyle(Palette.onInk)
+                                }
                             }
-                            if card.id != cards.last?.id { Hairline() }
                         }
-                        if !cards.isEmpty || applePay != nil { Hairline() }
                         Button(action: {
                             Haptics.light()
                             if let card = app.payments.checkoutCard { choose(card) } else { showAddCard = true }
                         }) {
-                            HStack(spacing: Space.s) {
-                                Image(systemName: "plus.circle").font(.system(size: 18, weight: .medium))
-                                Text("Add a card").font(HDFont.subStrong)
+                            HStack(spacing: Space.m) {
+                                Image(systemName: "plus")
+                                    .font(.system(size: 17, weight: .light))
+                                    .frame(width: 28)
+                                Text("Add a card").font(HDFont.body)
+                                Spacer(minLength: 0)
                             }
-                            .foregroundStyle(Palette.lacquer)
-                            .frame(minHeight: 48)
-                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .foregroundStyle(Palette.onInk)
+                            .padding(.vertical, Space.m)
+                            .frame(minHeight: 52)
+                            .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
                     }
-                    .card(padding: Space.m)
 
                     Text(holdLine)
                         .font(HDFont.caption)
-                        .foregroundStyle(Palette.inkSoft)
+                        .foregroundStyle(Palette.onInkSoft)
+                        .fixedSize(horizontal: false, vertical: true)
                     Text("Card details go to Stripe, not to us.")
                         .font(HDFont.caption)
-                        .foregroundStyle(Palette.inkFaint)
+                        .foregroundStyle(Palette.onInkSoft)
                 }
                 .screenGutter()
                 .padding(.top, Space.s)
                 .padding(.bottom, Space.xl)
             }
         }
-        .paperBackground()
+        .background(Palette.inkGround.ignoresSafeArea())
+        .presentationBackground(Palette.inkGround)
         .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
         .sheet(isPresented: $showAddCard) {
             AddCardSheet { method in
                 withAnimation(Motion.spring) { selected = method }
+                dismiss()
             }
         }
     }
@@ -602,58 +556,49 @@ private struct PaymentPickerSheet: View {
     }
 }
 
-/// A $0 line that says "Free" instead of "$0".
-struct FreeRow: View {
-    var label: String
-    var note: String? = nil
-
-    var body: some View {
-        HStack(alignment: .firstTextBaseline) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(label).font(HDFont.body).foregroundStyle(Palette.ink)
-                if let note { Text(note).font(HDFont.caption).foregroundStyle(Palette.inkSoft) }
-            }
-            Spacer()
-            Text("Free").font(HDFont.price).foregroundStyle(Palette.success)
-        }
-        .accessibilityElement(children: .combine)
-    }
-}
-
-/// One way to pay, with a radio on the right.
-struct PaymentRow<Content: View>: View {
+/// One choice on an ink sheet: content, then a paper check when it's the one. Paper hairline under.
+private struct InkChoiceRow<Content: View>: View {
     var isSelected: Bool
     var action: () -> Void
     @ViewBuilder var content: () -> Content
 
     var body: some View {
-        Button(action: { Haptics.light(); action() }) {
+        Button(action: { Haptics.selection(); action() }) {
             HStack(spacing: Space.m) {
                 content()
                 Spacer(minLength: 0)
-                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                    .font(.system(size: 22, weight: .regular))
-                    .foregroundStyle(isSelected ? Palette.lacquer : Palette.inkFaint)
+                Image(systemName: "checkmark")
+                    .font(.system(size: 15, weight: .regular))
+                    .foregroundStyle(Palette.onInk)
+                    .opacity(isSelected ? 1 : 0)
                     .accessibilityHidden(true)
             }
+            .padding(.vertical, Space.m)
             .frame(minHeight: 52)
             .contentShape(Rectangle())
+            .overlay(alignment: .bottom) { Rectangle().fill(Palette.inkLine).frame(height: 0.5) }
         }
         .buttonStyle(.plain)
         .accessibilityElement(children: .combine)
-        .accessibilityAddTraits(isSelected ? .isSelected : [])
+        .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
     }
 }
 
 // MARK: - Step 6: You're booked
 
-/// Still on ink. The check draws itself, "You're booked." in serif, then the record she keeps:
-/// paper, her work on top, who it's for, when, where, what, and a lacquer full stop.
+/// Still on ink. The check draws itself (a clock, for a request), "You're booked." in serif, then
+/// the record she keeps: paper, her work on top, who it's for, when, where, what, and a lacquer full stop.
+///
+/// Mockup 05 also shows "Add to Apple Wallet". That needs a signed pass (a Pass Type ID certificate and
+/// a server to sign it), which we don't have, so the space is left out rather than faked.
 struct BookedStep: View {
     @Environment(AppState.self) private var app
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var typeSize
     var booking: Booking
     var pro: Pro
+    /// How many inspo photos she picked, to say so if some didn't make it up.
+    var photosPicked: Int = 0
     var onMessage: () -> Void
     var onDone: () -> Void
 
@@ -667,7 +612,7 @@ struct BookedStep: View {
         if isRequest {
             return "\(pro.firstName) usually replies within \(pro.replyWindow). We'll ping you. Nothing's charged until she says yes."
         }
-        if booking.isToday { return "Sit tight, she's on her way at \(booking.start.clock)." }
+        if booking.isToday { return "Sit tight. \(pro.firstName)'s coming at \(booking.start.clock)." }
         return "\(pro.firstName), \(booking.start.friendlyDayInSentence) at \(booking.start.clock). We'll remind you the day before."
     }
 
@@ -675,25 +620,28 @@ struct BookedStep: View {
         "I've got \(pro.firstName) coming \(booking.start.friendlyDayInSentence) at \(booking.start.clock), \(booking.address.short). Booked on Hair Done. Ref \(booking.reference)."
     }
 
+    /// Some of her photos didn't upload. The booking stands; she can send them in the thread.
+    private var photosMissing: Bool {
+        app.isLive && photosPicked > 0 && booking.inspoURLs.count < photosPicked
+    }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
-                CheckShape()
-                    .trim(from: 0, to: drawn)
-                    .stroke(Palette.lacquer, style: StrokeStyle(lineWidth: 2.6, lineCap: .round, lineJoin: .round))
-                    .frame(width: 52, height: 38)
+                mark
                     .padding(.top, Space.xs)
                     .accessibilityHidden(true)
 
                 VStack(alignment: .leading, spacing: Space.s) {
                     Text(verbatim: title)
-                        .font(BookingInk.serif(42, relativeTo: .largeTitle))
+                        .font(HDFont.serif(42, relativeTo: .largeTitle))
                         .tracking(-0.5)
-                        .foregroundStyle(BookingInk.onInk)
+                        .foregroundStyle(Palette.onInk)
+                        .fixedSize(horizontal: false, vertical: true)
                         .accessibilityAddTraits(.isHeader)
                     Text(verbatim: sub)
-                        .font(BookingInk.sans(17))
-                        .foregroundStyle(BookingInk.onInk.opacity(0.75))
+                        .font(HDFont.body)
+                        .foregroundStyle(Palette.onInk.opacity(0.75))
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 .padding(.top, 18)
@@ -702,18 +650,13 @@ struct BookedStep: View {
                 record
                     .padding(.top, 28)
 
-                HStack(spacing: 13) {
-                    Button(action: { Haptics.light(); onMessage() }) {
-                        outlineLabel("Message \(pro.firstName)")
-                    }
-                    .buttonStyle(PressLift())
-
-                    ShareLink(item: shareText) {
-                        outlineLabel("Share with a friend")
-                    }
-                    .buttonStyle(PressLift())
+                if photosMissing {
+                    InkNote(text: "Your photos didn't all go through. Send them to \(pro.firstName) in Messages.")
+                        .padding(.top, Space.l)
                 }
-                .padding(.top, Space.xl)
+
+                actions
+                    .padding(.top, Space.xl)
             }
             .padding(.horizontal, Space.gutter)
             .padding(.bottom, Space.section)
@@ -724,8 +667,8 @@ struct BookedStep: View {
                 Spacer()
                 Button(action: { Haptics.light(); onDone() }) {
                     Text("Done")
-                        .font(BookingInk.sans(17, weight: .semibold))
-                        .foregroundStyle(BookingInk.onInk)
+                        .font(HDFont.bodyStrong)
+                        .foregroundStyle(Palette.onInk)
                         .padding(.horizontal, 8)
                         .frame(minWidth: 44, minHeight: 44)
                         .contentShape(Rectangle())
@@ -734,15 +677,76 @@ struct BookedStep: View {
             }
             .padding(.horizontal, Space.m)
             .padding(.top, Space.s)
-            .background(BookingInk.inkGround)
+            .background(Palette.inkGround)
         }
         .onAppear {
             if reduceMotion {
                 drawn = 1
             } else {
-                withAnimation(.easeInOut(duration: 0.55).delay(0.2)) { drawn = 1 }
+                withAnimation(.easeInOut(duration: isRequest ? 0.8 : 0.55).delay(0.2)) { drawn = 1 }
             }
         }
+    }
+
+    /// The lacquer check for a confirmed booking; an outline clock that draws itself for a request
+    /// (a tick would say "done" when it isn't yet).
+    @ViewBuilder
+    private var mark: some View {
+        if isRequest {
+            ZStack {
+                Circle()
+                    .trim(from: 0, to: drawn)
+                    .stroke(Palette.onInk, style: StrokeStyle(lineWidth: 2, lineCap: .round))
+                    .rotationEffect(.degrees(-90))
+                ClockHands()
+                    .trim(from: 0, to: drawn)
+                    .stroke(Palette.onInk, style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
+            }
+            .frame(width: 46, height: 46)
+        } else {
+            CheckShape()
+                .trim(from: 0, to: drawn)
+                .stroke(Palette.lacquer, style: StrokeStyle(lineWidth: 2.6, lineCap: .round, lineJoin: .round))
+                .frame(width: 52, height: 38)
+        }
+    }
+
+    @ViewBuilder
+    private var actions: some View {
+        if typeSize.isAccessibilitySize {
+            VStack(spacing: Space.m) {
+                messageButton
+                shareButton
+            }
+        } else {
+            HStack(spacing: 13) {
+                messageButton
+                shareButton
+            }
+        }
+    }
+
+    private var messageButton: some View {
+        OutlineButton(title: "Message \(pro.firstName)", tone: .onInk, action: onMessage)
+    }
+
+    /// ShareLink can't take a button style, so it wears the same outline.
+    private var shareButton: some View {
+        ShareLink(item: shareText) {
+            Text("Share with a friend")
+                .font(HDFont.bodyStrong)
+                .foregroundStyle(Palette.onInk)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, Space.l)
+                .padding(.vertical, 12)
+                .frame(maxWidth: .infinity, minHeight: 52)
+                .overlay(
+                    RoundedRectangle(cornerRadius: Radius.button, style: .continuous)
+                        .strokeBorder(Palette.onInk, lineWidth: 1)
+                )
+                .contentShape(RoundedRectangle(cornerRadius: Radius.button, style: .continuous))
+        }
+        .buttonStyle(PressLift())
     }
 
     // MARK: The record
@@ -768,12 +772,16 @@ struct BookedStep: View {
         return f.string(from: date)
     }
 
+    /// Type on the record. The record is paper in both modes, so its type is the fixed ink ground.
+    private var recordInk: Color { Palette.inkGround }
+    private var recordInkSoft: Color { Palette.inkGround.opacity(0.68) }
+
     private var recordLines: Text {
         let when = "\(BookedStep.longDay(booking.start)), \(booking.start.clock)"
         let whereLine = "at yours in \(booking.address.suburb)"
         let what = "\(booking.servicesLine) · \(Money.format(booking.price.clientTotalCents)) held"
-        return Text(verbatim: "\(when)\n\(whereLine)\n\(what)").foregroundStyle(BookingInk.recordInk)
-            + Text(verbatim: ".").fontWeight(.bold).foregroundStyle(Palette.lacquer)
+        return Text(verbatim: "\(when)\n\(whereLine)\n\(what)").foregroundColor(recordInk)
+            + Text(verbatim: ".").fontWeight(.bold).foregroundColor(Palette.lacquerFill)
     }
 
     private var record: some View {
@@ -786,16 +794,14 @@ struct BookedStep: View {
 
             VStack(alignment: .leading, spacing: 0) {
                 Text(verbatim: forLine)
-                    .font(BookingInk.sans(12, relativeTo: .caption1, weight: .medium))
-                    .tracking(1)
-                    .textCase(.uppercase)
-                    .foregroundStyle(BookingInk.recordInkSoft)
+                    .eyebrowStyle(color: recordInkSoft)
                 Text(verbatim: pro.displayName)
-                    .font(BookingInk.serif(32, relativeTo: .title1))
-                    .foregroundStyle(BookingInk.recordInk)
+                    .font(HDFont.serif(32, relativeTo: .title1))
+                    .foregroundStyle(recordInk)
+                    .fixedSize(horizontal: false, vertical: true)
                     .padding(.top, 4)
                 recordLines
-                    .font(BookingInk.serif(19, relativeTo: .title3))
+                    .font(HDFont.quote)
                     .lineSpacing(4)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.top, 10)
@@ -804,73 +810,37 @@ struct BookedStep: View {
             .padding(.top, 20)
             .padding(.bottom, 14)
 
-            TicketTear(notchColor: BookingInk.inkGround, lineColor: BookingInk.recordInk.opacity(0.22))
+            TicketTear(notchColor: Palette.inkGround, lineColor: recordInk.opacity(0.22))
 
             HStack(alignment: .firstTextBaseline) {
                 Text("Reference")
-                    .font(BookingInk.sans(13, relativeTo: .footnote))
-                    .foregroundStyle(BookingInk.recordInkSoft)
+                    .font(HDFont.caption)
+                    .foregroundStyle(recordInkSoft)
                 Spacer()
                 Text(verbatim: booking.reference)
-                    .font(BookingInk.sans(15, relativeTo: .subheadline, weight: .semibold).monospacedDigit())
-                    .foregroundStyle(BookingInk.recordInk)
+                    .font(HDFont.subStrong.monospacedDigit())
+                    .foregroundStyle(recordInk)
             }
             .padding(.horizontal, 20)
             .padding(.top, 8)
             .padding(.bottom, 18)
         }
-        .background(BookingInk.recordPaper)
-        .clipShape(RoundedRectangle(cornerRadius: Radius.button, style: .continuous))
+        .background(Palette.onInk)
+        .clipShape(RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
         .accessibilityElement(children: .combine)
-    }
-
-    private func outlineLabel(_ title: String) -> some View {
-        Text(verbatim: title)
-            .font(BookingInk.sans(16, weight: .medium))
-            .foregroundStyle(BookingInk.onInk)
-            .lineLimit(1)
-            .minimumScaleFactor(0.8)
-            .padding(.horizontal, Space.s)
-            .frame(maxWidth: .infinity)
-            .frame(height: 48)
-            .overlay(
-                RoundedRectangle(cornerRadius: Radius.button, style: .continuous)
-                    .strokeBorder(BookingInk.onInk.opacity(0.28), lineWidth: 1)
-            )
-            .contentShape(RoundedRectangle(cornerRadius: Radius.button, style: .continuous))
     }
 }
 
-/// Who, when, where, what, and the reference, on a paper card.
-struct BookingSummaryCard: View {
-    var booking: Booking
-    var pro: Pro
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: Space.m) {
-            HStack(spacing: Space.m) {
-                Avatar(name: pro.firstName, seed: pro.seed, size: 40)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(pro.displayName).font(HDFont.bodyStrong).foregroundStyle(Palette.ink)
-                    Text(pro.specialtyLine).font(HDFont.caption).foregroundStyle(Palette.inkSoft)
-                }
-                Spacer()
-                StatusBadge(status: booking.status)
-            }
-            Hairline()
-            SummaryRow(label: "When", value: booking.start.friendlyDayTime, detail: "Ends about \(booking.end.clock)")
-            SummaryRow(label: "Where", value: booking.address.labelled)
-            SummaryRow(label: "What", value: booking.servicesLine, detail: booking.minutes.minutesLabel)
-            SummaryRow(label: "Total", value: Money.format(booking.price.clientTotalCents), detail: "Held, not charged yet")
-            Hairline()
-            HStack {
-                Text("Reference").font(HDFont.caption).foregroundStyle(Palette.inkSoft)
-                Spacer()
-                Text(booking.reference).font(HDFont.subStrong.monospacedDigit()).foregroundStyle(Palette.ink)
-            }
-        }
-        .card()
-        .accessibilityElement(children: .combine)
+/// Two hands at ten past ten, drawn from the centre, for the request clock.
+private struct ClockHands: Shape {
+    func path(in rect: CGRect) -> Path {
+        let c = CGPoint(x: rect.midX, y: rect.midY)
+        let r = min(rect.width, rect.height) / 2
+        var p = Path()
+        p.move(to: CGPoint(x: c.x, y: c.y - r * 0.6))
+        p.addLine(to: c)
+        p.addLine(to: CGPoint(x: c.x + r * 0.42, y: c.y + r * 0.18))
+        return p
     }
 }
 
@@ -879,7 +849,7 @@ struct BookingSummaryCard: View {
     return Group {
         if let booking = app.upcomingBookings.first, let pro = app.pro(booking.proID) {
             BookedStep(booking: booking, pro: pro, onMessage: {}, onDone: {})
-                .background(BookingInk.inkGround.ignoresSafeArea())
+                .background(Palette.inkGround.ignoresSafeArea())
         }
     }
     .environment(app)

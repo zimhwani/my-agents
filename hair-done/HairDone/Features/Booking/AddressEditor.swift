@@ -5,18 +5,12 @@ import CoreLocation
 struct AddressEditor: View {
     @Environment(AppState.self) private var app
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.dynamicTypeSize) private var typeSize
     var address: Address? = nil
     var onSave: (Address) -> Void
 
     private enum LabelChoice: String, CaseIterable {
         case home = "Home", work = "Work", other = "Somewhere else"
-        var symbol: String {
-            switch self {
-            case .home: return "house"
-            case .work: return "briefcase"
-            case .other: return "mappin"
-            }
-        }
     }
 
     @State private var labelChoice: LabelChoice = .home
@@ -50,14 +44,9 @@ struct AddressEditor: View {
                 VStack(alignment: .leading, spacing: Space.xl) {
                     VStack(alignment: .leading, spacing: Space.m) {
                         Text("Call it").labelStyle()
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(spacing: Space.s) {
-                                ForEach(LabelChoice.allCases, id: \.self) { choice in
-                                    Chip(title: choice.rawValue, symbol: choice.symbol, isSelected: labelChoice == choice) {
-                                        withAnimation(Motion.spring) { labelChoice = choice }
-                                    }
-                                }
-                            }
+                        ViewThatFits(in: .horizontal) {
+                            HStack(spacing: Space.s) { labelOptions }
+                            VStack(alignment: .leading, spacing: Space.s) { labelOptions }
                         }
                         if labelChoice == .other {
                             HDTextField(label: "", placeholder: "Call it something. Home, Mum's, the hotel.", text: $customLabel)
@@ -67,17 +56,22 @@ struct AddressEditor: View {
 
                     VStack(alignment: .leading, spacing: Space.l) {
                         HDTextField(label: "Street", placeholder: "Unit, number and street", text: $line1, contentType: .streetAddressLine1)
-                        HStack(alignment: .top, spacing: Space.m) {
+                        if typeSize.isAccessibilitySize {
                             HDTextField(label: "Suburb", placeholder: "Suburb", text: $suburb, contentType: .addressCity)
                             HDTextField(label: "Postcode", placeholder: "3000", text: $postcode, keyboard: .numberPad, contentType: .postalCode)
-                                .frame(width: 112)
+                        } else {
+                            HStack(alignment: .top, spacing: Space.m) {
+                                HDTextField(label: "Suburb", placeholder: "Suburb", text: $suburb, contentType: .addressCity)
+                                HDTextField(label: "Postcode", placeholder: "3000", text: $postcode, keyboard: .numberPad, contentType: .postalCode)
+                                    .frame(maxWidth: 120)
+                            }
                         }
                         HDTextField(label: "Getting in", placeholder: "Parking, buzzer, dogs. Anything she should know getting in.", text: $instructions, axis: .vertical)
                             .lineLimit(2...4)
                     }
 
                     if let problem {
-                        InlineNote(text: problem, tone: .warn)
+                        FieldMessage(text: problem)
                             .transition(.opacity)
                     }
                 }
@@ -97,12 +91,24 @@ struct AddressEditor: View {
             }
         }
         .paperBackground()
+        .presentationBackground(Palette.paper)
         .holdsPushRoutes()
         .presentationDetents([.large])
         .presentationDragIndicator(.visible)
         .onChange(of: postcode) { _, new in
             let digits = String(new.filter(\.isNumber).prefix(4))
             if digits != new { postcode = digits }
+        }
+    }
+
+    /// Home, Work, Somewhere else: short choices as squared option boxes.
+    @ViewBuilder
+    private var labelOptions: some View {
+        ForEach(LabelChoice.allCases, id: \.self) { choice in
+            OptionBox(title: choice.rawValue, isSelected: labelChoice == choice) {
+                withAnimation(Motion.spring) { labelChoice = choice }
+            }
+            .fixedSize()
         }
     }
 

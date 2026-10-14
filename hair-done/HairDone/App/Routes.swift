@@ -8,6 +8,7 @@ enum Route: Hashable {
     case proBooking(String)    // pro-side booking detail, by id
     case thread(String)        // message thread, by id
     case proProfileEdit
+    case proWork               // her Work grid, pushed from the Profile tab
 
     var isBooking: Bool {
         if case .booking = self { return true }
@@ -23,6 +24,12 @@ enum Route: Hashable {
         if case .thread = self { return true }
         return false
     }
+
+    /// A pro's profile: what a shared link opens, on Home.
+    var isPro: Bool {
+        if case .pro = self { return true }
+        return false
+    }
 }
 
 struct RouteDestinations: ViewModifier {
@@ -34,6 +41,7 @@ struct RouteDestinations: ViewModifier {
             case .proBooking(let id): ProBookingDetailView(bookingID: id)
             case .thread(let id): ThreadView(threadID: id)
             case .proProfileEdit: ProProfileEditView()
+            case .proWork: ProWorkView()
             }
         }
     }

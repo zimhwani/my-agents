@@ -1,13 +1,24 @@
 import SwiftUI
 
-/// One conversation. Yours on the right in ink, hers on the left on card, the app's in the middle.
+/// One conversation. Yours on the right in ink, theirs on the left on paper with a hairline, the
+/// app's in the middle in small type. Squared bubbles, an underline composer, and quick replies
+/// that fill the field instead of sending. A message that doesn't go stays, at 60%, with
+/// "Didn't send. Tap to try again."
 struct ThreadView: View {
     @Environment(AppState.self) private var app
     var threadID: String
 
     @State private var draft = ""
-    @State private var sending = false
+    @State private var pending: [PendingMessage] = []
+    @State private var movingOn = false
     @FocusState private var composing: Bool
+
+    /// A message on its way, or one that didn't make it.
+    struct PendingMessage: Identifiable, Equatable {
+        let id = UUID()
+        var text: String
+        var failed = false
+    }
 
     private var thread: MessageThread? { app.threads.first { $0.id == threadID } }
     private var isPro: Bool { app.mode == .pro }
@@ -17,10 +28,12 @@ struct ThreadView: View {
             if let thread {
                 conversation(thread)
             } else {
-                EmptyState(symbol: "bubble.left", title: "We couldn't find that one.").paperBackground()
+                EmptyState(title: "We couldn't find that one.", message: "It might be on your other side. Check Inbox there.")
+                    .frame(maxHeight: .infinity, alignment: .top)
+                    .paperBackground()
+                    .hdNavHeader()
             }
         }
-        .navigationBarTitleDisplayMode(.inline)
     }
 
     // MARK: Lookups
@@ -33,23 +46,34 @@ struct ThreadView: View {
         isPro ? app.clientName(thread.clientID) : (app.pro(thread.proID)?.firstName ?? "Her")
     }
 
-    private func otherSeed(_ thread: MessageThread) -> Int {
-        isPro ? thread.clientID.hdSeed : (app.pro(thread.proID)?.seed ?? 0)
+    /// On the pro side a client's name can still be on its way; show nothing rather than "Client".
+    private func knownName(_ thread: MessageThread) -> String? {
+        if isPro && app.isLive && (app.clientNames[thread.clientID]?.isEmpty ?? true) { return nil }
+        return otherName(thread)
     }
 
-    /// Six quick replies. The client set is from the copy deck; the pro set is written in the same voice.
+    /// The pro's cover for the client side; nil on the pro side (clients have initials).
+    private func otherPhoto(_ thread: MessageThread) -> WorkItem? {
+        guard !isPro, let pro = app.pro(thread.proID) else { return nil }
+        return pro.work.first(where: { $0.isPinned }) ?? pro.work.first
+    }
+
+    /// Six quick replies. The client set is from the copy deck; the pro set is written in the same
+    /// voice. "On my way" only shows once she really is (the strip has the real button before that).
     private func quickReplies(_ thread: MessageThread) -> [String] {
+        let linked = booking(for: thread)
         if isPro {
-            return [
-                "On my way, there in 10",
+            var lines = [
                 "Running 5 minutes late, sorry",
                 "Which unit is it?",
                 "Parked, coming up now",
                 "Thank you, it was lovely",
                 "Same again in three weeks?"
             ]
+            if linked?.status == .onHerWay { lines.insert("On my way, there in 10", at: 0) }
+            return lines
         }
-        let unit = booking(for: thread)?.address.line1.unitNumber
+        let unit = linked?.address.line1.unitNumber
         return [
             "Running 5 minutes late, sorry",
             unit.map { "Come on up, buzzer's \($0)" } ?? "Come on up",
@@ -66,7 +90,8 @@ struct ThreadView: View {
         let name = otherName(thread)
         let linked = booking(for: thread)
         return VStack(spacing: 0) {
-            if let linked { bookingStrip(linked, thread: thread) }
+            if app.isOffline { OfflineBar() }
+            if let linked { bookingStrip(linked) }
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(spacing: Space.s) {
@@ -75,11 +100,16 @@ struct ThreadView: View {
                                 .font(HDFont.caption)
                                 .foregroundStyle(Palette.inkSoft)
                                 .multilineTextAlignment(.center)
+                                .frame(maxWidth: .infinity)
                                 .padding(.vertical, Space.s)
                         }
                         ForEach(thread.messages) { message in
                             bubble(message, otherName: name)
                                 .id(message.id)
+                        }
+                        ForEach(pending) { p in
+                            pendingBubble(p, in: thread)
+                                .id(p.id.uuidString)
                         }
                         Color.clear.frame(height: 1).id("bottom")
                     }
@@ -89,7 +119,7 @@ struct ThreadView: View {
                 }
                 .scrollDismissesKeyboard(.interactively)
                 .onAppear { proxy.scrollTo("bottom", anchor: .bottom) }
-                .onChange(of: thread.messages.count) { _, _ in
+                .onChange(of: thread.messages.count + pending.count) { _, _ in
                     withAnimation(Motion.spring) { proxy.scrollTo("bottom", anchor: .bottom) }
                 }
                 .onChange(of: composing) { _, focused in
@@ -101,21 +131,17 @@ struct ThreadView: View {
                     }
                 }
             }
-            .paperBackground()
         }
+        .paperBackground()
         .safeAreaInset(edge: .bottom, spacing: 0) {
             composer(thread)
         }
-        .navigationTitle(name)
-        .toolbar {
-            ToolbarItem(placement: .principal) {
-                HStack(spacing: Space.s) {
-                    Avatar(name: name, seed: otherSeed(thread), size: 28)
-                    Text(name).font(HDFont.bodyStrong).foregroundStyle(Palette.ink)
-                }
-                .accessibilityElement(children: .combine)
-            }
+        .hdNavHeader(knownName(thread), showsHairline: linked == nil) {
+            Avatar(name: name, seed: isPro ? thread.clientID.hdSeed : (app.pro(thread.proID)?.seed ?? 0), size: 28,
+                   photo: otherPhoto(thread))
+                .frame(width: 44, height: 44)
         }
+        .animation(Motion.gentle, value: app.isOffline)
         .onAppear {
             app.markRead(thread)
             app.hideTabBar()
@@ -137,33 +163,61 @@ struct ThreadView: View {
         }
     }
 
-    /// The booking this thread belongs to. Tap to open it.
-    private func bookingStrip(_ booking: Booking, thread: MessageThread) -> some View {
-        NavigationLink(value: isPro ? Route.proBooking(booking.id) : Route.booking(booking.id)) {
-            HStack(spacing: Space.m) {
-                Circle().fill(booking.status.color).frame(width: 8, height: 8).accessibilityHidden(true)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text("\(booking.servicesLine) · \(booking.start.friendlyDayTime)")
-                        .font(HDFont.subStrong)
-                        .foregroundStyle(Palette.ink)
-                        .lineLimit(1)
-                    Text("\(booking.address.suburb) · \(booking.status.label)")
-                        .font(HDFont.caption)
-                        .foregroundStyle(Palette.inkSoft)
-                        .lineLimit(1)
+    /// The booking this thread belongs to, pinned under the header. Tap to open it. On the pro side,
+    /// on the day of a confirmed job, the real `On my way` sits here (not a quick reply).
+    private func bookingStrip(_ booking: Booking) -> some View {
+        let pro = app.pro(booking.proID)
+        let statusWord = isPro ? booking.status.proLabel : booking.status.label
+        return VStack(spacing: Space.s) {
+            NavigationLink(value: isPro ? Route.proBooking(booking.id) : Route.booking(booking.id)) {
+                HStack(spacing: Space.m) {
+                    if !isPro {
+                        BookingPhoto(item: booking.coverItem(pro: pro))
+                            .frame(width: 36, height: 45)
+                    }
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("\(booking.servicesLine) · \(booking.start.friendlyDayTime)")
+                            .font(HDFont.sub)
+                            .foregroundStyle(Palette.ink)
+                            .lineLimit(2)
+                        HStack(spacing: 6) {
+                            if !booking.status.isCancelled {
+                                Circle().fill(booking.status == .requested ? Palette.warn : Palette.success)
+                                    .frame(width: 6, height: 6)
+                                    .accessibilityHidden(true)
+                            }
+                            Text("\(booking.address.suburb) · \(statusWord)")
+                                .font(HDFont.caption)
+                                .foregroundStyle(Palette.inkSoft)
+                                .lineLimit(1)
+                        }
+                    }
+                    Spacer(minLength: 0)
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 13, weight: .regular))
+                        .foregroundStyle(Palette.inkFaint)
+                        .accessibilityHidden(true)
                 }
-                Spacer(minLength: 0)
-                Image(systemName: "chevron.right").font(.system(size: 12, weight: .semibold)).foregroundStyle(Palette.inkFaint)
+                .contentShape(Rectangle())
             }
-            .screenGutter()
-            .padding(.vertical, Space.m)
-            .background(Palette.card)
-            .overlay(alignment: .bottom) { Hairline() }
-            .contentShape(Rectangle())
+            .buttonStyle(.plain)
+            .accessibilityElement(children: .combine)
+            .accessibilityHint("Opens the booking")
+
+            if isPro && booking.status == .confirmed && booking.isToday {
+                InkButton(title: "On my way", isLoading: movingOn, isEnabled: !app.isOffline, compact: true) {
+                    movingOn = true
+                    Task {
+                        _ = await app.update(booking, to: .onHerWay)
+                        movingOn = false
+                    }
+                }
+            }
         }
-        .buttonStyle(.plain)
-        .accessibilityElement(children: .combine)
-        .accessibilityHint("Opens the booking")
+        .screenGutter()
+        .padding(.vertical, Space.m)
+        .background(Palette.paper)
+        .overlay(alignment: .bottom) { Hairline(strong: true) }
     }
 
     // MARK: Bubbles
@@ -180,92 +234,154 @@ struct ThreadView: View {
                 .accessibilityLabel("Hair Done: \(message.text)")
         } else {
             let mine = message.senderID == app.userID
-            HStack(alignment: .bottom, spacing: Space.s) {
-                if mine { Spacer(minLength: 48) }
-                VStack(alignment: mine ? .trailing : .leading, spacing: 3) {
-                    Text(message.text)
-                        .font(HDFont.body)
-                        .foregroundStyle(mine ? Palette.paper : Palette.ink)
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 10)
-                        .background(mine ? Palette.ink : Palette.card, in: BubbleShape(mine: mine))
-                        .overlay(BubbleShape(mine: mine).strokeBorder(mine ? Color.clear : Palette.line, lineWidth: 1))
-                        .fixedSize(horizontal: false, vertical: true)
-                    Text(message.sentAt.friendlyDay == "Today" ? message.sentAt.clock : "\(message.sentAt.friendlyDay), \(message.sentAt.clock)")
-                        .font(HDFont.caption)
-                        .foregroundStyle(Palette.inkFaint)
-                        .padding(.horizontal, 4)
-                }
-                if !mine { Spacer(minLength: 48) }
-            }
-            .accessibilityElement(children: .combine)
-            .accessibilityLabel("\(mine ? "You" : otherName), \(message.sentAt.friendlyDayTime): \(message.text)")
+            bubbleBody(text: message.text, mine: mine, caption: timeLabel(message.sentAt))
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel("\(mine ? "You" : otherName), \(message.sentAt.friendlyDayTime): \(message.text)")
         }
     }
 
+    private func pendingBubble(_ p: PendingMessage, in thread: MessageThread) -> some View {
+        Button {
+            guard p.failed else { return }
+            retry(p, in: thread)
+        } label: {
+            bubbleBody(text: p.text, mine: true, caption: p.failed ? "Didn't send. Tap to try again." : "Sending…")
+                .opacity(0.6)
+        }
+        .buttonStyle(.plain)
+        .disabled(!p.failed)
+        .accessibilityLabel(p.failed ? "Didn't send: \(p.text)" : "Sending: \(p.text)")
+        .accessibilityHint(p.failed ? "Tries again" : "")
+    }
+
+    private func bubbleBody(text: String, mine: Bool, caption: String) -> some View {
+        HStack(alignment: .bottom, spacing: Space.s) {
+            if mine { Spacer(minLength: 48) }
+            VStack(alignment: mine ? .trailing : .leading, spacing: 4) {
+                Text(text)
+                    .font(HDFont.body)
+                    .foregroundStyle(mine ? Palette.paper : Palette.ink)
+                    .multilineTextAlignment(.leading)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+                    .background(mine ? Palette.ink : Palette.paper, in: BubbleShape(mine: mine))
+                    .overlay(BubbleShape(mine: mine).strokeBorder(mine ? Color.clear : Palette.line, lineWidth: 1))
+                    .fixedSize(horizontal: false, vertical: true)
+                Text(caption)
+                    .font(HDFont.caption)
+                    .foregroundStyle(Palette.inkSoft)
+                    .padding(.horizontal, 2)
+            }
+            if !mine { Spacer(minLength: 48) }
+        }
+    }
+
+    private func timeLabel(_ date: Date) -> String {
+        date.friendlyDay == "Today" ? date.clock : "\(date.friendlyDay), \(date.clock)"
+    }
+
     // MARK: Composer
+
+    private var hasText: Bool { !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
 
     private func composer(_ thread: MessageThread) -> some View {
         VStack(spacing: Space.s) {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: Space.s) {
                     ForEach(quickReplies(thread), id: \.self) { line in
-                        Chip(title: line) { send(line, in: thread) }
+                        OptionBox(title: line, isSelected: false) {
+                            draft = line
+                            composing = true
+                        }
+                        .fixedSize()
                     }
                 }
                 .padding(.horizontal, Space.gutter)
                 .padding(.vertical, 2)
             }
-            .accessibilityLabel("Quick replies")
+            .accessibilityLabel("Quick replies. They fill the message, ready to send.")
 
-            HStack(alignment: .bottom, spacing: Space.s) {
-                TextField("Message \(otherName(thread))", text: $draft, axis: .vertical)
+            HStack(alignment: .bottom, spacing: Space.m) {
+                TextField(knownName(thread).map { "Message \($0)" } ?? "Message", text: $draft, axis: .vertical)
                     .font(HDFont.body)
+                    .foregroundStyle(Palette.ink)
+                    .tint(Palette.ink)
                     .lineLimit(1...5)
                     .focused($composing)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 11)
-                    .background(Palette.card, in: RoundedRectangle(cornerRadius: Radius.input, style: .continuous))
-                    .overlay(RoundedRectangle(cornerRadius: Radius.input, style: .continuous).strokeBorder(Palette.line, lineWidth: 1))
-                if !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    IconButton(symbol: "paperplane", label: "Send", filled: true, tint: Palette.lacquer) {
-                        send(draft, in: thread)
+                    .padding(.vertical, 10)
+                    .frame(minHeight: 44)
+                    .overlay(alignment: .bottom) {
+                        Rectangle().fill(composing ? Palette.ink : Palette.line).frame(height: composing ? 2 : 1)
                     }
-                    .transition(.scale(scale: 0.6).combined(with: .opacity))
-                }
+                sendButton(thread)
             }
-            .animation(Motion.spring, value: draft.isEmpty)
             .screenGutter()
         }
         .padding(.top, Space.s)
         .padding(.bottom, Space.s)
-        .background(Palette.paper.opacity(0.94))
-        .background(.ultraThinMaterial)
-        .overlay(alignment: .top) { Hairline() }
+        .background(Palette.paper)
+        .overlay(alignment: .top) { Hairline(strong: true) }
+    }
+
+    private func sendButton(_ thread: MessageThread) -> some View {
+        let ready = hasText && !app.isOffline
+        return Button {
+            guard ready else { return }
+            Haptics.light()
+            send(draft, in: thread)
+        } label: {
+            Image(systemName: "arrow.up")
+                .font(.system(size: 17, weight: ready ? .regular : .light))
+                .foregroundStyle(ready ? Palette.paper : Palette.inkFaint)
+                .frame(width: 32, height: 32)
+                .background(ready ? Palette.ink : Color.clear, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(PressLift(scale: 0.92))
+        .disabled(!ready)
+        .animation(Motion.spring, value: ready)
+        .accessibilityLabel("Send")
     }
 
     private func send(_ text: String, in thread: MessageThread) {
         let line = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !line.isEmpty, !sending else { return }
-        sending = true
+        guard !line.isEmpty else { return }
+        let p = PendingMessage(text: line)
+        withAnimation(Motion.gentle) { pending.append(p) }
         draft = ""
-        Task {
-            let sent = await app.send(line, in: thread)
-            sending = false
-            // Didn't go: put the words back so she doesn't have to type them again.
-            if !sent && draft.isEmpty { draft = line }
+        deliver(p, in: thread)
+    }
+
+    private func retry(_ p: PendingMessage, in thread: MessageThread) {
+        guard !app.isOffline, let i = pending.firstIndex(where: { $0.id == p.id }) else { return }
+        Haptics.light()
+        pending[i].failed = false
+        deliver(pending[i], in: thread)
+    }
+
+    private func deliver(_ p: PendingMessage, in thread: MessageThread) {
+        Task { @MainActor in
+            let sent = await app.send(p.text, in: thread)
+            withAnimation(Motion.gentle) {
+                if sent {
+                    pending.removeAll { $0.id == p.id }
+                } else if let i = pending.firstIndex(where: { $0.id == p.id }) {
+                    pending[i].failed = true
+                }
+            }
         }
     }
 }
 
-/// A bubble with one tucked corner, so you can tell who's talking without reading.
+/// A squared bubble with one tucked corner, so you can tell who's talking without reading.
 struct BubbleShape: InsettableShape {
     var mine: Bool
     var inset: CGFloat = 0
 
     func path(in rect: CGRect) -> Path {
         let r = rect.insetBy(dx: inset, dy: inset)
-        let big: CGFloat = 18, small: CGFloat = 5
+        let big: CGFloat = 6, small: CGFloat = 2
         return UnevenRoundedRectangle(
             topLeadingRadius: big,
             bottomLeadingRadius: mine ? big : small,

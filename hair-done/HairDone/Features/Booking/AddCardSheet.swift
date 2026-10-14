@@ -27,35 +27,41 @@ struct AddCardSheet: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            SheetHeader(title: "Add a card", onClose: { dismiss() })
+            InkSheetHeader(title: "Add a card", onClose: { dismiss() })
 
             ScrollView {
                 VStack(alignment: .leading, spacing: Space.xl) {
                     VStack(alignment: .leading, spacing: Space.l) {
-                        HDTextField(
+                        InkField(
                             label: brand.map { "Card number · \($0)" } ?? "Card number",
                             placeholder: "1234 5678 9012 3456",
                             text: $number,
-                            keyboard: .numberPad,
                             contentType: .creditCardNumber
                         )
-                        HStack(alignment: .top, spacing: Space.m) {
-                            HDTextField(label: "Expiry", placeholder: "MM/YY", text: $expiry, keyboard: .numberPad)
-                            HDTextField(label: "CVC", placeholder: "123", text: $cvc, keyboard: .numberPad)
+                        ViewThatFits(in: .horizontal) {
+                            HStack(alignment: .top, spacing: Space.m) {
+                                InkField(label: "Expiry", placeholder: "MM/YY", text: $expiry)
+                                InkField(label: "CVC", placeholder: "123", text: $cvc)
+                            }
+                            VStack(alignment: .leading, spacing: Space.l) {
+                                InkField(label: "Expiry", placeholder: "MM/YY", text: $expiry)
+                                InkField(label: "CVC", placeholder: "123", text: $cvc)
+                            }
                         }
                     }
 
                     HStack(alignment: .firstTextBaseline, spacing: Space.s) {
                         Image(systemName: "lock")
-                            .font(.system(size: 13, weight: .medium))
+                            .font(.system(size: 13, weight: .light))
                             .accessibilityHidden(true)
                         Text("Cards are handled by Stripe. We never see the number.")
                             .font(HDFont.caption)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
-                    .foregroundStyle(Palette.inkSoft)
+                    .foregroundStyle(Palette.onInkSoft)
 
                     if let problem {
-                        InlineNote(text: problem, tone: .warn)
+                        InkNote(text: problem)
                             .transition(.opacity)
                     }
                 }
@@ -66,14 +72,19 @@ struct AddCardSheet: View {
             }
             .scrollDismissesKeyboard(.interactively)
 
-            StickyBar(title: "Add card", isLoading: isSaving, isEnabled: canSave, action: save) {
+            VStack(alignment: .leading, spacing: Space.s) {
                 Text(canSave ? "Nothing's charged yet." : "Number, expiry and CVC.")
                     .font(HDFont.caption)
-                    .foregroundStyle(Palette.inkSoft)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .foregroundStyle(Palette.onInkSoft)
+                InkButton(title: "Add card", isLoading: isSaving, isEnabled: canSave && !app.isOffline, tone: .onInk, action: save)
             }
+            .padding(.horizontal, Space.gutter)
+            .padding(.top, Space.m)
+            .padding(.bottom, Space.s)
+            .overlay(alignment: .top) { Rectangle().fill(Palette.inkLine).frame(height: 0.5) }
         }
-        .paperBackground()
+        .background(Palette.inkGround.ignoresSafeArea())
+        .presentationBackground(Palette.inkGround)
         .holdsPushRoutes()
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
@@ -114,6 +125,41 @@ struct AddCardSheet: View {
                 withAnimation(Motion.spring) { problem = error.localizedDescription }
             }
         }
+    }
+}
+
+/// A paper underline field on ink: label SF 13 in soft paper, SF 17 paper text, a hairline rule that
+/// turns into a 2pt paper rule while focused. Number pad, because every field here is digits.
+private struct InkField: View {
+    var label: String
+    var placeholder: String
+    @Binding var text: String
+    var contentType: UITextContentType? = nil
+
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Space.xs) {
+            Text(label)
+                .font(HDFont.caption)
+                .foregroundStyle(Palette.onInkSoft)
+            TextField("", text: $text, prompt: Text(placeholder).foregroundColor(Palette.onInk.opacity(0.35)))
+                .font(HDFont.body.monospacedDigit())
+                .foregroundStyle(Palette.onInk)
+                .tint(Palette.onInk)
+                .keyboardType(.numberPad)
+                .textContentType(contentType)
+                .focused($focused)
+                .padding(.vertical, 10)
+                .frame(minHeight: 44)
+                .overlay(alignment: .bottom) {
+                    Rectangle()
+                        .fill(focused ? Palette.onInk : Palette.onInk.opacity(0.3))
+                        .frame(height: focused ? 2 : 1)
+                        .animation(Motion.gentle, value: focused)
+                }
+        }
+        .accessibilityElement(children: .contain)
     }
 }
 

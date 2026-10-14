@@ -1,8 +1,9 @@
 import SwiftUI
 import PhotosUI
 
-// Shared bits for Pro mode: week maths, payout sums, the status action button,
-// the decline sheet, the service editor and the availability editor.
+// Shared bits for Pro mode: week maths, payout sums, the tab header, the status action button
+// (with No show), the decline sheet, the service editor, the hours editor, and the two pieces that
+// span screens: unsaved edits (asked about before a mode switch) and the booking-side banner.
 
 // MARK: - Weeks and money
 
@@ -51,9 +52,19 @@ enum ProMoney {
     static func dollarsText(_ cents: Int) -> String {
         cents % 100 == 0 ? String(cents / 100) : String(format: "%.2f", Double(cents) / 100)
     }
+
+    /// What the client pays for a no-show: everything but a tip.
+    static func noShowCharge(_ b: Booking) -> Int {
+        b.price.servicesCents + b.price.travelFeeCents + b.price.bookingFeeCents
+    }
+
+    /// What she gets for a no-show: her side, after the 12%.
+    static func noShowPayout(_ b: Booking) -> Int {
+        b.price.servicesCents + b.price.travelFeeCents - b.price.platformFeeCents
+    }
 }
 
-// MARK: - The next thing she taps
+// MARK: - Words and times
 
 enum ProFlow {
     /// The one button for the job's current state.
@@ -75,12 +86,21 @@ enum ProFlow {
         "Something else"
     ]
 
-    /// "Reply by 11:40 am or it lapses.", or "About to lapse." once it's up.
-    static func autoDeclineLine(for booking: Booking) -> String {
-        let deadline = booking.createdAt.adding(hours: Fees.autoDeclineHours)
-        let minutes = Int(deadline.timeIntervalSinceNow / 60)
-        if minutes <= 0 { return "About to lapse." }
-        return "Reply by \(deadline.clock) or it lapses."
+    /// When a request lapses: two hours after it came in, as the server does it.
+    static func deadline(_ b: Booking) -> Date { b.createdAt.adding(hours: Fees.autoDeclineHours) }
+
+    /// "Reply by 11:40 am", or "About to lapse" once it's up.
+    static func replyBy(_ b: Booking, now: Date = Date()) -> String {
+        let deadline = deadline(b)
+        return deadline <= now ? "About to lapse" : "Reply by \(deadline.clock)"
+    }
+
+    /// "1h 12m left", "48 min left".
+    static func timeLeft(_ b: Booking, now: Date = Date()) -> String {
+        let minutes = Int(deadline(b).timeIntervalSince(now) / 60)
+        if minutes <= 0 { return "About to lapse" }
+        if minutes < 60 { return "\(minutes) min left" }
+        return "\(minutes / 60)h \(minutes % 60)m left"
     }
 
     /// "today", "tomorrow" or "Tue 24 Sep", for the middle of a sentence.
@@ -89,50 +109,528 @@ enum ProFlow {
         return friendly == date.shortDay ? friendly : friendly.lowercased()
     }
 
-    /// A stable seed for a client's avatar tint. `hashValue` changes every launch; this doesn't.
+    /// A stable seed for a client's placeholder. `hashValue` changes every launch; this doesn't.
     static func seed(for id: String) -> Int {
         id.unicodeScalars.reduce(7) { ($0 &* 31 &+ Int($1.value)) & 0xFFFF }
     }
 
-    static func greeting(for name: String, at date: Date = Date()) -> String {
+    static func greetingLead(at date: Date = Date()) -> String {
         switch date.hourOfDay {
-        case 5..<12: return "Morning, \(name)."
-        case 12..<17: return "Afternoon, \(name)."
-        case 17..<21: return "Evening, \(name)."
-        default: return "Late one, \(name)."
+        case 5..<12: return "Morning"
+        case 12..<17: return "Afternoon"
+        case 17..<21: return "Evening"
+        default: return "Late one"
+        }
+    }
+
+    /// "Tuesday 14 October"
+    static func longDay(_ date: Date) -> String {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_AU")
+        f.dateFormat = "EEEE d MMMM"
+        return f.string(from: date)
+    }
+
+    /// "1 job", "3 jobs"
+    static func count(_ n: Int, _ one: String, _ many: String) -> String { n == 1 ? "1 \(one)" : "\(n) \(many)" }
+
+    // MARK: Notice
+
+    /// The "Notice you need" choices, in minutes.
+    static let noticeOptions = [60, 120, 240, 1440]
+
+    static func noticeLabel(_ minutes: Int) -> String {
+        switch minutes {
+        case 60: return "1 hour"
+        case 120: return "2 hours"
+        case 240: return "4 hours"
+        case 1440: return "A day"
+        case 2880: return "Two days"
+        default: return minutes.minutesLabel
+        }
+    }
+
+    // MARK: Hours
+
+    /// Hours a week clients can book her, from her usual week.
+    static func weeklyHours(_ hours: [Weekday: [TimeRange]]) -> Int {
+        let minutes = hours.values.flatMap { $0 }.reduce(0) { $0 + max(0, $1.endMinutes - $1.startMinutes) }
+        return Int((Double(minutes) / 60).rounded())
+    }
+
+    static func hoursSummary(_ ranges: [TimeRange]) -> String {
+        ranges.isEmpty ? "Off" : ranges.sorted { $0.startMinutes < $1.startMinutes }.map(\.label).joined(separator: ", ")
+    }
+}
+
+// MARK: - Her photo
+
+extension Pro {
+    /// Her pinned photo, else her first. Nil when she hasn't added any.
+    var proCoverItem: WorkItem? { work.first(where: { $0.isPinned }) ?? work.first }
+}
+
+/// Her face if she's set one, else her cover, else the warm photo ground. Squared at 2pt.
+struct ProFacePhoto: View {
+    var pro: Pro?
+
+    var body: some View {
+        ZStack {
+            Palette.photoGround
+            if let url = pro?.avatarURL {
+                AsyncImage(url: url) { image in image.resizable().scaledToFill() } placeholder: { Palette.photoGround }
+            } else if let cover = pro?.proCoverItem {
+                WorkTile(item: cover, cornerRadius: 0)
+            }
+        }
+        .photoShape()
+        .accessibilityHidden(true)
+    }
+}
+
+// MARK: - Tab header
+
+/// The top of every pro tab root: "PRO · KIARA M.", then the serif 40 title, with an optional
+/// trailing view on the title's baseline (TextTabs, her photo).
+struct ProTabHeader<Trailing: View>: View {
+    @Environment(AppState.self) private var app
+    var title: Text
+    var detail: String? = nil
+    private let trailing: Trailing
+
+    init(_ title: String, detail: String? = nil, @ViewBuilder trailing: () -> Trailing) {
+        self.title = Text(title)
+        self.detail = detail
+        self.trailing = trailing()
+    }
+
+    init(text: Text, detail: String? = nil, @ViewBuilder trailing: () -> Trailing) {
+        self.title = text
+        self.detail = detail
+        self.trailing = trailing()
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Space.xs) {
+            ProEyebrow(name: app.proSelf?.displayName ?? "You", detail: detail)
+            HStack(alignment: .firstTextBaseline, spacing: Space.m) {
+                title
+                    .font(HDFont.display)
+                    .foregroundStyle(Palette.ink)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityAddTraits(.isHeader)
+                Spacer(minLength: 0)
+                trailing
+            }
         }
     }
 }
 
+extension ProTabHeader where Trailing == EmptyView {
+    init(_ title: String, detail: String? = nil) {
+        self.init(title, detail: detail) { EmptyView() }
+    }
+}
+
+// MARK: - Small marks
+
+/// A line that needs her attention: a 6pt warn dot, then ink text. Warn is never the text colour.
+struct WarnDotLine: View {
+    var text: String
+    var color: Color = Palette.ink
+    var font: Font = HDFont.sub
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: Space.s) {
+            Circle().fill(Palette.warn).frame(width: 6, height: 6)
+                .alignmentGuide(.firstTextBaseline) { d in d[.bottom] - 1 }
+                .accessibilityHidden(true)
+            Text(text).font(font).foregroundStyle(color)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .accessibilityElement(children: .combine)
+    }
+}
+
+/// A 1pt ink progress line across the full width, on a `line` track.
+struct ProgressLine: View {
+    var fraction: Double
+
+    var body: some View {
+        GeometryReader { proxy in
+            ZStack(alignment: .leading) {
+                Rectangle().fill(Palette.line)
+                Rectangle().fill(Palette.ink).frame(width: proxy.size.width * CGFloat(min(max(fraction, 0), 1)))
+            }
+        }
+        .frame(height: 1)
+        .animation(Motion.spring, value: fraction)
+        .accessibilityHidden(true)
+    }
+}
+
+/// Wraps short options onto as many lines as they need.
+struct ProFlowLayout: Layout {
+    var spacing: CGFloat = Space.s
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let width = proposal.width ?? .infinity
+        var x: CGFloat = 0, y: CGFloat = 0, rowHeight: CGFloat = 0, widest: CGFloat = 0
+        for view in subviews {
+            let size = view.sizeThatFits(.unspecified)
+            if x > 0 && x + size.width > width {
+                y += rowHeight + spacing
+                x = 0
+                rowHeight = 0
+            }
+            x += size.width + spacing
+            widest = max(widest, x - spacing)
+            rowHeight = max(rowHeight, size.height)
+        }
+        return CGSize(width: proposal.width ?? widest, height: y + rowHeight)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        var x = bounds.minX, y = bounds.minY, rowHeight: CGFloat = 0
+        for view in subviews {
+            let size = view.sizeThatFits(.unspecified)
+            if x > bounds.minX && x + size.width > bounds.maxX {
+                y += rowHeight + spacing
+                x = bounds.minX
+                rowHeight = 0
+            }
+            view.place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(size))
+            x += size.width + spacing
+            rowHeight = max(rowHeight, size.height)
+        }
+    }
+}
+
+// MARK: - Unsaved edits
+
+/// Screens with edits she hasn't saved (Calendar's hours, Profile edit) register here, so a switch
+/// to booking can ask "Save your changes first?" instead of throwing them away.
+@Observable
+final class ProUnsavedWork {
+    static let shared = ProUnsavedWork()
+
+    struct Entry {
+        var save: () async -> Bool
+        var discard: () -> Void
+    }
+
+    private(set) var entries: [String: Entry] = [:]
+    var hasAny: Bool { !entries.isEmpty }
+
+    func update(_ id: String, dirty: Bool, save: @escaping () async -> Bool, discard: @escaping () -> Void) {
+        if dirty {
+            entries[id] = Entry(save: save, discard: discard)
+        } else if entries[id] != nil {
+            entries[id] = nil
+        }
+    }
+
+    func clear(_ id: String) {
+        if entries[id] != nil { entries[id] = nil }
+    }
+
+    /// Saves each in turn. False at the first that doesn't save; the rest stay registered.
+    @MainActor
+    func saveAll() async -> Bool {
+        for (id, entry) in entries {
+            guard await entry.save() else { return false }
+            entries[id] = nil
+        }
+        return true
+    }
+
+    func discardAll() {
+        let all = entries
+        entries = [:]
+        for entry in all.values { entry.discard() }
+    }
+}
+
+/// "Save your changes first?" with Save and Discard, then `proceed`. Swiping it away stays put.
+struct SaveFirstSheet: ViewModifier {
+    @Binding var isPresented: Bool
+    var message: String? = "You've changed things you haven't saved."
+    var proceed: () -> Void
+
+    @State private var working = false
+    @State private var failed = false
+    @State private var go = false
+
+    func body(content: Content) -> some View {
+        content
+            .sheet(isPresented: $isPresented, onDismiss: {
+                failed = false
+                if go { go = false; proceed() }
+            }) {
+                ConfirmSheet(
+                    title: "Save your changes first?",
+                    message: message,
+                    confirmTitle: "Save",
+                    cancelTitle: "Discard",
+                    isWorking: working,
+                    onConfirm: {
+                        Task { @MainActor in
+                            working = true
+                            let ok = await ProUnsavedWork.shared.saveAll()
+                            working = false
+                            if ok { go = true; isPresented = false } else { failed = true }
+                        }
+                    },
+                    onCancel: {
+                        ProUnsavedWork.shared.discardAll()
+                        go = true
+                        isPresented = false
+                    }
+                ) {
+                    if failed { FieldMessage(text: "Didn't save. Your changes are still here. Try again.") }
+                }
+                .confirmSheetPresentation()
+            }
+    }
+}
+
+extension View {
+    /// See `SaveFirstSheet`.
+    func saveFirstSheet(isPresented: Binding<Bool>, proceed: @escaping () -> Void) -> some View {
+        modifier(SaveFirstSheet(isPresented: isPresented, proceed: proceed))
+    }
+}
+
+// MARK: - The booking side, from here
+
+/// Watches her booking-side threads while she's in Pro mode and puts up one line when a pro
+/// messages her there: "Kiara: ‘French tip or plain?’" with `Open`. Shared, so every pro tab
+/// shows the same banner and a message is only announced once.
+@Observable
+final class ProSideBanner {
+    static let shared = ProSideBanner()
+
+    struct Banner: Equatable {
+        let threadID: String
+        let line: String
+    }
+
+    var current: Banner? = nil
+    @ObservationIgnored private var seen: Set<String> = []
+    @ObservationIgnored private var owner: String? = nil
+    @ObservationIgnored private var token = 0
+
+    func observe(_ app: AppState) {
+        let me = app.client?.id
+        let latest = app.otherSideThreads.compactMap { t -> (MessageThread, Message)? in
+            guard let m = t.last else { return nil }
+            return (t, m)
+        }
+        // First look (or someone else signed in): what's already there isn't news.
+        if owner != me {
+            owner = me
+            seen = Set(latest.map { $0.1.id })
+            current = nil
+            return
+        }
+        for (thread, message) in latest where !seen.contains(message.id) {
+            seen.insert(message.id)
+            guard thread.unreadForClient > 0, !message.isSystem, message.senderID != me else { continue }
+            let name = app.pro(thread.proID)?.firstName ?? "Your pro"
+            let words = message.text.count > 60 ? String(message.text.prefix(57)) + "…" : message.text
+            show(Banner(threadID: thread.id, line: "\(name): ‘\(words)’"))
+        }
+    }
+
+    private func show(_ banner: Banner) {
+        withAnimation(Motion.spring) { current = banner }
+        token += 1
+        let mine = token
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(8))
+            guard mine == self.token else { return }
+            withAnimation(Motion.gentle) { self.current = nil }
+        }
+    }
+
+    func dismiss() { withAnimation(Motion.gentle) { current = nil } }
+}
+
+private struct ProSideBannerModifier: ViewModifier {
+    @Environment(AppState.self) private var app
+    @State private var center = ProSideBanner.shared
+    @State private var askSave = false
+    @State private var waiting: String? = nil
+
+    func body(content: Content) -> some View {
+        content
+            .overlay(alignment: .top) {
+                if let banner = center.current {
+                    HStack(alignment: .center, spacing: Space.m) {
+                        Text(banner.line)
+                            .font(HDFont.sub)
+                            .foregroundStyle(Palette.onInk)
+                            .lineLimit(2)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        Button {
+                            Haptics.light()
+                            open(banner.threadID)
+                        } label: {
+                            Text("Open").font(HDFont.subMedium).foregroundStyle(Palette.onInk)
+                                .underline()
+                                .frame(minWidth: 44, minHeight: 44)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityHint("Switches to booking and opens the conversation")
+                    }
+                    .padding(.leading, Space.l)
+                    .padding(.trailing, Space.s)
+                    .padding(.vertical, Space.xs)
+                    .background(Palette.inkGround, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: Radius.card, style: .continuous).strokeBorder(Palette.onInk.opacity(0.1), lineWidth: 0.5))
+                    .padding(.horizontal, Space.gutter)
+                    .padding(.top, Space.xs)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                    .accessibilityElement(children: .combine)
+                    .accessibilityAddTraits(.updatesFrequently)
+                }
+            }
+            .onAppear {
+                center.observe(app)
+                takeProfileRoute()
+            }
+            .onChange(of: app.otherSideThreads) { _, _ in center.observe(app) }
+            // Profile edit asked for from booking mode: bring the Profile tab forward; it pushes the screen.
+            .onChange(of: app.pendingRoute) { _, _ in takeProfileRoute() }
+            .saveFirstSheet(isPresented: $askSave) {
+                if let id = waiting { go(id) }
+            }
+    }
+
+    private func takeProfileRoute() {
+        guard case .proProfileEdit = app.pendingRoute, app.selectedProTab != .profile else { return }
+        app.selectedProTab = .profile
+    }
+
+    private func open(_ threadID: String) {
+        center.dismiss()
+        if ProUnsavedWork.shared.hasAny {
+            waiting = threadID
+            askSave = true
+        } else {
+            go(threadID)
+        }
+    }
+
+    private func go(_ threadID: String) {
+        waiting = nil
+        app.open(PushTarget(kind: .message, bookingID: nil, threadID: threadID, side: .client))
+    }
+}
+
+extension View {
+    /// Put on each pro tab root. See `ProSideBanner`.
+    func proSideBanner() -> some View { modifier(ProSideBannerModifier()) }
+}
+
 // MARK: - Status action button
 
-/// "On my way" → "I'm here" → "Start" → "Mark done". Marking done asks first, because it charges her.
+/// "On my way" → "I'm here" → "Start" → "Mark done". Marking done asks first. From 15 minutes
+/// after "I'm here", once she's messaged, `No show` sits under it. After done, a static warn dot:
+/// "Waiting for Ruby to pay."
 struct StatusActionButton: View {
     @Environment(AppState.self) private var app
     var booking: Booking
     var clientName: String
+    /// On the ink job hero: paper button, paper text.
+    var onInk = false
+    /// Drawn as an outline (the quieter one) when something else on screen is the main action.
+    var quiet = false
     @State private var busy = false
     @State private var confirmDone = false
+    @State private var confirmNoShow = false
+
+    private var soft: Color { onInk ? Palette.onInkSoft : Palette.inkSoft }
+    private var strong: Color { onInk ? Palette.onInk : Palette.ink }
 
     var body: some View {
-        if let step = ProFlow.nextStep(for: booking.status) {
-            PrimaryButton(title: step.title, isLoading: busy) {
-                if step.next == .done { confirmDone = true } else { Task { await move(to: step.next) } }
+        VStack(alignment: .leading, spacing: Space.s) {
+            if let step = ProFlow.nextStep(for: booking.status) {
+                if quiet {
+                    OutlineButton(title: step.title, isLoading: busy, isEnabled: !app.isOffline, tone: onInk ? .onInk : .paper) { tap(step) }
+                } else {
+                    InkButton(title: step.title, isLoading: busy, isEnabled: !app.isOffline, tone: onInk ? .onInk : .ink) { tap(step) }
+                }
+                if app.isOffline {
+                    Text("Updates need a connection. Try again when you're back.")
+                        .font(HDFont.caption).foregroundStyle(soft)
+                }
+                if booking.status == .arrived { noShow }
+            } else if booking.status == .done {
+                WarnDotLine(text: "Waiting for \(clientName) to pay.", color: strong)
+                    .frame(minHeight: 44, alignment: .leading)
             }
-            .confirmationDialog("Mark it done?", isPresented: $confirmDone, titleVisibility: .visible) {
-                Button("Yes, done") { Task { await move(to: .done) } }
-                Button("Not yet", role: .cancel) {}
-            } message: {
-                Text("This charges \(clientName) \(Money.format(booking.price.clientTotalCents)). \(Money.format(booking.price.proPayoutCents)) comes to you after the 12%.")
+        }
+        .confirmSheet(isPresented: $confirmDone,
+                      title: "Mark it done?",
+                      message: "\(clientName)'s asked to pay \(Money.format(booking.price.clientTotalCents)) now. If she doesn't, we charge her card in 12 hours. \(Money.format(booking.price.proPayoutCents)) comes to you.",
+                      confirmTitle: "Yes, done",
+                      cancelTitle: "Not yet") {
+            Task { await move(to: .done) }
+        }
+        .confirmSheet(isPresented: $confirmNoShow,
+                      title: "Mark \(clientName) as a no-show?",
+                      message: noShowMessage,
+                      confirmTitle: "Mark no-show",
+                      cancelTitle: "Wait a bit longer") {
+            Task { await move(to: .noShow) }
+        }
+    }
+
+    private func tap(_ step: (title: String, next: BookingStatus)) {
+        if step.next == .done { confirmDone = true } else { Task { await move(to: step.next) } }
+    }
+
+    // MARK: No show
+
+    private var arrivedAt: Date? { booking.events.last(where: { $0.status == .arrived })?.at }
+
+    private var messagesSent: Int {
+        guard let me = app.proSelf?.id, let thread = app.thread(for: booking) else { return 0 }
+        return thread.messages.filter { $0.senderID == me && !$0.isSystem }.count
+    }
+
+    private var noShowMessage: String {
+        let since = arrivedAt.map { "since \($0.clock)" } ?? "a while"
+        let times: String
+        switch messagesSent {
+        case 0: times = ""
+        case 1: times = " and messaged once"
+        case 2: times = " and messaged twice"
+        default: times = " and messaged \(messagesSent) times"
+        }
+        return "You've been here \(since)\(times). \(clientName)'s charged the full \(Money.format(ProMoney.noShowCharge(booking))) and you're paid \(Money.format(ProMoney.noShowPayout(booking))). She can question it for 12 hours."
+    }
+
+    private var noShow: some View {
+        TimelineView(.periodic(from: .now, by: 30)) { context in
+            let waited = arrivedAt.map { context.date.timeIntervalSince($0) >= 15 * 60 } ?? false
+            if waited && messagesSent > 0 {
+                Button {
+                    Haptics.light()
+                    confirmNoShow = true
+                } label: {
+                    Text("No show").font(HDFont.subMedium).foregroundStyle(strong)
+                        .frame(minHeight: 44).contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .disabled(app.isOffline)
+            } else {
+                Text("No show? Message \(clientName) first, then wait 15 minutes.")
+                    .font(HDFont.caption).foregroundStyle(soft)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-        } else if booking.status == .done {
-            HStack(spacing: 8) {
-                ProgressView().tint(Palette.inkSoft)
-                Text("Done. \(Money.format(booking.price.proPayoutCents)) to you tomorrow.")
-                    .font(HDFont.sub).foregroundStyle(Palette.inkSoft)
-            }
-            .frame(maxWidth: .infinity, minHeight: 44)
-            .accessibilityElement(children: .combine)
         }
     }
 
@@ -141,12 +639,14 @@ struct StatusActionButton: View {
         defer { busy = false }
         guard let updated = await app.update(booking, to: status) else { return }
         switch status {
-        case .onHerWay: app.show("She's been told you're on your way.")
-        case .arrived: app.show("She's been told you're here.")
+        case .onHerWay: app.show("\(clientName)'s been told you're on your way.")
+        case .arrived: app.show("\(clientName)'s been told you're here.")
         case .inProgress: app.show("Started. Tap Mark done when you're finished.")
         case .done:
             Haptics.success()
-            app.show("Done. \(Money.format(updated.price.proPayoutCents)) to you tomorrow.")
+            app.show("Done. \(clientName)'s been asked to pay.")
+        case .noShow:
+            app.show("Marked as a no-show. \(Money.format(ProMoney.noShowPayout(updated))) comes to you.")
         default: break
         }
     }
@@ -172,40 +672,29 @@ struct DeclineSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            SheetHeader(title: "Reason", subtitle: "She'll see this. Keep it kind.", onClose: { dismiss() })
+            SheetHeader(title: "Reason", subtitle: "\(clientName) sees this. Keep it kind.", onClose: { dismiss() })
             ScrollView {
                 VStack(spacing: 0) {
                     ForEach(Array(ProFlow.declineReasons.enumerated()), id: \.offset) { i, reason in
-                        Button {
-                            Haptics.selection()
+                        OptionBox(isSelected: picked == i, style: .row, action: {
                             withAnimation(Motion.spring) { picked = i }
-                        } label: {
-                            HStack(spacing: 14) {
-                                Image(systemName: picked == i ? "largecircle.fill.circle" : "circle")
-                                    .font(.system(size: 20, weight: .regular))
-                                    .foregroundStyle(picked == i ? Palette.lacquer : Palette.inkFaint)
-                                Text(reason).font(HDFont.body).foregroundStyle(Palette.ink)
-                                Spacer()
-                            }
-                            .frame(minHeight: 52)
-                            .contentShape(Rectangle())
+                        }) {
+                            Text(reason).font(HDFont.body).foregroundStyle(Palette.ink)
+                                .multilineTextAlignment(.leading)
                         }
-                        .buttonStyle(.plain)
-                        .accessibilityAddTraits(picked == i ? .isSelected : [])
-                        if i < ProFlow.declineReasons.count - 1 { Hairline() }
                     }
                     if isOther {
                         HDTextField(label: "", placeholder: "One line. She'll read it.", text: $other, axis: .vertical)
                             .padding(.top, Space.m)
-                            .transition(.move(edge: .top).combined(with: .opacity))
+                            .transition(.opacity)
                     }
                 }
                 .screenGutter()
                 .padding(.top, Space.s)
             }
-            VStack(spacing: Space.s) {
-                PrimaryButton(title: "Decline", isLoading: busy, isEnabled: canSend) { Task { await decline() } }
-                Text("\(clientName)'s hold is released the moment you tap.")
+            VStack(alignment: .leading, spacing: Space.s) {
+                InkButton(title: "Decline", isLoading: busy, isEnabled: canSend && !app.isOffline) { Task { await decline() } }
+                Text(app.isOffline ? "You're offline. Try again when you're back." : "\(clientName)'s hold is released the moment you tap.")
                     .font(HDFont.caption).foregroundStyle(Palette.inkSoft)
             }
             .screenGutter()
@@ -215,6 +704,7 @@ struct DeclineSheet: View {
         .holdsPushRoutes()
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
+        .presentationBackground(Palette.paper)
     }
 
     private func decline() async {
@@ -224,87 +714,53 @@ struct DeclineSheet: View {
         let reason = isOther ? other.trimmingCharacters(in: .whitespacesAndNewlines) : ProFlow.declineReasons[picked]
         // A failure shows as a toast on this sheet (holdsPushRoutes carries it) and the sheet stays.
         if await app.update(booking, to: .declined, reason: reason) != nil {
-            app.show("Declined. She's been told and her hold's released.")
+            app.show("Declined. \(clientName)'s been told and her hold's released.")
             dismiss()
         }
     }
 }
 
-// MARK: - Small booking row
+// MARK: - A booking as a row
 
 /// One line of a day: time, client, what, status. Used on Today and in Calendar.
 struct ProBookingRow: View {
     var booking: Booking
     var clientName: String
     var showDay = false
+    var showsHairline = true
+    @Environment(\.dynamicTypeSize) private var typeSize
 
     var body: some View {
-        HStack(alignment: .center, spacing: Space.m) {
-            VStack(alignment: .trailing, spacing: 2) {
-                Text(booking.start.clock).font(HDFont.subStrong).foregroundStyle(Palette.ink).monospacedDigit()
-                Text(booking.minutes.minutesLabel).font(HDFont.caption).foregroundStyle(Palette.inkSoft)
+        let layout = typeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: Space.xs))
+            : AnyLayout(HStackLayout(alignment: .firstTextBaseline, spacing: Space.m))
+        HStack(alignment: .center, spacing: Space.s) {
+            layout {
+                Text(showDay ? "\(booking.start.friendlyDay) \(booking.start.clock)" : booking.start.clock)
+                    .font(HDFont.priceSmall)
+                    .foregroundStyle(Palette.ink)
+                    .frame(minWidth: showDay ? 0 : 68, alignment: .leading)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(clientName).font(HDFont.nameSmall).foregroundStyle(Palette.ink)
+                    Text("\(booking.servicesLine) · \(booking.minutes.minutesLabel)")
+                        .font(HDFont.caption).foregroundStyle(Palette.inkSoft)
+                        .fixedSize(horizontal: false, vertical: true)
+                    StatusBadge(status: booking.status, forPro: true).padding(.top, 2)
+                }
             }
-            .frame(width: 66, alignment: .trailing)
-            Rectangle().fill(booking.status.color).frame(width: 3, height: 36).clipShape(Capsule())
-            VStack(alignment: .leading, spacing: 2) {
-                Text(showDay ? "\(clientName) · \(booking.start.friendlyDay)" : clientName)
-                    .font(HDFont.bodyStrong).foregroundStyle(Palette.ink)
-                Text(booking.servicesLine).font(HDFont.sub).foregroundStyle(Palette.inkSoft).lineLimit(1)
-            }
-            Spacer(minLength: 4)
-            StatusBadge(status: booking.status)
+            Spacer(minLength: 0)
+            Image(systemName: "chevron.right")
+                .font(.system(size: 13, weight: .regular))
+                .foregroundStyle(Palette.inkFaint)
+                .accessibilityHidden(true)
         }
-        .padding(.vertical, Space.s)
+        .padding(.vertical, Space.m)
         .contentShape(Rectangle())
+        .overlay(alignment: .bottom) {
+            if showsHairline { Rectangle().fill(Palette.lineStrong).frame(height: 0.5) }
+        }
         .accessibilityElement(children: .combine)
         .accessibilityHint("Opens the booking")
-    }
-}
-
-/// A gear or similar drawn like `IconButton`, for use inside a `NavigationLink`.
-struct IconGlyph: View {
-    var symbol: String
-    var body: some View {
-        Image(systemName: symbol)
-            .font(.system(size: 17, weight: .medium))
-            .foregroundStyle(Palette.ink)
-            .frame(width: 40, height: 40)
-            .background(Palette.card, in: Circle())
-            .overlay(Circle().strokeBorder(Palette.line, lineWidth: 1))
-    }
-}
-
-// MARK: - Work photos
-
-extension WorkItem {
-    /// A brand-new tile with placeholder art. Real image data comes later.
-    static func placeholder(category: Category, caption: String = "") -> WorkItem {
-        WorkItem(id: UUID().uuidString.lowercased(), category: category, caption: caption, seed: Int.random(in: 1...9_999))
-    }
-}
-
-/// A `PhotosPicker` dressed as the primary button.
-struct AddPhotosButton: View {
-    @Binding var selection: [PhotosPickerItem]
-    var title = "Add photos"
-    var maxCount = 10
-    var quiet = false
-
-    var body: some View {
-        PhotosPicker(selection: $selection, maxSelectionCount: maxCount, matching: .images) {
-            HStack(spacing: 8) {
-                Image(systemName: "plus")
-                Text(title)
-            }
-            .font(HDFont.bodyStrong)
-            .foregroundStyle(quiet ? Palette.ink : Palette.onLacquer)
-            .frame(maxWidth: .infinity)
-            .frame(height: 52)
-            .background(quiet ? Palette.card : Palette.lacquer, in: Capsule())
-            .overlay(Capsule().strokeBorder(quiet ? Palette.line : Color.clear, lineWidth: 1))
-        }
-        .buttonStyle(PressLift())
-        .accessibilityLabel(title)
     }
 }
 
@@ -349,6 +805,7 @@ struct ServiceEditorSheet: View {
     @Environment(\.dismiss) private var dismiss
     var categories: [Category]
     var onSave: (Service) -> Void
+    var onRemove: (() -> Void)? = nil
     private let existingID: String?
     @State private var name: String
     @State private var category: Category
@@ -357,9 +814,10 @@ struct ServiceEditorSheet: View {
     @State private var detail: String
     @State private var isPopular: Bool
 
-    init(existing: Service? = nil, categories: [Category], onSave: @escaping (Service) -> Void) {
+    init(existing: Service? = nil, categories: [Category], onRemove: (() -> Void)? = nil, onSave: @escaping (Service) -> Void) {
         self.categories = categories.isEmpty ? [.hair] : categories
         self.onSave = onSave
+        self.onRemove = onRemove
         existingID = existing?.id
         _name = State(initialValue: existing?.name ?? "")
         _category = State(initialValue: existing?.category ?? categories.first ?? .hair)
@@ -378,44 +836,31 @@ struct ServiceEditorSheet: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: Space.xl) {
                     HDTextField(label: "Service", placeholder: "Full set, French tip", text: $name)
-                    VStack(alignment: .leading, spacing: Space.s) {
-                        Text("Category").font(HDFont.subStrong).foregroundStyle(Palette.ink)
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(spacing: Space.s) {
+                    if categories.count > 1 {
+                        VStack(alignment: .leading, spacing: Space.s) {
+                            Text("Category").font(HDFont.caption).foregroundStyle(Palette.inkSoft)
+                            ProFlowLayout {
                                 ForEach(categories) { c in
-                                    Chip(title: c.label, isSelected: category == c, tint: c.tint) { category = c }
+                                    OptionBox(title: c.label, isSelected: category == c) { category = c }
                                 }
                             }
                         }
                     }
-                    VStack(alignment: .leading, spacing: 6) {
-                        HDTextField(label: "Price", placeholder: "95", text: $priceText, keyboard: .decimalPad)
-                        if priceCents > 0 {
-                            Text("You get \(Money.format(ProMoney.afterFee(priceCents)))")
-                                .font(HDFont.caption).foregroundStyle(Palette.inkSoft)
-                        }
-                    }
-                    HStack {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("How long").font(HDFont.subStrong).foregroundStyle(Palette.ink)
-                            Text(minutes.minutesLabel).font(HDFont.sub).foregroundStyle(Palette.inkSoft).monospacedDigit()
-                        }
-                        Spacer()
-                        Stepper("How long", value: $minutes, in: 15...300, step: 15).labelsHidden()
-                    }
+                    HDTextField(label: "Price", placeholder: "95", text: $priceText, keyboard: .decimalPad,
+                                caption: priceCents > 0 ? "You get \(Money.format(ProMoney.afterFee(priceCents)))" : "What she pays for this. Hair Done's 12% comes out of your side.")
+                    HDStepper(title: "How long", value: $minutes, in: 15...300, step: 15) { $0.minutesLabel }
                     HDTextField(label: "What's included", placeholder: "Optional", text: $detail, axis: .vertical)
-                    Toggle(isOn: $isPopular) {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Mark as popular").font(HDFont.body).foregroundStyle(Palette.ink)
-                            Text("Shows a small tag on your profile.").font(HDFont.caption).foregroundStyle(Palette.inkSoft)
-                        }
+                    HDSwitch(title: "Mark as popular", subtitle: "Shows POPULAR beside it on your profile.", isOn: $isPopular)
+                    if let onRemove {
+                        TertiaryButton(title: "Remove this service") { onRemove(); dismiss() }
+                            .padding(.leading, -8)
                     }
-                    .tint(Palette.lacquer)
                 }
                 .screenGutter()
                 .padding(.vertical, Space.l)
             }
-            PrimaryButton(title: "Save", isEnabled: canSave) {
+            .scrollDismissesKeyboard(.interactively)
+            InkButton(title: "Done", isEnabled: canSave) {
                 onSave(Service(id: existingID ?? UUID().uuidString.lowercased(), name: name.trimmingCharacters(in: .whitespaces),
                                category: category, priceCents: priceCents, minutes: minutes, detail: detail, isPopular: isPopular))
                 dismiss()
@@ -426,123 +871,213 @@ struct ServiceEditorSheet: View {
         .paperBackground()
         .holdsPushRoutes()
         .presentationDragIndicator(.visible)
+        .presentationBackground(Palette.paper)
     }
 }
 
-/// One service, as a row with edit and remove.
+/// One service as a price-list row: name and duration on the left, price on the right, `Edit` in ink.
 struct ServiceEditRow: View {
     var service: Service
     var onEdit: () -> Void
-    var onRemove: () -> Void
 
     var body: some View {
-        HStack(alignment: .top, spacing: Space.m) {
-            VStack(alignment: .leading, spacing: 3) {
-                HStack(spacing: 6) {
-                    Text(service.name).font(HDFont.bodyStrong).foregroundStyle(Palette.ink)
-                    if service.isPopular { Tag(text: "Popular", color: Palette.lacquer, background: Palette.lacquerSoft) }
+        Button {
+            Haptics.light()
+            onEdit()
+        } label: {
+            HStack(alignment: .firstTextBaseline, spacing: Space.m) {
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(alignment: .firstTextBaseline, spacing: Space.s) {
+                        Text(service.name).font(HDFont.body).foregroundStyle(Palette.ink)
+                        if service.isPopular { Tag(text: "Popular") }
+                    }
+                    Text("\(service.durationLabel) · you get \(Money.format(ProMoney.afterFee(service.priceCents)))")
+                        .font(HDFont.caption).foregroundStyle(Palette.inkSoft)
                 }
-                Text("\(service.durationLabel) · \(service.category.label)").font(HDFont.caption).foregroundStyle(Palette.inkSoft)
-                Text("You get \(Money.format(ProMoney.afterFee(service.priceCents)))").font(HDFont.caption).foregroundStyle(Palette.inkSoft)
-            }
-            Spacer()
-            VStack(alignment: .trailing, spacing: 4) {
+                Spacer(minLength: Space.s)
                 Text(service.priceLabel).font(HDFont.price).foregroundStyle(Palette.ink)
-                HStack(spacing: 0) {
-                    TertiaryButton(title: "Edit", tint: Palette.lacquer, action: onEdit)
-                    TertiaryButton(title: "Remove", action: onRemove)
-                }
+                Text("Edit").font(HDFont.subMedium).foregroundStyle(Palette.ink)
             }
+            .padding(.vertical, Space.m)
+            .frame(minHeight: 52)
+            .contentShape(Rectangle())
+            .overlay(alignment: .bottom) { Rectangle().fill(Palette.lineStrong).frame(height: 0.5) }
         }
-        .padding(.vertical, Space.s)
+        .buttonStyle(.plain)
+        .accessibilityElement(children: .combine)
+        .accessibilityHint("Edits the service")
     }
 }
 
-// MARK: - Availability editor
+// MARK: - Hours
 
-/// Weekday rows: on/off, then start and end in half hours. Binds straight to the template dictionary.
-struct AvailabilityEditor: View {
+/// Her usual week as hairline rows (tap a day for its windows), the buffer between jobs, the
+/// notice she needs, and a live line: "Clients can book you 32 hours a week."
+struct ProHoursForm: View {
     @Binding var hours: [Weekday: [TimeRange]]
-    private let steps = Array(stride(from: 0, through: 23 * 60 + 30, by: 30))
+    @Binding var bufferMinutes: Int
+    @Binding var noticeMinutes: Int
+    var showsCopyMonday = false
+
+    private struct EditingDay: Identifiable {
+        let day: Weekday
+        var id: Int { day.rawValue }
+    }
+    @State private var editing: EditingDay? = nil
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Space.xl) {
+            VStack(alignment: .leading, spacing: 0) {
+                ForEach(Weekday.week, id: \.self) { day in
+                    let ranges = hours[day] ?? []
+                    HairlineRow(title: day.long,
+                                trailing: Text(ProFlow.hoursSummary(ranges))
+                                    .font(HDFont.priceSmall)
+                                    .foregroundStyle(ranges.isEmpty ? Palette.inkSoft : Palette.ink)
+                                    .multilineTextAlignment(.trailing)) {
+                        editing = EditingDay(day: day)
+                    }
+                    .accessibilityHint("Changes \(day.long)'s hours")
+                }
+                Text(previewLine)
+                    .font(HDFont.sub).foregroundStyle(Palette.inkSoft)
+                    .padding(.top, Space.m)
+                if showsCopyMonday {
+                    TertiaryButton(title: "Copy Monday to every day", tint: Palette.ink) {
+                        let monday = hours[.monday] ?? []
+                        withAnimation(Motion.spring) { for d in Weekday.week { hours[d] = monday } }
+                    }
+                    .padding(.leading, -8)
+                }
+            }
+
+            VStack(alignment: .leading, spacing: Space.xs) {
+                HDStepper(title: "Between jobs", value: $bufferMinutes, in: 0...60, step: 15) { "\($0) min" }
+                Text("Time to pack up and drive. Clients can't book inside it.")
+                    .font(HDFont.caption).foregroundStyle(Palette.inkSoft)
+            }
+
+            VStack(alignment: .leading, spacing: Space.s) {
+                Text("Notice you need").font(HDFont.body).foregroundStyle(Palette.ink)
+                ProFlowLayout {
+                    ForEach(noticeChoices, id: \.self) { m in
+                        OptionBox(title: ProFlow.noticeLabel(m), isSelected: noticeMinutes == m) { noticeMinutes = m }
+                    }
+                }
+                Text("Nobody can book you closer to the time than this.")
+                    .font(HDFont.caption).foregroundStyle(Palette.inkSoft)
+            }
+        }
+        .sheet(item: $editing) { e in
+            DayHoursSheet(day: e.day, windows: hours[e.day] ?? []) { new in
+                withAnimation(Motion.spring) { hours[e.day] = new }
+            }
+        }
+    }
+
+    /// The four choices, plus whatever she has now if it isn't one of them.
+    private var noticeChoices: [Int] {
+        ProFlow.noticeOptions.contains(noticeMinutes) ? ProFlow.noticeOptions : (ProFlow.noticeOptions + [noticeMinutes]).sorted()
+    }
+
+    private var previewLine: String {
+        let n = ProFlow.weeklyHours(hours)
+        return n == 0 ? "Clients can't book you yet. Add some hours." : "Clients can book you \(ProFlow.count(n, "hour", "hours")) a week."
+    }
+}
+
+/// One day's windows: off or on, each window on two wheels, `Add another window`.
+struct DayHoursSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    var day: Weekday
+    var onDone: ([TimeRange]) -> Void
+    @State private var windows: [TimeRange]
+
+    private let steps = Array(stride(from: 0, through: 24 * 60, by: 15))
+
+    init(day: Weekday, windows: [TimeRange], onDone: @escaping ([TimeRange]) -> Void) {
+        self.day = day
+        self.onDone = onDone
+        _windows = State(initialValue: windows.sorted { $0.startMinutes < $1.startMinutes })
+    }
+
+    private var problem: String? {
+        if windows.contains(where: { $0.endMinutes <= $0.startMinutes }) { return "A window has to finish after it starts." }
+        let sorted = windows.sorted { $0.startMinutes < $1.startMinutes }
+        for i in sorted.indices.dropFirst() where sorted[i].startMinutes < sorted[i - 1].endMinutes {
+            return "These windows overlap. Move one."
+        }
+        return nil
+    }
 
     var body: some View {
         VStack(spacing: 0) {
-            ForEach(Weekday.week, id: \.self) { day in
-                VStack(alignment: .leading, spacing: Space.s) {
-                    Toggle(isOn: onBinding(day)) {
-                        HStack {
-                            Text(day.long).font(HDFont.body).foregroundStyle(Palette.ink)
-                            Spacer()
-                            if !isOn(day) { Text("Off").font(HDFont.sub).foregroundStyle(Palette.inkSoft) }
+            SheetHeader(title: day.long, onClose: { dismiss() })
+            ScrollView {
+                VStack(alignment: .leading, spacing: Space.l) {
+                    HDSwitch(title: "Working", subtitle: windows.isEmpty ? "Off. Clients can't book you on \(day.long)s." : nil, isOn: Binding(
+                        get: { !windows.isEmpty },
+                        set: { on in withAnimation(Motion.spring) { windows = on ? [.hours(9, 17)] : [] } }
+                    ))
+                    ForEach(windows.indices, id: \.self) { i in
+                        VStack(alignment: .leading, spacing: Space.s) {
+                            HStack {
+                                Text(windows.count > 1 ? "Window \(i + 1)" : "Hours").labelStyle()
+                                Spacer()
+                                if windows.count > 1 {
+                                    TertiaryButton(title: "Remove") { if i < windows.count { _ = withAnimation(Motion.spring) { windows.remove(at: i) } } }
+                                }
+                            }
+                            HStack(spacing: Space.s) {
+                                wheel("Start", binding: Binding(get: { i < windows.count ? windows[i].startMinutes : 0 },
+                                                                 set: { if i < windows.count { windows[i].startMinutes = $0 } }))
+                                Text("to").font(HDFont.sub).foregroundStyle(Palette.inkSoft)
+                                wheel("Finish", binding: Binding(get: { i < windows.count ? windows[i].endMinutes : 0 },
+                                                                  set: { if i < windows.count { windows[i].endMinutes = $0 } }))
+                            }
                         }
+                        .padding(.bottom, Space.s)
+                        .overlay(alignment: .bottom) { Rectangle().fill(Palette.lineStrong).frame(height: 0.5) }
                     }
-                    .tint(Palette.lacquer)
-                    if isOn(day) {
-                        HStack(spacing: Space.s) {
-                            timePicker("Start on \(day.long)", binding: startBinding(day))
-                            Text("to").font(HDFont.sub).foregroundStyle(Palette.inkSoft)
-                            timePicker("Finish on \(day.long)", binding: endBinding(day))
-                            Spacer()
-                        }
-                        .transition(.opacity)
+                    if !windows.isEmpty {
+                        TertiaryButton(title: "Add another window", tint: Palette.ink) { addWindow() }
+                            .padding(.leading, -8)
                     }
+                    if let problem { FieldMessage(text: problem) }
                 }
-                .padding(.vertical, Space.m)
-                if day != .sunday { Hairline() }
+                .screenGutter()
+                .padding(.vertical, Space.l)
             }
+            InkButton(title: "Done", isEnabled: problem == nil) {
+                onDone(windows.sorted { $0.startMinutes < $1.startMinutes })
+                dismiss()
+            }
+            .screenGutter()
+            .padding(.vertical, Space.l)
         }
-        .animation(Motion.spring, value: hours)
+        .paperBackground()
+        .holdsPushRoutes()
+        .presentationDetents([.large])
+        .presentationDragIndicator(.visible)
+        .presentationBackground(Palette.paper)
     }
 
-    private func timePicker(_ label: String, binding: Binding<Int>) -> some View {
+    private func wheel(_ label: String, binding: Binding<Int>) -> some View {
         Picker(label, selection: binding) {
-            ForEach(steps, id: \.self) { m in Text(TimeRange(startMinutes: m, endMinutes: m).clock(m)).tag(m) }
-        }
-        .pickerStyle(.menu)
-        .tint(Palette.ink)
-        .padding(.horizontal, 6)
-        .background(Palette.card, in: RoundedRectangle(cornerRadius: Radius.input, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: Radius.input, style: .continuous).strokeBorder(Palette.line, lineWidth: 1))
-        .accessibilityLabel(label)
-    }
-
-    private func isOn(_ day: Weekday) -> Bool { !(hours[day] ?? []).isEmpty }
-    private func range(_ day: Weekday) -> TimeRange { hours[day]?.first ?? .hours(9, 17) }
-
-    private func onBinding(_ day: Weekday) -> Binding<Bool> {
-        Binding(get: { isOn(day) }, set: { on in hours[day] = on ? [.hours(9, 17)] : [] })
-    }
-    private func startBinding(_ day: Weekday) -> Binding<Int> {
-        Binding(get: { range(day).startMinutes }, set: { m in
-            var r = range(day)
-            r.startMinutes = m
-            if r.endMinutes <= m { r.endMinutes = min(m + 60, 23 * 60 + 30) }
-            hours[day] = [r]
-        })
-    }
-    private func endBinding(_ day: Weekday) -> Binding<Int> {
-        Binding(get: { range(day).endMinutes }, set: { m in
-            var r = range(day)
-            r.endMinutes = m
-            if r.startMinutes >= m { r.startMinutes = max(m - 60, 0) }
-            hours[day] = [r]
-        })
-    }
-}
-
-// MARK: - Progress segments
-
-struct ProgressSegments: View {
-    var step: Int
-    var total: Int
-    var body: some View {
-        HStack(spacing: 4) {
-            ForEach(0..<total, id: \.self) { i in
-                Capsule().fill(i < step ? Palette.lacquer : Palette.line).frame(height: 3)
+            ForEach(steps, id: \.self) { m in
+                Text(TimeRange(startMinutes: m, endMinutes: m).clock(m)).font(HDFont.price).tag(m)
             }
         }
-        .animation(Motion.spring, value: step)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Step \(step) of \(total)")
+        .pickerStyle(.wheel)
+        .frame(maxWidth: .infinity)
+        .frame(height: 140)
+        .clipped()
+        .accessibilityLabel("\(label) on \(day.long)")
+    }
+
+    private func addWindow() {
+        let lastEnd = windows.map(\.endMinutes).max() ?? 17 * 60
+        let start = min(lastEnd + 60, 22 * 60)
+        withAnimation(Motion.spring) { windows.append(TimeRange(startMinutes: start, endMinutes: min(start + 120, 24 * 60))) }
     }
 }

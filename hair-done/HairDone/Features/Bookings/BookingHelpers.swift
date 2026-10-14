@@ -14,25 +14,62 @@ extension Booking {
     /// "Today, 6:15 pm · Fitzroy North"
     var whenWhereLine: String { "\(start.friendlyDayTime) · \(address.suburb)" }
 
+    /// What she pays if she cancels right now, by the spec (product-spec §5):
+    /// requested, or confirmed and 24 hours or more out: nothing. Confirmed inside 24 hours, or
+    /// once the pro is on her way: half the services and travel. Once the pro has arrived (or
+    /// started): the full price and the booking fee.
+    var cancelChargeCents: Int {
+        let work = price.servicesCents + price.travelFeeCents
+        switch status {
+        case .confirmed:
+            if hoursUntil >= Double(Fees.freeCancellationHours) { return 0 }
+            return Int((Double(work) * Fees.lateCancellationRate).rounded())
+        case .onHerWay:
+            return Int((Double(work) * Fees.lateCancellationRate).rounded())
+        case .arrived, .inProgress:
+            return work + price.bookingFeeCents
+        default:
+            return 0
+        }
+    }
+
+    /// The client can cancel up to the moment the work starts.
+    var clientCanCancel: Bool { [.requested, .confirmed, .onHerWay, .arrived].contains(status) }
+
     /// The line on the cancel sheet, with the exact charge. Copy deck `detail.cancel.body.*`.
     func cancelBody(proName: String) -> String {
-        if status == .requested { return "She hasn't confirmed yet, so nothing's charged." }
-        let charge = cancellationChargeCents
-        if charge == 0 { return "More than 24 hours out, so it's free. The hold drops off your card in a few days." }
-        return "Under 24 hours. \(proName) keeps half, \(Money.format(charge)). She's already turned down other work for you."
+        let charge = cancelChargeCents
+        switch status {
+        case .requested:
+            return "She hasn't confirmed yet, so nothing's charged."
+        case .onHerWay:
+            return "\(proName)'s already on her way, so she keeps half, \(Money.format(charge)). The rest drops off your card."
+        case .arrived, .inProgress:
+            return "\(proName)'s at your door, so it's the full price and the \(Money.format(price.bookingFeeCents)) booking fee."
+        default:
+            if charge == 0 { return "More than 24 hours out, so it's free. The hold drops off your card in a few days." }
+            return "Under 24 hours. \(proName) keeps half, \(Money.format(charge)). She's already turned down other work for you."
+        }
     }
 
     /// Button title on the cancel sheet. Carries the amount when there is one.
     var cancelButtonTitle: String {
-        let charge = cancellationChargeCents
+        let charge = cancelChargeCents
         return charge == 0 ? "Cancel it" : "Cancel and pay \(Money.format(charge))"
     }
 
     /// Toast after cancelling. Copy deck `detail.cancel.done.*`.
     func cancelDoneLine(proName: String) -> String {
-        let charge = cancellationChargeCents
+        let charge = cancelChargeCents
         if charge == 0 { return "Cancelled. Nothing charged." }
+        if status == .arrived || status == .inProgress { return "Cancelled. \(Money.format(charge)) to \(proName)." }
         return "Cancelled. \(Money.format(charge)) to \(proName), the rest drops off your card."
+    }
+
+    /// When the card is charged if she doesn't pay at done: 12 hours after the pro marked it done.
+    var autoChargeAt: Date {
+        let doneAt = events.last(where: { $0.status == .done })?.at ?? end
+        return doneAt.adding(hours: Fees.autoCaptureHours)
     }
 
     /// A plain-text receipt for sharing.
@@ -44,7 +81,7 @@ extension Booking {
         lines.append("")
         for s in services { lines.append("\(s.name) (\(s.durationLabel))  \(Money.format(s.priceCents))") }
         lines.append("Travel fee  \(Money.format(price.travelFeeCents))")
-        lines.append("Hair Done fee  \(Money.format(price.bookingFeeCents))")
+        lines.append("Booking fee  \(Money.format(price.bookingFeeCents))")
         if price.tipCents > 0 { lines.append("Tip  \(Money.format(price.tipCents))") }
         lines.append("Total  \(Money.format(price.clientTotalCents))")
         lines.append("")
@@ -54,7 +91,7 @@ extension Booking {
 
     /// What you'd text a friend so she knows where you are.
     func shareText(proName: String) -> String {
-        "I've got \(proName) coming \(start.friendlyDayInSentence) at \(start.clock), \(address.short). Booked on Hair Done. Booking \(reference)."
+        "I've got \(proName) coming \(start.hdSpokenDay) at \(start.clock), \(address.short). Booked on Hair Done. Booking \(reference)."
     }
 
     /// Rough minutes for her to drive from her base to your door. Used for the on-her-way line.
@@ -66,6 +103,21 @@ extension Booking {
     /// When each step on the timeline happened, if it has.
     func eventTime(for status: BookingStatus) -> Date? {
         events.first { $0.status == status }?.at
+    }
+
+    /// Not finished on either side: still to happen, or done and waiting on payment.
+    var isUnfinished: Bool { status.isUpcoming || status == .done }
+
+    /// Her pro's photo for this booking: one in the booked category, else her pinned or first photo,
+    /// else the warm placeholder in that category. Never another pro's photo.
+    func coverItem(pro: Pro?) -> WorkItem {
+        if let pro {
+            let matching = pro.work.filter { $0.category == primaryCategory }
+            if let pick = matching.first(where: { $0.isPinned }) ?? matching.first { return pick }
+            if let pick = pro.work.first(where: { $0.isPinned }) ?? pro.work.first { return pick }
+            return WorkItem(id: "cover_\(pro.id)", category: primaryCategory, caption: pro.displayName, seed: pro.seed)
+        }
+        return WorkItem(id: "cover_\(id)", category: primaryCategory, caption: servicesLine, seed: reference.hdSeed)
     }
 }
 
@@ -108,6 +160,28 @@ extension Date {
         let f = DateFormatter(); f.locale = Locale(identifier: "en_AU"); f.dateFormat = "d MMM"; return f.string(from: self)
     }
 
+    /// For the middle of a sentence: "today", "tomorrow", "on Saturday", "on Sat 25 Oct".
+    var hdSpokenDay: String {
+        let cal = Calendar.current
+        if cal.isDateInToday(self) { return "today" }
+        if cal.isDateInTomorrow(self) { return "tomorrow" }
+        if cal.isDateInYesterday(self) { return "yesterday" }
+        let days = cal.dateComponents([.day], from: Date().startOfDay, to: startOfDay).day ?? 99
+        let f = DateFormatter(); f.locale = Locale(identifier: "en_AU")
+        f.dateFormat = (days > 0 && days < 7) ? "EEEE" : "EEE d MMM"
+        return "on " + f.string(from: self)
+    }
+
+    /// "Thursday 23 October"
+    var hdLongDay: String {
+        let f = DateFormatter(); f.locale = Locale(identifier: "en_AU"); f.dateFormat = "EEEE d MMMM"; return f.string(from: self)
+    }
+
+    /// "March 2026"
+    var hdMonthYear: String {
+        let f = DateFormatter(); f.locale = Locale(identifier: "en_AU"); f.dateFormat = "MMMM yyyy"; return f.string(from: self)
+    }
+
     var yearNumber: Int { Calendar.current.component(.year, from: self) }
 }
 
@@ -123,25 +197,139 @@ extension String {
     }
 }
 
-/// A lacquer dot that breathes. For the booking that's happening today.
+/// A status dot that breathes, for the booking that's happening today. Still under Reduce Motion.
 struct LiveDot: View {
-    var color: Color = Palette.lacquer
+    var color: Color = Palette.success
+    var size: CGFloat = 6
     @State private var on = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         ZStack {
-            Circle().fill(color.opacity(0.28))
-                .frame(width: 16, height: 16)
-                .scaleEffect(on ? 1.15 : 0.6)
+            Circle().fill(color.opacity(0.3))
+                .frame(width: size * 2.4, height: size * 2.4)
+                .scaleEffect(on ? 1.1 : 0.5)
                 .opacity(on ? 0 : 0.9)
-            Circle().fill(color).frame(width: 8, height: 8)
+            Circle().fill(color).frame(width: size, height: size)
         }
-        .frame(width: 16, height: 16)
+        .frame(width: size * 2.4, height: size * 2.4)
         .onAppear {
             guard !reduceMotion else { return }
             withAnimation(.easeOut(duration: 1.6).repeatForever(autoreverses: false)) { on = true }
         }
         .accessibilityHidden(true)
+    }
+}
+
+/// A photo that fills its frame, cropped, at the photo radius. Nil shows the warm photo ground.
+struct BookingPhoto: View {
+    var item: WorkItem?
+    var cornerRadius: CGFloat = Radius.photo
+
+    var body: some View {
+        Group {
+            if let item { WorkTile(item: item, cornerRadius: 0) } else { Palette.photoGround }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+        .accessibilityHidden(true)
+    }
+}
+
+/// The ink "Next up" block, the same object as Home's: her photo at the left, status eyebrow,
+/// serif name line and the time, on `inkGround`. Opens the booking.
+struct NextUpBlock: View {
+    var booking: Booking
+    var pro: Pro?
+    var action: () -> Void
+
+    private var proName: String { pro?.firstName ?? "her" }
+
+    var body: some View {
+        Button {
+            Haptics.light()
+            action()
+        } label: {
+            HStack(spacing: 0) {
+                BookingPhoto(item: booking.coverItem(pro: pro), cornerRadius: 0)
+                    .frame(width: 84)
+                    .frame(maxHeight: .infinity)
+                    .clipped()
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 7) {
+                        if booking.isToday && booking.status.isActiveDay {
+                            LiveDot(color: dotColor, size: 5)
+                        } else {
+                            Circle().fill(dotColor).frame(width: 5, height: 5)
+                        }
+                        Text("Next up · \(booking.status.label)")
+                            .eyebrowStyle(color: Palette.onInkSoft)
+                            .lineLimit(1)
+                    }
+                    Text(booking.cardTitle(proName: proName))
+                        .font(HDFont.nameBar)
+                        .foregroundStyle(Palette.onInk)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text(booking.whenWhereLine)
+                        .font(HDFont.caption)
+                        .foregroundStyle(Palette.onInkSoft)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(.leading, Space.l)
+                .padding(.vertical, 14)
+                Spacer(minLength: Space.s)
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 13, weight: .regular))
+                    .foregroundStyle(Palette.onInkSoft)
+                    .padding(.trailing, Space.l)
+                    .accessibilityHidden(true)
+            }
+            .frame(minHeight: 104)
+            .background(Palette.inkGround)
+            .clipShape(RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: Radius.card, style: .continuous)
+                    .strokeBorder(Palette.onInk.opacity(0.10), lineWidth: 0.5)
+            )
+        }
+        .buttonStyle(PressLift(scale: 0.985))
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Next up. \(booking.cardTitle(proName: proName)), \(booking.whenWhereLine), \(booking.status.label)")
+        .accessibilityHint("Opens the booking")
+    }
+
+    /// Status dot on ink: warn for waiting, success for on, paper for the rest.
+    private var dotColor: Color {
+        switch booking.status {
+        case .requested: return Palette.warn
+        case .confirmed, .onHerWay, .arrived, .inProgress, .done, .paid: return Palette.success
+        default: return Palette.onInkSoft
+        }
+    }
+}
+
+/// An eyebrow status on paper: 6pt dot in the status colour, tracked caps in ink. Same rules as
+/// `StatusBadge`, but on-the-way states get the success dot (lacquer is for unread and Pay only).
+struct BookingStatusEyebrow: View {
+    var status: BookingStatus
+    var live = false
+
+    var body: some View {
+        HStack(spacing: 6) {
+            if !status.isCancelled {
+                if live { LiveDot(color: color) } else { Circle().fill(color).frame(width: 6, height: 6) }
+            }
+            Text(status.label)
+                .eyebrowStyle(color: status.isCancelled ? Palette.inkSoft : Palette.ink)
+                .lineLimit(1)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Status: \(status.label)")
+    }
+
+    private var color: Color {
+        switch status {
+        case .requested: return Palette.warn
+        default: return Palette.success
+        }
     }
 }

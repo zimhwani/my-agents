@@ -42,7 +42,7 @@ struct OnboardingFlow: View {
                 )
                 .transition(slide)
             case .name:
-                OnboardingName(onNext: { go(.location) })
+                OnboardingName(onNext: nameDone)
                     .transition(slide)
             case .location:
                 OnboardingLocation()
@@ -61,6 +61,17 @@ struct OnboardingFlow: View {
             insertion: .move(edge: forward ? .trailing : .leading).combined(with: .opacity),
             removal: .move(edge: forward ? .leading : .trailing).combined(with: .opacity)
         )
+    }
+
+    /// After her name: the location ask, unless she came in through "Get booked here", in which
+    /// case she goes straight to You, where pro setup opens (`AccountView` takes the intent).
+    private func nameDone() {
+        if app.wantsProOnboarding {
+            app.selectedTab = .you
+            app.finishOnboarding()
+        } else {
+            go(.location)
+        }
     }
 
     private func go(_ to: Step, forward: Bool = true) {
@@ -83,16 +94,17 @@ struct OnboardingFlow: View {
 
 // MARK: - Shared pieces
 
-/// Serif headline and a soft sub-line. Air above, air below.
+/// Serif title and a soft sub-line. Air above, air below.
 private struct OnboardingHeadline: View {
     var title: String
     var sub: String? = nil
     var body: some View {
         VStack(alignment: .leading, spacing: Space.s) {
             Text(title)
-                .font(HDFont.hero)
+                .font(HDFont.title)
                 .foregroundStyle(Palette.ink)
                 .fixedSize(horizontal: false, vertical: true)
+                .accessibilityAddTraits(.isHeader)
             if let sub {
                 Text(sub)
                     .font(HDFont.body)
@@ -105,7 +117,7 @@ private struct OnboardingHeadline: View {
     }
 }
 
-/// Top row with an optional back button. Keeps the same height with or without it.
+/// Top row with an optional bare back glyph. Keeps the same height with or without it.
 private struct OnboardingTopBar: View {
     var onBack: (() -> Void)? = nil
     var body: some View {
@@ -113,24 +125,69 @@ private struct OnboardingTopBar: View {
             if let onBack { IconButton(symbol: "chevron.left", label: "Back", action: onBack) }
             Spacer()
         }
-        .frame(height: 44)
-        .screenGutter()
+        .frame(minHeight: 44)
+        .padding(.horizontal, Space.gutter - 12)
         .padding(.top, Space.s)
     }
 }
 
-/// One line of red under a field, only when there's something to say.
+/// A problem under a field: warn dot, ink words. Never lacquer, never red.
 private struct OnboardingError: View {
     var text: String?
     var body: some View {
         if let text {
-            Text(text)
-                .font(HDFont.caption)
-                .foregroundStyle(Palette.lacquer)
-                .fixedSize(horizontal: false, vertical: true)
-                .transition(.opacity.combined(with: .move(edge: .top)))
+            FieldMessage(text: text)
+                .transition(.opacity)
                 .accessibilityAddTraits(.updatesFrequently)
         }
+    }
+}
+
+/// The underline field the sign-in steps share, like `HDTextField`, but with focus the step can
+/// set (so the keyboard is up when the step arrives). A leading view sits on the same rule (+61).
+private struct OnboardingField<Leading: View>: View {
+    var placeholder: String
+    @Binding var text: String
+    var focused: FocusState<Bool>.Binding
+    var hasError: Bool
+    var monospaced = false
+    @ViewBuilder var leading: () -> Leading
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: Space.m) {
+            leading()
+            TextField(placeholder, text: $text)
+                .font(monospaced ? HDFont.body.monospacedDigit() : HDFont.body)
+                .foregroundStyle(Palette.ink)
+                .tint(Palette.ink)
+                .focused(focused)
+        }
+        .padding(.vertical, 12)
+        .frame(minHeight: 48)
+        .overlay(alignment: .bottom) {
+            Rectangle()
+                .fill(hasError ? Palette.warn : (focused.wrappedValue ? Palette.ink : Palette.line))
+                .frame(height: focused.wrappedValue || hasError ? 2 : 1)
+                .animation(Motion.gentle, value: focused.wrappedValue)
+        }
+    }
+}
+
+extension OnboardingField where Leading == EmptyView {
+    init(placeholder: String, text: Binding<String>, focused: FocusState<Bool>.Binding, hasError: Bool, monospaced: Bool = false) {
+        self.init(placeholder: placeholder, text: text, focused: focused, hasError: hasError, monospaced: monospaced) { EmptyView() }
+    }
+}
+
+/// The paper footer every step's action sits in.
+private struct OnboardingFooter<Content: View>: View {
+    @ViewBuilder var content: () -> Content
+    var body: some View {
+        VStack(spacing: Space.xs) { content() }
+            .screenGutter()
+            .padding(.top, Space.m)
+            .padding(.bottom, Space.s)
+            .background(Palette.paper)
     }
 }
 
@@ -147,9 +204,9 @@ private struct OnboardingWelcome: View {
     /// The raw nonce for the Apple request in flight; its hash goes to Apple, the raw one to our server.
     @State private var nonce = ""
 
-    /// Paper-coloured ink for everything sitting on the video.
-    private let onVideo = Color(hex: 0xF4ECE4)
-    private let onVideoSoft = Color(hex: 0xF4ECE4).opacity(0.78)
+    /// Paper-coloured type for everything sitting on the video.
+    private let onVideo = Palette.onInk
+    private let onVideoSoft = Palette.onInk.opacity(0.78)
 
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -160,7 +217,7 @@ private struct OnboardingWelcome: View {
 
                 MonogramMark(size: 22, color: onVideo)
                     .padding(.bottom, Space.l)
-                .accessibilityHidden(true)
+                    .accessibilityHidden(true)
 
                 VStack(alignment: .leading, spacing: -2) {
                     Text("hair done.")
@@ -174,6 +231,7 @@ private struct OnboardingWelcome: View {
                 .foregroundStyle(onVideo)
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel("Hair done, nails done, everything done")
+                .accessibilityAddTraits(.isHeader)
                 .padding(.bottom, Space.l)
 
                 Text("A vetted pro comes to you. Melbourne, for now.")
@@ -193,12 +251,22 @@ private struct OnboardingWelcome: View {
                     }
                     .signInWithAppleButtonStyle(.white)
                     .frame(height: 52)
-                    .clipShape(Capsule())
+                    .clipShape(RoundedRectangle(cornerRadius: Radius.button, style: .continuous))
+                    .disabled(isSigningIn)
                     .accessibilityLabel("Continue with Apple")
 
-                    PrimaryButton(title: "Continue with email", isLoading: false, isEnabled: !isSigningIn, action: onEmail)
+                    InkButton(title: "Continue with email", isEnabled: !isSigningIn, tone: .onInk, action: onEmail)
 
-                    OnboardingError(text: appleError)
+                    if let appleError {
+                        Text(appleError)
+                            .font(HDFont.caption)
+                            .foregroundStyle(onVideo)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .transition(.opacity)
+                    }
+
+                    proLink
 
                     Text("By continuing you agree to the [terms](https://hairdone.app/terms) and [privacy policy](https://hairdone.app/privacy).")
                         .font(HDFont.caption)
@@ -206,7 +274,7 @@ private struct OnboardingWelcome: View {
                         .tint(onVideo)
                         .multilineTextAlignment(.center)
                         .frame(maxWidth: .infinity)
-                        .padding(.top, Space.xs)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 .padding(.bottom, Space.l)
             }
@@ -214,9 +282,52 @@ private struct OnboardingWelcome: View {
             .opacity(appeared ? 1 : 0)
             .offset(y: appeared ? 0 : 12)
         }
-        .preferredColorScheme(.dark)
+        // Dark only for the welcome's own content: the window keeps the system scheme, so the next
+        // step doesn't arrive dark and snap to light (audit m27).
+        .environment(\.colorScheme, .dark)
         .onAppear {
             if reduceMotion { appeared = true } else { withAnimation(Motion.springSlow.delay(0.15)) { appeared = true } }
+        }
+    }
+
+    /// "Do hair, nails or makeup? Get booked here." Sets the intent: after sign-in she skips the
+    /// location ask and goes straight to pro setup.
+    @ViewBuilder
+    private var proLink: some View {
+        if app.wantsProOnboarding {
+            HStack(spacing: Space.s) {
+                Text("Sign in first, then we'll set up your pro side.")
+                    .font(HDFont.sub)
+                    .foregroundStyle(onVideo)
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: 0)
+                Button {
+                    Haptics.light()
+                    withAnimation(Motion.gentle) { app.wantsProOnboarding = false }
+                } label: {
+                    Text("Undo").font(HDFont.subMedium).foregroundStyle(onVideoSoft)
+                        .frame(minWidth: 44, minHeight: 44)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+            .transition(.opacity)
+        } else {
+            Button {
+                Haptics.light()
+                withAnimation(Motion.gentle) { app.wantsProOnboarding = true }
+            } label: {
+                Text("Do hair, nails or makeup? Get booked here.")
+                    .font(HDFont.subMedium)
+                    .foregroundStyle(onVideo)
+                    .underline()
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: .infinity, minHeight: 44)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityHint("After you sign in, sets up your pro side")
+            .transition(.opacity)
         }
     }
 
@@ -266,23 +377,22 @@ private struct OnboardingEmail: View {
                         .padding(.top, Space.l)
 
                     VStack(alignment: .leading, spacing: Space.s) {
-                        TextField("you@example.com", text: $email)
-                            .font(HDFont.body)
+                        OnboardingField(placeholder: "you@example.com", text: $email, focused: $focused, hasError: error != nil)
                             .keyboardType(.emailAddress)
                             .textContentType(.emailAddress)
                             .textInputAutocapitalization(.never)
                             .autocorrectionDisabled()
                             .submitLabel(.send)
-                            .focused($focused)
-                            .padding(.horizontal, 14)
-                            .frame(height: 52)
-                            .background(Palette.card, in: RoundedRectangle(cornerRadius: Radius.input, style: .continuous))
-                            .overlay(RoundedRectangle(cornerRadius: Radius.input, style: .continuous).strokeBorder(error == nil ? Palette.line : Palette.lacquer, lineWidth: 1))
                             .onChange(of: email) { _, _ in
                                 if error != nil { withAnimation(Motion.gentle) { error = nil } }
                             }
                             .accessibilityLabel("Your email")
                         OnboardingError(text: error)
+                        if app.wantsProOnboarding {
+                            Text("Then we'll set up your pro side.")
+                                .font(HDFont.caption)
+                                .foregroundStyle(Palette.inkSoft)
+                        }
                     }
                 }
                 .screenGutter()
@@ -290,14 +400,11 @@ private struct OnboardingEmail: View {
             .scrollDismissesKeyboard(.interactively)
         }
         .safeAreaInset(edge: .bottom) {
-            VStack(spacing: Space.xs) {
-                PrimaryButton(title: "Continue", isLoading: sending, isEnabled: !email.trimmingCharacters(in: .whitespaces).isEmpty, action: submit)
+            OnboardingFooter {
+                InkButton(title: "Continue", isLoading: sending, isEnabled: !email.trimmingCharacters(in: .whitespaces).isEmpty, action: submit)
                 // Still here for the test numbers.
                 TertiaryButton(title: "Use your phone instead", action: onPhone)
             }
-            .screenGutter()
-            .padding(.vertical, Space.m)
-            .background(Palette.paper)
         }
         .onAppear { focused = true }
         .onSubmit(submit)
@@ -364,31 +471,20 @@ private struct OnboardingPhone: View {
                         .padding(.top, Space.l)
 
                     VStack(alignment: .leading, spacing: Space.s) {
-                        HStack(spacing: Space.m) {
+                        OnboardingField(placeholder: "04xx xxx xxx", text: $phone, focused: $focused, hasError: error != nil, monospaced: true) {
                             Text("+61")
-                                .font(HDFont.bodyStrong)
-                                .foregroundStyle(Palette.ink)
-                                .padding(.horizontal, 14)
-                                .frame(height: 52)
-                                .background(Palette.line.opacity(0.6), in: RoundedRectangle(cornerRadius: Radius.input, style: .continuous))
-                                .accessibilityLabel("Country code plus 61, Australia")
-
-                            TextField("04xx xxx xxx", text: $phone)
                                 .font(HDFont.body.monospacedDigit())
-                                .keyboardType(.numberPad)
-                                .textContentType(.telephoneNumber)
-                                .focused($focused)
-                                .padding(.horizontal, 14)
-                                .frame(height: 52)
-                                .background(Palette.card, in: RoundedRectangle(cornerRadius: Radius.input, style: .continuous))
-                                .overlay(RoundedRectangle(cornerRadius: Radius.input, style: .continuous).strokeBorder(error == nil ? Palette.line : Palette.lacquer, lineWidth: 1))
-                                .onChange(of: phone) { _, new in
-                                    let formatted = AUPhone.format(new)
-                                    if formatted != new { phone = formatted }
-                                    if error != nil { withAnimation(Motion.gentle) { error = nil } }
-                                }
-                                .accessibilityLabel("Mobile number")
+                                .foregroundStyle(Palette.inkSoft)
+                                .accessibilityLabel("Country code plus 61, Australia")
                         }
+                        .keyboardType(.numberPad)
+                        .textContentType(.telephoneNumber)
+                        .onChange(of: phone) { _, new in
+                            let formatted = AUPhone.format(new)
+                            if formatted != new { phone = formatted }
+                            if error != nil { withAnimation(Motion.gentle) { error = nil } }
+                        }
+                        .accessibilityLabel("Mobile number")
                         OnboardingError(text: error)
                     }
                 }
@@ -397,10 +493,9 @@ private struct OnboardingPhone: View {
             .scrollDismissesKeyboard(.interactively)
         }
         .safeAreaInset(edge: .bottom) {
-            PrimaryButton(title: "Text me a code", isLoading: sending, isEnabled: !phone.isEmpty, action: submit)
-                .screenGutter()
-                .padding(.vertical, Space.m)
-                .background(Palette.paper)
+            OnboardingFooter {
+                InkButton(title: "Text me a code", isLoading: sending, isEnabled: !phone.isEmpty, action: submit)
+            }
         }
         .onAppear { focused = true }
         .onSubmit(submit)
@@ -523,13 +618,13 @@ private struct OnboardingCode: View {
                     HStack(spacing: Space.l) {
                         if resendIn > 0 {
                             Text("Send again in \(resendIn)s")
-                                .font(HDFont.subStrong)
-                                .foregroundStyle(Palette.inkFaint)
+                                .font(HDFont.subMedium)
+                                .foregroundStyle(Palette.inkSoft)
                                 .monospacedDigit()
                                 .frame(minHeight: 44)
                                 .padding(.horizontal, 8)
                         } else {
-                            TertiaryButton(title: "Send it again", tint: Palette.lacquer) {
+                            TertiaryButton(title: "Send it again", tint: Palette.ink) {
                                 withAnimation(Motion.gentle) { error = nil }
                                 resend()
                             }
@@ -562,7 +657,7 @@ private struct OnboardingCode: View {
         .animation(reduceMotion ? nil : Motion.spring, value: isVerifying)
     }
 
-    /// Six boxes drawn from one hidden field, so the system keyboard and one-time-code
+    /// Six underline cells drawn from one hidden field, so the system keyboard and one-time-code
     /// autofill both work as usual.
     private var boxes: some View {
         ZStack {
@@ -580,21 +675,21 @@ private struct OnboardingCode: View {
                     if d.count == length { verify() }
                 }
 
-            HStack(spacing: Space.s) {
+            HStack(spacing: Space.m) {
                 ForEach(0..<length, id: \.self) { i in
                     let chars = Array(code)
                     let ch = i < chars.count ? String(chars[i]) : ""
                     let isActive = focused && i == min(chars.count, length - 1)
                     Text(ch)
-                        .font(Font.system(.title, design: .serif).weight(.medium).monospacedDigit())
+                        .font(HDFont.priceTotal)
                         .foregroundStyle(Palette.ink)
                         .frame(maxWidth: .infinity)
-                        .frame(height: 60)
-                        .background(Palette.card, in: RoundedRectangle(cornerRadius: Radius.input, style: .continuous))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: Radius.input, style: .continuous)
-                                .strokeBorder(error != nil ? Palette.lacquer : (isActive ? Palette.ink : Palette.line), lineWidth: isActive ? 1.5 : 1)
-                        )
+                        .frame(minHeight: 56)
+                        .overlay(alignment: .bottom) {
+                            Rectangle()
+                                .fill(error != nil ? Palette.warn : (isActive || !ch.isEmpty ? Palette.ink : Palette.line))
+                                .frame(height: isActive || error != nil ? 2 : 1)
+                        }
                         .animation(reduceMotion ? nil : Motion.spring, value: ch)
                 }
             }
@@ -668,16 +763,10 @@ private struct OnboardingName: View {
                         .padding(.top, Space.l)
 
                     VStack(alignment: .leading, spacing: Space.s) {
-                        TextField("Your first name", text: $name)
-                            .font(HDFont.body)
+                        OnboardingField(placeholder: "Your first name", text: $name, focused: $focused, hasError: error != nil)
                             .textContentType(.givenName)
                             .autocorrectionDisabled()
-                            .focused($focused)
                             .submitLabel(.done)
-                            .padding(.horizontal, 14)
-                            .frame(height: 52)
-                            .background(Palette.card, in: RoundedRectangle(cornerRadius: Radius.input, style: .continuous))
-                            .overlay(RoundedRectangle(cornerRadius: Radius.input, style: .continuous).strokeBorder(error == nil ? Palette.line : Palette.lacquer, lineWidth: 1))
                             .accessibilityLabel("Your first name")
                             .onChange(of: name) { _, _ in
                                 if error != nil { withAnimation(Motion.gentle) { error = nil } }
@@ -690,10 +779,9 @@ private struct OnboardingName: View {
             .scrollDismissesKeyboard(.interactively)
         }
         .safeAreaInset(edge: .bottom) {
-            PrimaryButton(title: "That's me", action: submit)
-                .screenGutter()
-                .padding(.vertical, Space.m)
-                .background(Palette.paper)
+            OnboardingFooter {
+                InkButton(title: "That's me", action: submit)
+            }
         }
         .onAppear {
             if name.isEmpty { name = app.client?.firstName ?? "" }
@@ -731,7 +819,7 @@ private struct OnboardingLocation: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: Space.xl) {
                     rings
-                        .frame(height: 220)
+                        .frame(height: 240)
                         .frame(maxWidth: .infinity)
                         .padding(.top, Space.l)
 
@@ -744,13 +832,10 @@ private struct OnboardingLocation: View {
             }
         }
         .safeAreaInset(edge: .bottom) {
-            VStack(spacing: Space.xs) {
-                PrimaryButton(title: "Use my location", isLoading: waiting, action: allow)
+            OnboardingFooter {
+                InkButton(title: "Use my location", isLoading: waiting, action: allow)
                 TertiaryButton(title: "Not now") { app.finishOnboarding() }
             }
-            .screenGutter()
-            .padding(.vertical, Space.m)
-            .background(Palette.paper)
         }
         .onAppear {
             if reduceMotion { appeared = true } else { withAnimation(Motion.springSlow.delay(0.15)) { appeared = true } }
@@ -770,27 +855,27 @@ private struct OnboardingLocation: View {
         }
     }
 
-    /// Concentric hairlines, the drop in the middle, three pros dotted around it.
+    /// Concentric hairlines, the mark in the middle, three bits of real work on the rings.
     private var rings: some View {
-        let nearby = Array(MockData.pros.prefix(3))
+        let work: [WorkItem] = Array(MockData.pros.prefix(3)).compactMap { p in p.work.first(where: { $0.isPinned }) ?? p.work.first }
         return ZStack {
             ForEach([1.0, 0.68, 0.36], id: \.self) { scale in
                 Circle()
-                    .strokeBorder(Palette.line, lineWidth: 1)
-                    .frame(width: 220 * scale, height: 220 * scale)
-                    .scaleEffect(appeared ? 1 : 0.8)
+                    .strokeBorder(Palette.lineStrong, lineWidth: 0.5)
+                    .frame(width: 230 * scale, height: 230 * scale)
+                    .scaleEffect(appeared ? 1 : 0.85)
                     .opacity(appeared ? 1 : 0)
             }
-            Circle().fill(Palette.lacquerSoft).frame(width: 56, height: 56)
-            DropMark(size: 28)
+            MonogramMark(size: 20)
 
-            ForEach(Array(nearby.enumerated()), id: \.element.id) { i, pro in
+            ForEach(Array(work.enumerated()), id: \.element.id) { i, item in
                 let angle = Double(i) * 120 - 30
-                let radius: CGFloat = i == 1 ? 96 : 70
-                Avatar(name: pro.firstName, seed: pro.seed, size: 40)
-                    .overlay(Circle().strokeBorder(Palette.paper, lineWidth: 3))
+                let radius: CGFloat = i == 1 ? 115 : 78
+                WorkTile(item: item, cornerRadius: Radius.photo)
+                    .frame(width: 36, height: 45)
+                    .overlay(RoundedRectangle(cornerRadius: Radius.photo, style: .continuous).strokeBorder(Palette.paper, lineWidth: 1.5))
                     .offset(x: cos(angle * .pi / 180) * radius, y: sin(angle * .pi / 180) * radius)
-                    .scaleEffect(appeared ? 1 : 0.5)
+                    .scaleEffect(appeared ? 1 : 0.6)
                     .opacity(appeared ? 1 : 0)
                     .animation(reduceMotion ? nil : Motion.springSlow.delay(0.2 + Double(i) * 0.08), value: appeared)
             }

@@ -131,7 +131,7 @@ struct ClientShell: View {
                     .init(id: ClientTab.home.rawValue, title: "Home", symbol: "house"),
                     .init(id: ClientTab.bookings.rawValue, title: "Bookings", symbol: "calendar"),
                     .init(id: ClientTab.inbox.rawValue, title: "Inbox", symbol: "bubble.left", unread: app.unreadCount > 0),
-                    .init(id: ClientTab.you.rawValue, title: "You", symbol: "person")
+                    .init(id: ClientTab.you.rawValue, title: "You", symbol: "person", unread: app.clientYouBadge)
                 ], selected: app.selectedTab.rawValue) { id in
                     if let tab = ClientTab(rawValue: id) { app.selectedTab = tab }
                 }
@@ -178,21 +178,21 @@ struct ProShell: View {
         case .today: ProTodayView()
         case .calendar: ProCalendarView()
         case .inbox: InboxView()
-        case .work: ProWorkView()
         case .earnings: ProEarningsView()
-        // PROFILE TAB: when `ProTab.profile` lands, add `case .profile: <the pro profile screen>()` here.
+        // PROFILE TAB
+        case .profile: ProProfileTab()
         }
     }
 
     /// Title and outline glyph for each pro tab.
     private func item(for tab: ProTab) -> HDTabBar.Item {
         switch tab {
-        case .today: return .init(id: tab.rawValue, title: "Today", symbol: "sun.horizon")
+        case .today: return .init(id: tab.rawValue, title: "Today", symbol: "sun.horizon", unread: !app.openRequests.isEmpty)
         case .calendar: return .init(id: tab.rawValue, title: "Calendar", symbol: "calendar")
         case .inbox: return .init(id: tab.rawValue, title: "Inbox", symbol: "bubble.left", unread: app.unreadCount > 0)
-        case .work: return .init(id: tab.rawValue, title: "Work", symbol: "square.grid.2x2")
         case .earnings: return .init(id: tab.rawValue, title: "Earnings", symbol: "chart.bar")
-        // PROFILE TAB: add `case .profile: return .init(id: tab.rawValue, title: "Profile", symbol: "person")` here.
+        // PROFILE TAB: the dot is something waiting on her booking side (item 7).
+        case .profile: return .init(id: tab.rawValue, title: "Profile", symbol: "person.crop.circle", unread: app.otherSideUnreadCount > 0)
         }
     }
 

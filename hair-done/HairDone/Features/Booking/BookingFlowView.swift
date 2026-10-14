@@ -7,32 +7,42 @@ enum BookingStep: Int, CaseIterable {
     case services, time, place, notes, review, booked
 
     var canGoBack: Bool { self != .services && self != .booked }
+
+    /// Steps she moves through before she's booked (the "2 OF 5" count).
+    static let countedSteps = 5
 }
 
 /// What can go wrong at the pay step, and the way back from each.
 enum BookingFlowError: Equatable {
     case declined
     case slotTaken(Date)
+    /// She isn't taking bookings (paused, closed, or payouts not on). Nothing's been charged.
+    case proUnavailable
     case other(String)
 
     var message: String {
         switch self {
         case .declined: return "That card didn't go through. Nothing's been charged. Try another, or Apple Pay."
         case .slotTaken(let start): return "Someone just took \(start.clock). Here's what's still free."
+        case .proUnavailable: return "She's not taking bookings right now. Nothing's been charged."
         case .other(let line): return line
         }
     }
 }
 
 /// Book a pro: services → time → where → notes and photos → check it over → you're booked.
-/// Presented as a full-screen cover from her profile.
+/// Presented as a full-screen cover from her profile. The profile's ink Book bar carries through
+/// every step; the ground turns to ink when she checks it over.
 struct BookingFlowView: View {
     @Environment(AppState.self) private var app
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var pro: Pro
     var preselected: [Service] = []
     var onBooked: ((Booking) -> Void)? = nil
+    /// "See who's free" after she's told this pro isn't taking bookings. The flow closes first.
+    var onSeeWhosFree: (() -> Void)? = nil
 
     @State private var draft: BookingDraft
     @State private var step: BookingStep = .services
@@ -42,11 +52,13 @@ struct BookingFlowView: View {
     @State private var isPaying = false
     @State private var payError: BookingFlowError? = nil
     @State private var askForPush = false
+    @State private var slotReload = 0
 
-    init(pro: Pro, preselected: [Service] = [], onBooked: ((Booking) -> Void)? = nil) {
+    init(pro: Pro, preselected: [Service] = [], onBooked: ((Booking) -> Void)? = nil, onSeeWhosFree: (() -> Void)? = nil) {
         self.pro = pro
         self.preselected = preselected
         self.onBooked = onBooked
+        self.onSeeWhosFree = onSeeWhosFree
         var d = BookingDraft(pro: pro)
         d.services = preselected
         _draft = State(initialValue: d)
@@ -55,6 +67,9 @@ struct BookingFlowView: View {
     var body: some View {
         VStack(spacing: 0) {
             header
+            if app.isOffline && step != .booked {
+                OfflineBar()
+            }
             content
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             footer
@@ -63,18 +78,20 @@ struct BookingFlowView: View {
             // Paper for browsing, ink for committing: the ground turns to ink on review and booked.
             ZStack {
                 Palette.paper
-                BookingInk.inkGround.opacity(isInk ? 1 : 0)
+                Palette.inkGround.opacity(isInk ? 1 : 0)
             }
             .ignoresSafeArea()
-            .animation(Motion.gentle, value: isInk)
+            .animation(reduceMotion ? nil : Motion.gentle, value: isInk)
         }
+        .animation(Motion.gentle, value: app.isOffline)
         .interactiveDismissDisabled(hasChosenAnything)
-        .confirmationDialog("Leave it here?", isPresented: $showLeaveConfirm, titleVisibility: .visible) {
-            Button("Leave", role: .destructive) { dismiss() }
-            Button("Keep going", role: .cancel) {}
-        } message: {
-            Text("Nothing's booked yet, and your picks won't be kept.")
-        }
+        .confirmSheet(
+            isPresented: $showLeaveConfirm,
+            title: "Leave it here?",
+            message: "Nothing's booked yet, and your picks won't be kept.",
+            confirmTitle: "Leave",
+            cancelTitle: "Keep going"
+        ) { dismiss() }
         .sheet(isPresented: $askForPush) { PushPrePrompt(side: .client) }
         .holdsPushRoutes()
     }
@@ -87,47 +104,22 @@ struct BookingFlowView: View {
     private var header: some View {
         switch step {
         case .review:
-            inkHeader
+            HDNavHeader("Check it over", tone: .ink, onBack: { goBack() }) {
+                IconButton(symbol: "xmark", label: "Close", tint: Palette.onInkSoft) { close() }
+            }
+            .padding(.top, Space.s)
         case .booked:
             // The booked step carries its own "Done".
             EmptyView()
         case .services, .time, .place, .notes:
-            paperHeader
+            FlowHeader(
+                step: step.rawValue,
+                total: BookingStep.countedSteps,
+                canGoBack: step.canGoBack,
+                onBack: { goBack() },
+                onClose: { close() }
+            )
         }
-    }
-
-    /// Ink chrome: a bare chevron, the title centred in paper serif, a quiet close.
-    private var inkHeader: some View {
-        ZStack {
-            Text("Check it over")
-                .font(BookingInk.serif(20, relativeTo: .headline))
-                .foregroundStyle(BookingInk.onInk)
-                .accessibilityAddTraits(.isHeader)
-            HStack(spacing: 0) {
-                BookingInkIconButton(symbol: "chevron.left", label: "Back") { goBack() }
-                Spacer(minLength: 0)
-                BookingInkIconButton(symbol: "xmark", label: "Close", tint: BookingInk.onInkSoft) { close() }
-            }
-        }
-        .frame(height: 44)
-        .padding(.horizontal, Space.s)
-        .padding(.top, Space.s)
-        .padding(.bottom, Space.s)
-    }
-
-    private var paperHeader: some View {
-        HStack(spacing: Space.m) {
-            if step.canGoBack {
-                IconButton(symbol: "chevron.left", label: "Back") { goBack() }
-            } else {
-                Color.clear.frame(width: 40, height: 40)
-            }
-            FlowProgress(current: step.rawValue, total: BookingStep.allCases.count)
-            IconButton(symbol: "xmark", label: step == .booked ? "Done" : "Close") { close() }
-        }
-        .screenGutter()
-        .padding(.top, Space.l)
-        .padding(.bottom, Space.s)
     }
 
     // MARK: Steps
@@ -139,11 +131,11 @@ struct BookingFlowView: View {
                 case .services:
                     ServicesStep(pro: pro, selected: $draft.services)
                 case .time:
-                    TimeStep(pro: pro, minutes: draft.minutes, start: $draft.start)
+                    TimeStep(pro: pro, minutes: draft.minutes, start: $draft.start, reload: slotReload)
                 case .place:
                     WhereStep(pro: pro, address: $draft.address)
                 case .notes:
-                    NotesStep(pro: pro, notes: $draft.notes, seeds: $draft.inspoSeeds)
+                    NotesStep(notes: $draft.notes, photos: $draft.inspoPhotos)
                 case .review:
                     ReviewStep(
                         draft: $draft,
@@ -152,93 +144,90 @@ struct BookingFlowView: View {
                         onPickAnotherTime: {
                             draft.start = nil
                             payError = nil
+                            slotReload += 1
                             go(to: .time)
                         },
                         onTryAgain: { pay() },
+                        onSeeWhosFree: seeWhosFree,
                         isPaying: isPaying,
                         onPay: { pay() }
                     )
                 case .booked:
                     if let booked {
-                        BookedStep(booking: booked, pro: pro, onMessage: messageHer, onDone: finish)
+                        BookedStep(booking: booked, pro: pro, photosPicked: draft.inspoPhotos.count, onMessage: messageHer, onDone: finish)
                     }
                 }
             }
-            .transition(.asymmetric(
+            .transition(reduceMotion ? .opacity : .asymmetric(
                 insertion: .move(edge: goingForward ? .trailing : .leading).combined(with: .opacity),
                 removal: .opacity
             ))
         }
     }
 
-    // MARK: Footer
+    // MARK: Footer: the ink bar from her profile
 
     @ViewBuilder
     private var footer: some View {
         switch step {
         case .services:
-            StickyBar(title: "Pick a time", isEnabled: !draft.services.isEmpty, action: { go(to: .time) }) {
-                footerLine(
-                    draft.services.isEmpty ? "Pick at least one." : servicesSummary,
-                    strong: !draft.services.isEmpty
-                )
-            }
+            BookBar(
+                name: pro.firstName,
+                summary: draft.services.isEmpty ? nil : priceSummary,
+                detail: draft.services.isEmpty ? "Pick at least one." : servicesCount,
+                actionTitle: "Pick a time",
+                isEnabled: !draft.services.isEmpty
+            ) { go(to: .time) }
         case .time:
-            StickyBar(title: "Next", isEnabled: draft.start != nil, action: { go(to: .place) }) {
-                if let start = draft.start {
-                    footerLine("\(start.friendlyDay), \(start.clock) · \(draft.minutes.minutesLabel)", strong: true)
-                } else {
-                    footerLine("Pick a time", strong: false)
-                }
-            }
+            BookBar(
+                name: pro.firstName,
+                summary: priceSummary,
+                detail: draft.start.map { "\($0.friendlyDay), \($0.clock)" } ?? "Pick a time",
+                actionTitle: "Next",
+                isEnabled: draft.start != nil
+            ) { go(to: .place) }
         case .place:
-            StickyBar(title: "Next", isEnabled: canLeaveWhere, action: { go(to: .notes) }) {
-                if let address = draft.address {
-                    footerLine(address.labelled, strong: true)
-                } else {
-                    footerLine("Pick a spot", strong: false)
-                }
-            }
+            BookBar(
+                name: pro.firstName,
+                summary: priceSummary,
+                detail: draft.address?.labelled ?? "Pick a spot",
+                actionTitle: "Next",
+                isEnabled: canLeaveWhere
+            ) { go(to: .notes) }
         case .notes:
-            StickyBar(title: "Review", action: { go(to: .review) }) {
-                if draft.notes.isEmpty && draft.inspoSeeds.isEmpty {
-                    TertiaryButton(title: "Skip for now") { go(to: .review) }
-                } else {
-                    footerLine(notesSummary, strong: false)
-                }
-            }
+            BookBar(
+                name: pro.firstName,
+                summary: priceSummary,
+                detail: notesSummary ?? "Optional. Skip it if you like.",
+                actionTitle: "Review"
+            ) { go(to: .review) }
         case .review, .booked:
             // The pay buttons live on the ink ticket itself.
             EmptyView()
         }
     }
 
-    private func footerLine(_ text: String, strong: Bool) -> some View {
-        Text(text)
-            .font(strong ? HDFont.subStrong : HDFont.sub)
-            .foregroundStyle(strong ? Palette.ink : Palette.inkSoft)
-            .lineLimit(2)
-            .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
     // MARK: Derived
 
-    private var servicesSummary: String {
-        let n = draft.services.count
-        let count = n == 1 ? "1 service" : "\(n) services"
-        return "\(count) · \(draft.minutes.minutesLabel) · \(Money.format(draft.servicesCents))"
+    private var priceSummary: String {
+        "\(Money.format(draft.servicesCents)) · \(ShortDuration.label(draft.minutes))"
     }
 
-    private var notesSummary: String {
-        let photos = draft.inspoSeeds.count
+    private var servicesCount: String {
+        draft.services.count == 1 ? "1 service" : "\(draft.services.count) services"
+    }
+
+    private var notesSummary: String? {
+        let photos = draft.inspoPhotos.count
         let photoLine = photos == 0 ? nil : (photos == 1 ? "1 photo" : "\(photos) photos")
         let noteLine = draft.notes.isEmpty ? nil : "Notes added"
-        return [noteLine, photoLine].compactMap { $0 }.joined(separator: " · ")
+        let parts = [noteLine, photoLine].compactMap { $0 }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 
     private var canLeaveWhere: Bool {
         guard let address = draft.address else { return false }
-        return pro.comesTo(address)
+        return pro.comesTo(address) && !WhereStep.needsDoorNote(address)
     }
 
     private var hasChosenAnything: Bool {
@@ -247,14 +236,14 @@ struct BookingFlowView: View {
             || draft.start != nil
             || draft.address != nil
             || !draft.notes.isEmpty
-            || !draft.inspoSeeds.isEmpty
+            || !draft.inspoPhotos.isEmpty
     }
 
     // MARK: Moving about
 
     private func go(to next: BookingStep) {
         goingForward = next.rawValue > step.rawValue
-        withAnimation(Motion.spring) { step = next }
+        withAnimation(reduceMotion ? nil : Motion.spring) { step = next }
     }
 
     private func goBack() {
@@ -272,9 +261,22 @@ struct BookingFlowView: View {
         if let booked { onBooked?(booked) }
     }
 
+    /// Straight to her thread, on the Inbox tab.
     private func messageHer() {
+        let thread = booked.flatMap { app.thread(for: $0) }
         dismiss()
+        if let booked { onBooked?(booked) }
         app.selectedTab = .inbox
+        if let thread { app.pendingRoute = .thread(thread.id) }
+    }
+
+    private func seeWhosFree() {
+        dismiss()
+        if let onSeeWhosFree {
+            onSeeWhosFree()
+        } else {
+            app.selectedTab = .home
+        }
     }
 
     /// Her first booking is the moment notifications explain themselves. After the check has drawn.
@@ -290,6 +292,10 @@ struct BookingFlowView: View {
 
     private func pay() {
         guard !isPaying, draft.isComplete else { return }
+        guard !app.isOffline else {
+            withAnimation(Motion.spring) { payError = .other(DataError.offline.errorDescription ?? "") }
+            return
+        }
         withAnimation(Motion.gentle) { payError = nil }
         isPaying = true
         Task { @MainActor in
@@ -301,6 +307,11 @@ struct BookingFlowView: View {
                 askForPushSoon()
             } catch PaymentError.declined {
                 withAnimation(Motion.spring) { payError = .declined }
+            } catch PaymentError.proNotReady {
+                withAnimation(Motion.spring) { payError = .proUnavailable }
+            } catch DataError.notFound {
+                // The server says pro_not_found when she isn't bookable (paused, closed, or blocked).
+                withAnimation(Motion.spring) { payError = .proUnavailable }
             } catch DataError.slotTaken {
                 withAnimation(Motion.spring) { payError = .slotTaken(draft.start ?? Date()) }
             } catch {
@@ -312,6 +323,8 @@ struct BookingFlowView: View {
 
 // MARK: - Step 1: Services
 
+/// Her price list, the same rows as on her profile: name and detail on the left, duration and price
+/// on the right, hairlines between, an ink check on what's picked.
 struct ServicesStep: View {
     var pro: Pro
     @Binding var selected: [Service]
@@ -320,24 +333,13 @@ struct ServicesStep: View {
         ScrollView {
             VStack(alignment: .leading, spacing: Space.xl) {
                 StepTitle(title: "Services", sub: "Pick as many as you like. She'll do them in one visit.")
-                VStack(spacing: Space.m) {
+                VStack(spacing: 0) {
+                    Hairline(strong: true)
                     ForEach(pro.services) { service in
-                        SelectableCard(isSelected: isPicked(service), action: { toggle(service) }) {
-                            VStack(alignment: .leading, spacing: 4) {
-                                HStack(alignment: .firstTextBaseline, spacing: Space.s) {
-                                    Text(service.name).font(HDFont.bodyStrong).foregroundStyle(Palette.ink)
-                                    if service.isPopular { Tag(text: "Popular") }
-                                }
-                                if !service.detail.isEmpty {
-                                    Text(service.detail).font(HDFont.caption).foregroundStyle(Palette.inkSoft).lineLimit(2)
-                                }
-                                HStack(spacing: Space.s) {
-                                    Text(service.durationLabel).font(HDFont.sub).foregroundStyle(Palette.inkSoft)
-                                    Text("·").foregroundStyle(Palette.inkFaint)
-                                    Text(service.priceLabel).font(HDFont.price).foregroundStyle(Palette.ink)
-                                }
-                            }
+                        OptionBox(isSelected: isPicked(service), style: .row, action: { toggle(service) }) {
+                            ServicePriceRow(service: service, isSelected: isPicked(service))
                         }
+                        .accessibilityHint(isPicked(service) ? "Takes it off your booking" : "Adds it to your booking")
                     }
                 }
             }
@@ -359,30 +361,73 @@ struct ServicesStep: View {
     }
 }
 
+/// One line of a price list. "POPULAR" as an eyebrow, never a capsule.
+struct ServicePriceRow: View {
+    var service: Service
+    var isSelected: Bool
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: Space.m) {
+            VStack(alignment: .leading, spacing: 3) {
+                if service.isPopular {
+                    Text("Popular").eyebrowStyle()
+                }
+                Text(service.name)
+                    .font(HDFont.body)
+                    .fontWeight(isSelected ? Font.Weight.semibold : Font.Weight.regular)
+                    .foregroundStyle(Palette.ink)
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
+                if !service.detail.isEmpty {
+                    Text(service.detail)
+                        .font(HDFont.caption)
+                        .foregroundStyle(Palette.inkSoft)
+                        .multilineTextAlignment(.leading)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            Spacer(minLength: Space.s)
+            Text(ShortDuration.label(service.minutes))
+                .font(HDFont.priceSmall)
+                .foregroundStyle(Palette.inkSoft)
+                .fixedSize()
+            Text(service.priceLabel)
+                .font(isSelected ? HDFont.priceStrong : HDFont.price)
+                .foregroundStyle(Palette.ink)
+                .fixedSize()
+                .frame(minWidth: 44, alignment: .trailing)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(service.name), \(service.minutes.minutesLabel), \(service.priceLabel)" + (service.isPopular ? ", popular" : ""))
+    }
+}
+
 // MARK: - Step 2: Time
 
 struct TimeStep: View {
     var pro: Pro
     var minutes: Int
     @Binding var start: Date?
+    var reload: Int = 0
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: Space.xl) {
                 VStack(alignment: .leading, spacing: Space.s) {
                     StepTitle(title: "When", sub: "These are her real free slots.")
-                    HStack(spacing: 6) {
-                        Image(systemName: pro.instantBook ? "bolt.fill" : "clock")
-                            .font(.system(size: 12, weight: .semibold))
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        Image(systemName: pro.instantBook ? "bolt" : "clock")
+                            .font(.system(size: 13, weight: .regular))
                             .accessibilityHidden(true)
                         Text(pro.instantBook ? "Confirmed as soon as you pay" : "\(pro.firstName) confirms, usually within \(pro.replyWindow)")
-                            .font(HDFont.caption)
+                            .font(HDFont.sub)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
-                    .foregroundStyle(pro.instantBook ? Palette.lacquer : Palette.inkSoft)
+                    .foregroundStyle(Palette.inkSoft)
                 }
                 .screenGutter()
 
-                SlotPicker(pro: pro, minutes: minutes, selected: $start)
+                SlotPicker(pro: pro, minutes: minutes, selected: $start, reload: reload)
             }
             .padding(.bottom, Space.xl)
         }
@@ -396,59 +441,52 @@ struct WhereStep: View {
     var pro: Pro
     @Binding var address: Address?
 
+    /// Finding where she is, for "Use my location".
+    private enum Here: Equatable {
+        case idle
+        case finding
+        /// The street we think she's on, waiting for "Right?".
+        case confirm(Address)
+        case failed(String)
+    }
+
     @State private var access = ""
     @State private var showEditor = false
+    @State private var here: Here = .idle
 
     private var saved: [Address] { app.client?.addresses ?? [] }
     private var isHere: Bool { address?.id == WhereStep.hereID }
-    private static let hereID = "addr_here"
+    static let hereID = "addr_here"
+
+    /// A spot from "Use my location" with no street number needs a unit or door note before she goes on.
+    static func needsDoorNote(_ address: Address) -> Bool {
+        address.id == hereID
+            && !address.line1.contains(where: \.isNumber)
+            && address.instructions.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private var hereHasNumber: Bool { address.map { $0.line1.contains(where: \.isNumber) } ?? true }
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: Space.xl) {
                 StepTitle(title: "Where", sub: "She'll come to you. Somewhere with a power point and decent light is ideal.")
 
-                SelectableCard(isSelected: isHere, action: useLocation) {
-                    HStack(spacing: Space.m) {
-                        Image(systemName: "location.fill")
-                            .font(.system(size: 16, weight: .medium))
-                            .foregroundStyle(Palette.lacquer)
-                            .frame(width: 28)
-                            .accessibilityHidden(true)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Use my location").font(HDFont.bodyStrong).foregroundStyle(Palette.ink)
-                            Text("Around \(app.location.suburbGuess). You can add the door details below.")
-                                .font(HDFont.caption).foregroundStyle(Palette.inkSoft)
-                        }
+                VStack(spacing: 0) {
+                    Hairline(strong: true)
+                    OptionBox(isSelected: isHere, style: .row, action: useLocation) {
+                        placeRow(symbol: "location", title: "Use my location", line: hereLine)
                     }
-                }
-
-                if !saved.isEmpty {
-                    VStack(alignment: .leading, spacing: Space.m) {
-                        Text("Saved").labelStyle()
+                    hereFollowUp
+                    if !saved.isEmpty {
                         ForEach(saved) { a in
-                            SelectableCard(isSelected: address?.id == a.id, action: { pick(a) }) {
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(a.label).font(HDFont.bodyStrong).foregroundStyle(Palette.ink)
-                                    Text(a.short).font(HDFont.sub).foregroundStyle(Palette.inkSoft)
-                                    if !a.instructions.isEmpty {
-                                        Text(a.instructions).font(HDFont.caption).foregroundStyle(Palette.inkFaint).lineLimit(1)
-                                    }
-                                }
+                            OptionBox(isSelected: address?.id == a.id, style: .row, action: { pick(a) }) {
+                                placeRow(symbol: a.label == "Work" ? "briefcase" : "house", title: a.label, line: a.short, note: a.instructions)
                             }
                         }
                     }
+                    HairlineRow(title: "Add an address", symbol: "plus", chevron: false) { showEditor = true }
                 }
-
-                Button(action: { Haptics.light(); showEditor = true }) {
-                    HStack(spacing: Space.s) {
-                        Image(systemName: "plus.circle").font(.system(size: 18, weight: .medium))
-                        Text("Add an address").font(HDFont.subStrong)
-                    }
-                    .foregroundStyle(Palette.lacquer)
-                    .frame(minHeight: 44)
-                }
-                .buttonStyle(.plain)
 
                 if let address, !pro.comesTo(address) {
                     InlineNote(text: "That's outside where \(pro.firstName) travels. She comes to \(pro.travelAreaLine).", tone: .warn)
@@ -456,14 +494,14 @@ struct WhereStep: View {
                 }
 
                 if address != nil {
-                    HDTextField(label: "Getting in", placeholder: "Parking, buzzer, dogs. Anything she should know getting in.", text: $access, axis: .vertical)
-                        .lineLimit(2...4)
+                    accessField
                         .transition(.opacity.combined(with: .move(edge: .bottom)))
                 }
             }
             .screenGutter()
             .padding(.bottom, Space.xl)
             .animation(Motion.spring, value: address?.id)
+            .animation(Motion.spring, value: here)
         }
         .scrollDismissesKeyboard(.interactively)
         .onAppear { access = address?.instructions ?? "" }
@@ -476,19 +514,133 @@ struct WhereStep: View {
         }
     }
 
+    private var hereLine: String {
+        if isHere, let address { return address.short }
+        if here == .finding { return "Finding you…" }
+        return "Around \(app.location.suburbGuess). We'll check the street with you."
+    }
+
+    @ViewBuilder
+    private var accessField: some View {
+        if isHere && !hereHasNumber {
+            HDTextField(
+                label: "Unit or door",
+                placeholder: "Unit 4, the green gate, buzz 12",
+                text: $access,
+                axis: .vertical,
+                caption: "There's no street number here, so tell her which door."
+            )
+            .lineLimit(1...3)
+        } else {
+            HDTextField(label: "Getting in", placeholder: "Parking, buzzer, dogs. Anything she should know getting in.", text: $access, axis: .vertical)
+                .lineLimit(2...4)
+        }
+    }
+
+    /// "12 Smith St, Fitzroy. Right?" with Yes and a way to type it instead.
+    @ViewBuilder
+    private var hereFollowUp: some View {
+        switch here {
+        case .idle, .finding:
+            EmptyView()
+        case .confirm(let found):
+            VStack(alignment: .leading, spacing: Space.m) {
+                Text(verbatim: "\(found.short). Right?")
+                    .font(HDFont.quote)
+                    .foregroundStyle(Palette.ink)
+                    .fixedSize(horizontal: false, vertical: true)
+                HStack(spacing: Space.m) {
+                    InkButton(title: "Yes", compact: true) {
+                        here = .idle
+                        pick(found)
+                    }
+                    OutlineButton(title: "No, type it", compact: true) {
+                        here = .idle
+                        showEditor = true
+                    }
+                }
+            }
+            .padding(.vertical, Space.l)
+            .overlay(alignment: .bottom) { Hairline(strong: true) }
+            .transition(.opacity)
+        case .failed(let why):
+            VStack(alignment: .leading, spacing: Space.xs) {
+                FieldMessage(text: why)
+                TertiaryButton(title: "Add the address", tint: Palette.ink) {
+                    here = .idle
+                    showEditor = true
+                }
+                .padding(.horizontal, -8)
+            }
+            .padding(.vertical, Space.m)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .overlay(alignment: .bottom) { Hairline(strong: true) }
+            .transition(.opacity)
+        }
+    }
+
+    private func placeRow(symbol: String, title: String, line: String, note: String = "") -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: Space.m) {
+            Image(systemName: symbol)
+                .font(.system(size: 17, weight: .light))
+                .foregroundStyle(Palette.ink)
+                .frame(width: 24)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(verbatim: title).font(HDFont.body).foregroundStyle(Palette.ink)
+                Text(verbatim: line).font(HDFont.sub).foregroundStyle(Palette.inkSoft)
+                    .fixedSize(horizontal: false, vertical: true)
+                if !note.isEmpty {
+                    Text(verbatim: note).font(HDFont.caption).foregroundStyle(Palette.inkSoft).lineLimit(1)
+                }
+            }
+        }
+    }
+
     private func pick(_ a: Address) {
         withAnimation(Motion.spring) { address = a }
         access = a.instructions
     }
 
+    /// Finds the street she's on and asks her to confirm it, so the pro gets a door, not a GPS point.
     private func useLocation() {
+        if isHere { return }
+        here = .finding
         app.location.request()
-        let c = app.location.coordinate
-        let here = Address(
-            id: WhereStep.hereID, label: "Here", line1: "Where you are now", suburb: app.location.suburbGuess,
-            postcode: "", latitude: c.latitude, longitude: c.longitude, instructions: ""
-        )
-        pick(here)
+        Task { @MainActor in
+            // Give a first fix a moment to land after the prompt or a fresh request.
+            var waited = 0
+            while !app.location.isUsingRealLocation && waited < 12 {
+                if app.location.hasAsked && !app.location.isAllowed { break }
+                try? await Task.sleep(for: .milliseconds(250))
+                waited += 1
+            }
+            guard app.location.isAllowed, app.location.isUsingRealLocation else {
+                here = .failed(app.location.hasAsked && !app.location.isAllowed
+                    ? "Location's off for Hair Done. Add the address instead."
+                    : "Couldn't find you just now. Add the address instead.")
+                return
+            }
+            let c = app.location.coordinate
+            let mark = try? await CLGeocoder().reverseGeocodeLocation(CLLocation(latitude: c.latitude, longitude: c.longitude)).first
+            guard let mark, let street = mark.thoroughfare else {
+                here = .failed("Couldn't find a street where you are. Add the address instead.")
+                return
+            }
+            let line1 = [mark.subThoroughfare, street].compactMap { $0 }.joined(separator: " ")
+            let found = Address(
+                id: WhereStep.hereID,
+                label: "Here",
+                line1: line1,
+                suburb: mark.locality ?? mark.subLocality ?? app.location.suburbGuess,
+                state: "VIC",
+                postcode: mark.postalCode ?? "",
+                latitude: c.latitude,
+                longitude: c.longitude,
+                instructions: ""
+            )
+            here = .confirm(found)
+        }
     }
 
     private func save(_ new: Address) {
@@ -501,13 +653,25 @@ struct WhereStep: View {
 
 // MARK: - Step 4: Notes and inspo
 
+/// Notes in her words, and up to three photos. The photos are made upload-ready here (2000px, JPEG)
+/// and go up with the booking once it's made.
 struct NotesStep: View {
-    var pro: Pro
     @Binding var notes: String
-    @Binding var seeds: [Int]
+    @Binding var photos: [Data]
+
+    /// A photo still being read, or one that couldn't be.
+    private struct Pending: Identifiable {
+        let id = UUID()
+        var item: PhotosPickerItem
+        var failed = false
+    }
 
     @State private var picked: [PhotosPickerItem] = []
+    @State private var pending: [Pending] = []
+    @State private var thumbs: [UIImage?] = []
     private let limit = 3
+
+    private var count: Int { photos.count + pending.count }
 
     var body: some View {
         ScrollView {
@@ -518,91 +682,108 @@ struct NotesStep: View {
                     .lineLimit(3...7)
 
                 VStack(alignment: .leading, spacing: Space.m) {
-                    HStack {
-                        Text("Inspo").font(HDFont.heading).foregroundStyle(Palette.ink)
+                    HStack(alignment: .firstTextBaseline) {
+                        Text("Inspo").font(HDFont.name).foregroundStyle(Palette.ink)
+                            .accessibilityAddTraits(.isHeader)
                         Spacer()
-                        Text("\(seeds.count) of \(limit)").font(HDFont.caption).foregroundStyle(Palette.inkSoft).monospacedDigit()
+                        Text("\(photos.count) of \(limit)").font(HDFont.caption.monospacedDigit()).foregroundStyle(Palette.inkSoft)
                     }
-                    HStack(spacing: Space.s) {
-                        ForEach(Array(seeds.enumerated()), id: \.offset) { index, seed in
-                            InspoTile(seed: seed, category: pro.primaryCategory) { remove(at: index) }
-                        }
-                        if seeds.count < limit {
-                            PhotosPicker(selection: $picked, maxSelectionCount: limit - seeds.count, matching: .images) {
-                                AddPhotoTile()
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: Space.s) {
+                            ForEach(Array(photos.indices), id: \.self) { index in
+                                UploadTile(image: thumb(at: index), state: .done, onRemove: { remove(at: index) })
                             }
-                            .buttonStyle(PressLift(scale: 0.96))
+                            ForEach(pending) { p in
+                                UploadTile(image: nil, state: p.failed ? .failed : .uploading(0.5),
+                                           onRetry: { retry(p.id) },
+                                           onRemove: { pending.removeAll { $0.id == p.id } })
+                            }
+                            if count < limit {
+                                PhotosPicker(selection: $picked, maxSelectionCount: limit - count, matching: .images) {
+                                    AddPhotoTile()
+                                }
+                                .buttonStyle(PressLift(scale: 0.96))
+                            }
                         }
-                        if seeds.count < limit - 1 { Spacer(minLength: 0) }
                     }
-                    .frame(height: 104)
-                    if seeds.count >= limit {
+                    if photos.count >= limit {
                         Text("Three's the limit. Keep your favourites.").font(HDFont.caption).foregroundStyle(Palette.inkSoft)
+                    } else {
+                        Text("They go to her with the booking.").font(HDFont.caption).foregroundStyle(Palette.inkSoft)
                     }
                 }
             }
             .screenGutter()
             .padding(.bottom, Space.xl)
-            .animation(Motion.spring, value: seeds)
+            .animation(Motion.spring, value: photos.count)
+            .animation(Motion.spring, value: pending.count)
         }
         .scrollDismissesKeyboard(.interactively)
+        .onAppear { rebuildThumbs() }
         .onChange(of: picked) { _, items in
             guard !items.isEmpty else { return }
-            // Mock: the picker is real, the photo isn't kept. A seed stands in for it.
-            for _ in items where seeds.count < limit {
-                seeds.append(Int.random(in: 1...9_999))
-            }
+            let room = max(0, limit - count)
+            let fresh = items.prefix(room).map { Pending(item: $0) }
             picked = []
+            pending.append(contentsOf: fresh)
+            for p in fresh { prepare(p.id) }
         }
+    }
+
+    private func thumb(at index: Int) -> UIImage? {
+        thumbs.indices.contains(index) ? thumbs[index] : nil
+    }
+
+    private func rebuildThumbs() {
+        thumbs = photos.map { InspoPhoto.thumbnail(from: $0) }
+    }
+
+    /// Reads the photo and makes the JPEG. A failure stays on screen with "Tap to try again".
+    private func prepare(_ id: UUID) {
+        guard let p = pending.first(where: { $0.id == id }) else { return }
+        Task { @MainActor in
+            let jpeg = await InspoPhoto.jpeg(from: p.item)
+            guard let i = pending.firstIndex(where: { $0.id == id }) else { return }
+            if let jpeg, photos.count < limit {
+                pending.remove(at: i)
+                photos.append(jpeg)
+                thumbs.append(InspoPhoto.thumbnail(from: jpeg))
+            } else {
+                pending[i].failed = true
+            }
+        }
+    }
+
+    private func retry(_ id: UUID) {
+        guard let i = pending.firstIndex(where: { $0.id == id }) else { return }
+        pending[i].failed = false
+        prepare(id)
     }
 
     private func remove(at index: Int) {
-        guard seeds.indices.contains(index) else { return }
-        seeds.remove(at: index)
+        guard photos.indices.contains(index) else { return }
+        photos.remove(at: index)
+        if thumbs.indices.contains(index) { thumbs.remove(at: index) }
     }
 }
 
-/// A picked inspo photo, drawn as placeholder art in the mock, with a remove button.
-struct InspoTile: View {
-    var seed: Int
-    var category: Category
-    var onRemove: () -> Void
-
-    var body: some View {
-        WorkTile(item: WorkItem(id: "inspo_\(seed)", category: category, caption: "Inspo", seed: seed), cornerRadius: Radius.tile)
-            .frame(width: 104, height: 104)
-            .overlay(alignment: .topTrailing) {
-                Button(action: { Haptics.light(); onRemove() }) {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 11, weight: .bold))
-                        .foregroundStyle(Palette.ink)
-                        .frame(width: 26, height: 26)
-                        .background(Palette.paper.opacity(0.92), in: Circle())
-                }
-                .buttonStyle(.plain)
-                .padding(6)
-                .accessibilityLabel("Remove photo")
-            }
-            .accessibilityElement(children: .contain)
-            .accessibilityLabel("Inspo photo")
-    }
-}
-
-/// The dashed "Add photos" tile.
+/// The "Add photos" tile: same size as a photo, a 1pt line border and an outline plus. No dashes, no fill.
 struct AddPhotoTile: View {
     var body: some View {
-        VStack(spacing: 6) {
-            Image(systemName: "photo.badge.plus").font(.system(size: 20, weight: .light))
+        VStack(spacing: Space.s) {
+            Image(systemName: "plus").font(.system(size: 19, weight: .light))
             Text("Add photos").font(HDFont.caption.weight(.medium))
         }
-        .foregroundStyle(Palette.inkSoft)
-        .frame(width: 104, height: 104)
-        .background(Palette.card, in: RoundedRectangle(cornerRadius: Radius.tile, style: .continuous))
+        .foregroundStyle(Palette.ink)
+        .frame(width: 104, height: 130)
         .overlay(
-            RoundedRectangle(cornerRadius: Radius.tile, style: .continuous)
-                .strokeBorder(Palette.line, style: StrokeStyle(lineWidth: 1, dash: [5, 4]))
+            RoundedRectangle(cornerRadius: Radius.photo, style: .continuous)
+                .strokeBorder(Palette.line, lineWidth: 1)
         )
+        .contentShape(Rectangle())
+        .accessibilityElement(children: .ignore)
         .accessibilityLabel("Add photos")
+        .accessibilityAddTraits(.isButton)
     }
 }
 
@@ -614,10 +795,13 @@ struct StepTitle: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(title).font(HDFont.title).foregroundStyle(Palette.ink)
-            if let sub { Text(sub).font(HDFont.sub).foregroundStyle(Palette.inkSoft) }
+            if let sub {
+                Text(sub).font(HDFont.sub).foregroundStyle(Palette.inkSoft)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.top, Space.s)
+        .padding(.top, Space.l)
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(.isHeader)
     }

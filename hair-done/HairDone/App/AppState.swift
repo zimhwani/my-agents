@@ -2,6 +2,7 @@ import Foundation
 import SwiftUI
 import Observation
 import CoreLocation
+import Network
 
 /// Which side of the app you're on.
 enum AppMode: String { case client, pro }
@@ -64,8 +65,29 @@ final class AppState {
     var pros: [Pro] = []
     var bookings: [Booking] = []
     var proBookings: [Booking] = []
+    /// Threads on the side she's on. The other side's are loaded with them, so a switch never shows
+    /// one side's threads under the other side's labels.
     var threads: [MessageThread] = []
+    var otherSideThreads: [MessageThread] = []
     var payouts: [Payout] = []
+
+    /// Pro id → her first free start today, for Who's free. Loaded with `pros`.
+    var whosFree: [String: Date] = [:]
+    /// Server search across every bookable pro, not just the ones near you.
+    var searchResults: [Pro] = []
+    var isSearching = false
+    /// The search the results are for, so a slow one can't land on top of a newer one.
+    private var searchQuery = ""
+
+    /// No network. Screens show the offline bar and hold back anything that needs the server.
+    var isOffline = false
+    @ObservationIgnored private var pathMonitor = NWPathMonitor()
+
+    /// True when the last load failed (not when it came back empty), so a screen can say so and offer Try again.
+    var prosLoadFailed = false
+    var bookingsLoadFailed = false
+    var threadsLoadFailed = false
+    var proSideLoadFailed = false
 
     /// Pros met through bookings, threads and favourites who aren't in the nearby list.
     var knownPros: [String: Pro] = [:]
@@ -91,10 +113,14 @@ final class AppState {
     /// A tapped notification that's waiting: she wasn't signed in yet, or she was in the middle of
     /// something (see `busySurfaces`). Opened once she's free.
     private var pendingPush: PushTarget? = nil
+    /// A pro link that came in before she was signed in (it launched the app, say). Opened once she is.
+    private var pendingProLink: String? = nil
     /// Screens she's in the middle of (the booking flow, pro onboarding, payout setup, sheets with
     /// unsaved input). While any is up, a tapped notification waits instead of switching sides or
     /// moving things underneath her. Counted by `.holdsPushRoutes()`.
     var busySurfaces = 0
+    /// She tapped "Do hair, nails or makeup? Get booked here." on Welcome: after sign-in, You opens pro onboarding.
+    var wantsProOnboarding = false
 
     /// Shown as an alert by the payout screens, or by the root when none of them is up.
     var payoutNotice: PayoutNotice? = nil
@@ -118,7 +144,17 @@ final class AppState {
         let live = !(data is MockDataService)
         self.isLive = live
         self.isRestoring = live
+        pathMonitor.pathUpdateHandler = { [weak self] path in
+            let offline = path.status != .satisfied
+            DispatchQueue.main.async {
+                guard let self, self.isOffline != offline else { return }
+                self.isOffline = offline
+            }
+        }
+        pathMonitor.start(queue: DispatchQueue(label: "app.hairdone.network"))
     }
+
+    deinit { pathMonitor.cancel() }
 
     /// The real backend when `HairDone.xcconfig` has the Supabase URL and key; the sample data otherwise.
     /// Stripe's sheet takes payments when there's a Stripe key and the package is in the build.
@@ -155,12 +191,16 @@ final class AppState {
         }
         client = restored
         proSelf = await data.currentPro()
+        restoreMode()
         stage = restored.firstName.isEmpty ? .signedIn : .ready
         isRestoring = false
         registerForPush()
         if stage == .ready, let waiting = pendingPush {
             pendingPush = nil
             open(waiting)
+        } else if stage == .ready, let link = pendingProLink {
+            pendingProLink = nil
+            openProLink(link)
         }
     }
 
@@ -214,6 +254,7 @@ final class AppState {
 
     private func signedIn() async {
         proSelf = await data.currentPro()
+        restoreMode()
         lastError = nil
         signInFailure = nil
         stage = .signedIn
@@ -233,9 +274,14 @@ final class AppState {
             if let named { try? await self.data.updateClient(named) }
             await self.refreshAll()
         }
+        if let link = pendingProLink {
+            pendingProLink = nil
+            openProLink(link)
+        }
     }
 
     func signOut() {
+        wantsProOnboarding = false
         let data = self.data
         // The token comes off the account first, while there's still a session to do it with.
         let token = PushCenter.savedToken
@@ -246,11 +292,15 @@ final class AppState {
         stage = .welcome
         mode = .client
         client = nil
-        if isLive { proSelf = nil }
-        bookings = []; proBookings = []; threads = []; pros = []; payouts = []
+        // Both builds: the next person on this phone mustn't see her pro side.
+        proSelf = nil
+        bookings = []; proBookings = []; threads = []; otherSideThreads = []; pros = []; payouts = []
         knownPros = [:]; proDetails = [:]; clientNames = [:]; blockedIDs = []
+        whosFree = [:]; searchResults = []; searchQuery = ""; isSearching = false
+        prosLoadFailed = false; bookingsLoadFailed = false; threadsLoadFailed = false; proSideLoadFailed = false
         pendingCheckout = nil
-        pendingRoute = nil; pendingPush = nil; openThreadID = nil
+        pendingRoute = nil; pendingPush = nil; pendingProLink = nil; openThreadID = nil
+        selectedTab = .home; selectedProTab = .today
     }
 
     /// App Store rule: an account can be deleted from the app. False (with `lastError`) if it wasn't.
@@ -267,8 +317,29 @@ final class AppState {
 
     func switchMode(_ new: AppMode) {
         Haptics.medium()
-        withAnimation(Motion.spring) { mode = new }
+        setMode(new)
         Task { await self.refreshAll() }
+    }
+
+    /// Changes side, swapping the threads straight away (the other side's are already loaded) and
+    /// remembering the side for next launch.
+    private func setMode(_ new: AppMode) {
+        guard new != mode else { return }
+        let current = threads
+        threads = otherSideThreads
+        otherSideThreads = current
+        withAnimation(Motion.spring) { mode = new }
+        if let id = client?.id { UserDefaults.standard.set(new.rawValue, forKey: Self.modeKey(id)) }
+    }
+
+    private static func modeKey(_ userID: String) -> String { "mode.\(userID)" }
+
+    /// Back to the side she was last on, if that's Pro mode and she still has an open pro profile.
+    private func restoreMode() {
+        guard let id = client?.id else { return }
+        let saved = UserDefaults.standard.string(forKey: Self.modeKey(id)).flatMap(AppMode.init(rawValue:))
+        let canBePro = proSelf.map { !$0.isClosed } ?? false
+        mode = saved == .pro && canBePro ? .pro : .client
     }
 
     // MARK: Loading
@@ -283,29 +354,96 @@ final class AppState {
         await loadPeople()
     }
 
+    /// Pros near her, and who's free today, together.
     func loadPros(category: Category? = nil) async {
         isLoadingPros = true
         defer { isLoadingPros = false }
+        async let free: Void = loadWhosFree(category: category)
         do {
             if isLive && client != nil { blockedIDs = (try? await data.blockedIDs()) ?? blockedIDs }
             let blocked = blockedIDs
             pros = try await data.pros(near: location.coordinate, category: category).filter { !blocked.contains($0.id) }
-        } catch { lastError = error.localizedDescription }
+            prosLoadFailed = false
+        } catch {
+            prosLoadFailed = true
+            lastError = error.localizedDescription
+        }
+        await free
+    }
+
+    /// Who's free today, from her real slots. Empty if it didn't load; the list itself says when that's a failure.
+    func loadWhosFree(category: Category?) async {
+        do {
+            whosFree = try await data.whosFree(near: location.coordinate, category: category)
+        } catch {
+            whosFree = [:]
+        }
+    }
+
+    /// Server search. Under two characters it clears the results instead.
+    func search(_ query: String) async {
+        let words = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        searchQuery = words
+        guard words.count >= 2 else {
+            searchResults = []
+            isSearching = false
+            return
+        }
+        isSearching = true
+        do {
+            let found = try await data.searchPros(words, near: location.coordinate)
+            guard searchQuery == words else { return }
+            let blocked = blockedIDs
+            searchResults = found.filter { !blocked.contains($0.id) }
+            for p in searchResults where knownPros[p.id] == nil && !pros.contains(where: { $0.id == p.id }) { knownPros[p.id] = p }
+        } catch {
+            guard searchQuery == words else { return }
+            searchResults = []
+            lastError = error.localizedDescription
+        }
+        isSearching = false
     }
 
     func loadBookings(people: Bool = true) async {
         guard let client else { return }
-        do { bookings = try await data.bookings(clientID: client.id) } catch { lastError = error.localizedDescription }
+        do {
+            bookings = try await data.bookings(clientID: client.id)
+            bookingsLoadFailed = false
+        } catch {
+            bookingsLoadFailed = true
+            lastError = error.localizedDescription
+        }
         if people { await loadPeople() }
     }
 
+    /// Both sides' threads in one go, split by side: `threads` for the side she's on, `otherSideThreads` for the other.
     func loadThreads(people: Bool = true) async {
-        let me = userID
-        let side = mode
+        let clientID = client?.id ?? ""
+        let proID = proSelf?.id ?? ""
+        guard !clientID.isEmpty || !proID.isEmpty else { return }
         do {
-            let all = try await data.threads(userID: me)
-            threads = all.filter { side == .pro ? $0.proID == me : $0.clientID == me }
-        } catch { lastError = error.localizedDescription }
+            var all = try await data.threads(userID: clientID.isEmpty ? proID : clientID)
+            // The sample data keeps her pro self under another id; the real server sends both sides at once.
+            if !proID.isEmpty && !clientID.isEmpty && proID != clientID {
+                let more = try await data.threads(userID: proID)
+                let seen = Set(all.map(\.id))
+                all += more.filter { !seen.contains($0.id) }
+            }
+            let asPro = all.filter { !proID.isEmpty && $0.proID == proID }
+            let asClient = all.filter { !clientID.isEmpty && $0.clientID == clientID }
+            // The side she's on now, which may have changed while this loaded.
+            if mode == .pro {
+                threads = asPro
+                otherSideThreads = asClient
+            } else {
+                threads = asClient
+                otherSideThreads = asPro
+            }
+            threadsLoadFailed = false
+        } catch {
+            threadsLoadFailed = true
+            lastError = error.localizedDescription
+        }
         if people { await loadPeople() }
     }
 
@@ -314,15 +452,20 @@ final class AppState {
         do {
             proBookings = try await data.bookings(proID: proSelf.id)
             payouts = try await data.payouts(proID: proSelf.id)
-        } catch { lastError = error.localizedDescription }
+            proSideLoadFailed = false
+        } catch {
+            proSideLoadFailed = true
+            lastError = error.localizedDescription
+        }
         if people { await loadPeople() }
     }
 
     /// Fills in the pros and clients the lists mention but the nearby list doesn't have.
     func loadPeople() async {
         guard isLive else { return }
+        let allThreads = threads + otherSideThreads
         var proIDs = Set(bookings.map(\.proID))
-        proIDs.formUnion(threads.map(\.proID))
+        proIDs.formUnion(allThreads.map(\.proID))
         proIDs.formUnion(client?.favouriteProIDs ?? [])
         proIDs.subtract(pros.map(\.id))
         proIDs.subtract(knownPros.keys)
@@ -334,7 +477,7 @@ final class AppState {
         }
 
         var clientIDs = Set(proBookings.map(\.clientID))
-        clientIDs.formUnion(threads.map(\.clientID))
+        clientIDs.formUnion(allThreads.map(\.clientID))
         if let own = client?.id { clientIDs.remove(own) }
         clientIDs.subtract(clientNames.keys)
         clientIDs.remove("")
@@ -416,8 +559,42 @@ final class AppState {
     /// Past bookings you haven't rated yet.
     var awaitingReview: [Booking] { pastBookings.filter { $0.status.isFinished && $0.review == nil } }
 
+    /// The dot on You in booking mode: something's waiting on her pro side.
+    var clientYouBadge: Bool { mode == .client && (!openRequests.isEmpty || otherSideUnreadCount > 0) }
+
     var unreadCount: Int {
         threads.reduce(0) { $0 + (mode == .pro ? $1.unreadForPro : $1.unreadForClient) }
+    }
+
+    /// Unread messages waiting on the side she isn't on.
+    var otherSideUnreadCount: Int {
+        otherSideThreads.reduce(0) { $0 + (mode == .pro ? $1.unreadForClient : $1.unreadForPro) }
+    }
+
+    /// Her pro requests waiting for an answer, the one that lapses first at the top.
+    var openRequests: [Booking] {
+        proBookings.filter { $0.status == .requested }.sorted { requestDeadline($0) < requestDeadline($1) }
+    }
+
+    /// When a request lapses if she hasn't answered: two hours after it came in, as the server does it.
+    func requestDeadline(_ b: Booking) -> Date { b.createdAt.adding(hours: Fees.autoDeclineHours) }
+
+    /// Paid jobs that aren't in a payout yet.
+    private var unpaidOut: [Booking] {
+        let paidOut = Set(payouts.flatMap(\.bookingIDs))
+        return proBookings.filter { $0.status == .paid && !paidOut.contains($0.id) }
+    }
+
+    /// What's on its way to her: her share of paid jobs not yet in a payout.
+    var pendingEarningsCents: Int { unpaidOut.reduce(0) { $0 + $1.price.proPayoutCents } }
+
+    /// The next business day after the last of those jobs was paid. Nil when nothing's waiting.
+    var nextPayoutDate: Date? {
+        let paidAt = unpaidOut.map { b in b.events.last(where: { $0.status == .paid })?.at ?? b.start }
+        guard let last = paidAt.max() else { return nil }
+        var day = last.startOfDay.adding(days: 1)
+        while day.weekday == .saturday || day.weekday == .sunday { day = day.adding(days: 1) }
+        return day
     }
 
     // MARK: Booking actions
@@ -481,13 +658,36 @@ final class AppState {
         }
     }
 
-    func reschedule(_ booking: Booking, to start: Date) async {
+    /// False (with `lastError` set) if it didn't move. The server writes the new time in the thread.
+    @discardableResult
+    func reschedule(_ booking: Booking, to start: Date) async -> Bool {
         lastError = nil
-        do { replace(try await data.reschedule(bookingID: booking.id, to: start)) } catch { lastError = error.localizedDescription }
+        do {
+            replace(try await data.reschedule(bookingID: booking.id, to: start))
+            await loadThreads(people: false)
+            return true
+        } catch {
+            lastError = error.localizedDescription
+            return false
+        }
     }
 
     /// Leaves the review. On a done booking that isn't paid yet, this is also "Pay": the charge and any tip go through first.
     /// If the payment goes through and the review doesn't, the booking still shows as paid.
+    /// Pays for a done booking with the tip. The review is separate and optional. False (with `lastError`) if it didn't go.
+    @discardableResult
+    func pay(_ booking: Booking, tipCents: Int) async -> Bool {
+        if isOffline { fail(DataError.offline); return false }
+        do {
+            replace(try await data.pay(bookingID: booking.id, tipCents: tipCents))
+            Haptics.success()
+            return true
+        } catch {
+            lastError = error.localizedDescription
+            return false
+        }
+    }
+
     func review(_ booking: Booking, rating: Int, text: String, tipCents: Int) async -> ReviewOutcome {
         do {
             replace(try await data.submitReview(bookingID: booking.id, rating: rating, text: text, tipCents: tipCents))
@@ -607,13 +807,187 @@ final class AppState {
         let before = proSelf
         proSelf = pro
         do {
-            proSelf = try await data.updatePro(pro)
+            let saved = try await data.updatePro(pro)
+            proSelf = saved
+            // Her name is one name on both sides. (The sample data's pro is someone else, so not there.)
+            if isLive, var c = client, !saved.firstName.isEmpty, c.firstName != saved.firstName {
+                c.firstName = saved.firstName
+                client = c
+            }
             return true
         } catch {
             proSelf = before
             fail(error)
             return false
         }
+    }
+
+    /// Closes her pro profile and takes her back to booking. False, with `lastError`, while she has a job that isn't finished.
+    @discardableResult
+    func closeProProfile() async -> Bool {
+        guard isOnline() else { return false }
+        do {
+            try await data.closeProProfile()
+            if var p = proSelf {
+                p.isClosed = true
+                p.isActive = false
+                proSelf = p
+            }
+            if mode == .pro { await MainActor.run { self.switchMode(.client) } }
+            return true
+        } catch DataError.liveBooking {
+            fail(CloseRefused())
+            return false
+        } catch {
+            fail(error)
+            return false
+        }
+    }
+
+    /// Opens her pro profile again, with her work and prices as she left them.
+    @discardableResult
+    func reopenProProfile() async -> Bool {
+        guard isOnline() else { return false }
+        do {
+            try await data.reopenProProfile()
+            if let fresh = await data.currentPro() {
+                proSelf = fresh
+            } else if var p = proSelf {
+                p.isClosed = false
+                p.isActive = true
+                proSelf = p
+            }
+            return true
+        } catch {
+            fail(error)
+            return false
+        }
+    }
+
+    /// The close was refused because a job isn't finished.
+    private struct CloseRefused: LocalizedError {
+        var errorDescription: String? { "Finish or cancel your jobs first." }
+    }
+
+    // MARK: Photos and ID
+
+    /// A work photo, uploaded. Put the URL in `WorkItem.imageURL`, then `saveProSelf`. Nil (with a toast) if it didn't go.
+    func uploadWorkPhoto(_ jpeg: Data) async -> URL? {
+        guard isOnline() else { return nil }
+        do { return try await data.uploadWorkPhoto(jpeg) } catch { fail(error); return nil }
+    }
+
+    /// Her profile photo, uploaded and saved, on both sides. Nil (with a toast) if it didn't go.
+    func uploadAvatar(_ jpeg: Data) async -> URL? {
+        guard isOnline() else { return nil }
+        do {
+            let url = try await data.uploadAvatar(jpeg)
+            client?.avatarURL = url
+            proSelf?.avatarURL = url
+            return url
+        } catch {
+            fail(error)
+            return nil
+        }
+    }
+
+    @discardableResult
+    func uploadIDDocument(_ jpeg: Data, kind: IDDocumentKind) async -> Bool {
+        guard isOnline() else { return false }
+        do {
+            try await data.uploadIDDocument(jpeg, kind: kind)
+            return true
+        } catch {
+            fail(error)
+            return false
+        }
+    }
+
+    /// Sends her ID for a person to check. Only the server sets "ID checked".
+    @discardableResult
+    func submitIDCheck() async -> Bool {
+        guard isOnline() else { return false }
+        do {
+            try await data.submitIDCheck()
+            proSelf?.idSubmitted = true
+            return true
+        } catch {
+            fail(error)
+            return false
+        }
+    }
+
+    // MARK: Phone
+
+    /// Texts a code to the new number. False (with a toast) if it didn't go.
+    @discardableResult
+    func changePhone(to phone: String) async -> Bool {
+        guard isOnline() else { return false }
+        do {
+            try await data.changePhone(to: phone)
+            lastError = nil
+            return true
+        } catch {
+            fail(error)
+            return false
+        }
+    }
+
+    /// The code for the new number. On true, `client.phone` is the new number and it's how she signs in.
+    @discardableResult
+    func verifyPhoneChange(_ code: String, phone: String) async -> Bool {
+        guard isOnline() else { return false }
+        do {
+            client = try await data.verifyPhoneChange(phone: phone, code: code)
+            lastError = nil
+            return true
+        } catch {
+            fail(error)
+            return false
+        }
+    }
+
+    /// False, with the offline toast, when there's no network.
+    private func isOnline() -> Bool {
+        guard isOffline else { return true }
+        fail(DataError.offline)
+        return false
+    }
+
+    // MARK: Links
+
+    /// The link "Share" sends for a pro. This should become https://hairdone.app/pro/<id> once the domain
+    /// serves apple-app-site-association, so it opens the app for people who have it and the site for
+    /// people who don't.
+    func shareURL(for pro: Pro) -> URL {
+        URL(string: "hairdone://pro/\(pro.id)") ?? URL(string: "hairdone://pro")!
+    }
+
+    /// A pro link was opened (hairdone://pro/<id>): her profile, on Home, in booking mode. Waits for
+    /// sign-in; ignored, with a toast, while she's in the middle of something.
+    func openProLink(_ id: String) {
+        guard !id.isEmpty else { return }
+        guard stage == .ready, !isRestoring, client != nil else {
+            pendingProLink = id
+            return
+        }
+        if busySurfaces > 0 {
+            show("Finish this first, then open the link again.")
+            return
+        }
+        Task { await self.routeToPro(id) }
+    }
+
+    @MainActor
+    private func routeToPro(_ id: String) async {
+        await loadProDetail(id)
+        guard let found = pro(id) else {
+            show("We couldn't find her. The link might be old.")
+            return
+        }
+        enter(.client)
+        selectedTab = .home
+        pendingRoute = .pro(found)
     }
 
     // MARK: Push notifications
@@ -782,7 +1156,7 @@ final class AppState {
     private func enter(_ side: AppMode) {
         guard side != mode else { return }
         if side == .pro && proSelf == nil { return }
-        withAnimation(Motion.spring) { mode = side }
+        setMode(side)
     }
 
     func show(_ message: String) {
@@ -795,4 +1169,5 @@ final class AppState {
 }
 
 enum ClientTab: String, CaseIterable { case home, bookings, inbox, you }
-enum ProTab: String, CaseIterable { case today, calendar, inbox, work, earnings }
+/// Work lives in Profile now, pushed as `Route.proWork`.
+enum ProTab: String, CaseIterable { case today, calendar, inbox, earnings, profile }

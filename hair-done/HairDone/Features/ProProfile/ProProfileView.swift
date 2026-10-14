@@ -20,15 +20,20 @@ struct ProProfileView: View {
     @State private var showBooking = false
     @State private var showVerified = false
     @State private var showInstant = false
+    /// Asked from the Report or block sheet; shown here once that sheet has gone.
+    @State private var confirmBlock = false
 
-    /// The freshest copy of her, so a review you just left shows up.
-    private var live: Pro { app.pro(pro.id) ?? pro }
+    /// Her own profile, opened from "See it as a client": what clients see, with no way to book herself.
+    private var isSelf: Bool { app.proSelf?.id == pro.id }
+    /// The freshest copy of her, so a review you just left shows up. Her own is the copy she passed in
+    /// (her edits, as clients will see them once saved).
+    private var live: Pro { isSelf ? pro : (app.pro(pro.id) ?? pro) }
     private var selectedServices: [Service] { live.services.filter { selectedIDs.contains($0.id) } }
     private var totalCents: Int { selectedServices.reduce(0) { $0 + $1.priceCents } }
     private var totalMinutes: Int { selectedServices.reduce(0) { $0 + $1.minutes } }
     private var isFavourite: Bool { app.isFavourite(live) }
     private var distanceKm: Double { live.distanceKm(from: app.location.coordinate) }
-    private var nextFree: Date? { ProfileNextFree.start(in: live.availability) }
+    private var nextFree: Date? { ProfileNextFree.start(for: live, whosFree: app.whosFree) }
 
     /// Her pinned photo if she has one, else her first.
     private var heroItem: WorkItem? { live.work.first(where: { $0.isPinned }) ?? live.work.first }
@@ -57,12 +62,14 @@ struct ProProfileView: View {
                             reviews
                                 .padding(.top, Space.section)
                             availability
-                            HStack {
-                                Spacer()
-                                TertiaryButton(title: "Report or block", tint: Palette.inkFaint) { showReport = true }
-                                Spacer()
+                            if !isSelf {
+                                HStack {
+                                    Spacer()
+                                    TertiaryButton(title: "Report or block") { showReport = true }
+                                    Spacer()
+                                }
+                                .padding(.top, Space.xl)
                             }
-                            .padding(.top, Space.xl)
                         }
                         .screenGutter()
                         .padding(.bottom, Space.xl)
@@ -84,7 +91,7 @@ struct ProProfileView: View {
             floatingControls
         }
         .paperBackground()
-        .safeAreaInset(edge: .bottom, spacing: 0) { bookBar }
+        .safeAreaInset(edge: .bottom, spacing: 0) { bottomBar }
         .toolbar(.hidden, for: .navigationBar)
         .onAppear { app.hideTabBar() }
         .onDisappear { app.showTabBar() }
@@ -94,15 +101,43 @@ struct ProProfileView: View {
             ProfileWorkViewer(items: live.work, current: item)
         }
         .fullScreenCover(isPresented: $showBooking) {
-            BookingFlowView(pro: live, preselected: selectedServices, onBooked: { _ in selectedIDs = [] })
+            BookingFlowView(
+                pro: live,
+                preselected: selectedServices,
+                onBooked: { _ in selectedIDs = [] },
+                onSeeWhosFree: seeWhosFree
+            )
         }
         .sheet(isPresented: $showAllReviews) { ProfileAllReviewsSheet(pro: live) }
-        .sheet(isPresented: $showReport) { ProfileReportSheet(pro: live) }
+        .sheet(isPresented: $showReport) {
+            ProfileReportSheet(pro: live) {
+                // The block question opens once this sheet has closed.
+                showReport = false
+                Task { @MainActor in
+                    try? await Task.sleep(for: .milliseconds(450))
+                    confirmBlock = true
+                }
+            }
+        }
         .sheet(isPresented: $showVerified) {
             ProfileExplainerSheet(title: "ID checked", text: "Hair Done has seen her ID and ABN. Reviews only come from completed bookings.")
         }
         .sheet(isPresented: $showInstant) {
             ProfileExplainerSheet(title: "Instant book", text: "Book a free slot and it's confirmed straight away. No waiting on a reply.")
+        }
+        .confirmSheet(
+            isPresented: $confirmBlock,
+            title: "Block \(live.firstName)?",
+            message: "She won't show up for you and can't message you. She won't be told.",
+            confirmTitle: "Block",
+            cancelTitle: "Leave it"
+        ) {
+            Task {
+                if await app.block(live.id) {
+                    app.show("Blocked.")
+                    dismiss()
+                }
+            }
         }
     }
 
@@ -130,11 +165,11 @@ struct ProProfileView: View {
             .overlay {
                 LinearGradient(
                     stops: [
-                        .init(color: ProfileTone.inkFixed.opacity(0.38), location: 0),
-                        .init(color: ProfileTone.inkFixed.opacity(0), location: 0.28),
-                        .init(color: ProfileTone.inkFixed.opacity(0), location: 0.5),
-                        .init(color: ProfileTone.inkFixed.opacity(0.35), location: 0.74),
-                        .init(color: ProfileTone.inkFixed.opacity(0.66), location: 1)
+                        .init(color: Palette.inkGround.opacity(0.38), location: 0),
+                        .init(color: Palette.inkGround.opacity(0), location: 0.28),
+                        .init(color: Palette.inkGround.opacity(0), location: 0.5),
+                        .init(color: Palette.inkGround.opacity(0.35), location: 0.74),
+                        .init(color: Palette.inkGround.opacity(0.66), location: 1)
                     ],
                     startPoint: .top,
                     endPoint: .bottom
@@ -148,7 +183,7 @@ struct ProProfileView: View {
     private var heroTitle: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(live.displayName)
-                .font(ProfileType.heroName)
+                .font(HDFont.heroName)
                 .tracking(-0.6)
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)
@@ -160,8 +195,8 @@ struct ProProfileView: View {
                     .opacity(0.95)
             }
         }
-        .foregroundStyle(ProfileTone.onPhoto)
-        .shadow(color: ProfileTone.inkFixed.opacity(0.25), radius: 10, x: 0, y: 1)
+        .foregroundStyle(Palette.onPhoto)
+        .shadow(color: Palette.inkGround.opacity(0.25), radius: 10, x: 0, y: 1)
         .padding(.horizontal, Space.gutter)
         .padding(.bottom, 28)
         .allowsHitTesting(false)
@@ -185,19 +220,18 @@ struct ProProfileView: View {
 
             Spacer()
 
-            Button {
-                Haptics.light()
-                withAnimation(reduceMotion ? nil : Motion.spring) { app.toggleFavourite(live) }
-            } label: {
-                ProfileRoundIcon(
-                    symbol: isFavourite ? "heart.fill" : "heart",
-                    tint: isFavourite ? Palette.lacquer : ProfileTone.onPhoto
-                )
-                .symbolEffect(.bounce, value: isFavourite)
+            if !isSelf {
+                Button {
+                    Haptics.light()
+                    withAnimation(reduceMotion ? nil : Motion.spring) { app.toggleFavourite(live) }
+                } label: {
+                    ProfileRoundIcon(symbol: isFavourite ? "heart.fill" : "heart")
+                        .symbolEffect(.bounce, value: isFavourite)
+                }
+                .buttonStyle(PressLift(scale: 0.92))
+                .accessibilityLabel(isFavourite ? "Saved" : "Save")
+                .accessibilityHint(isFavourite ? "Takes her off your saved list" : "Keeps her in your saved list")
             }
-            .buttonStyle(PressLift(scale: 0.92))
-            .accessibilityLabel(isFavourite ? "Saved" : "Save")
-            .accessibilityHint(isFavourite ? "Takes her off your saved list" : "Keeps her in your saved list")
 
             ShareLink(item: shareURL, message: Text(shareText)) {
                 ProfileRoundIcon(symbol: "square.and.arrow.up")
@@ -209,7 +243,7 @@ struct ProProfileView: View {
         .padding(.top, 2)
     }
 
-    private var shareURL: URL { URL(string: "https://hairdone.app/pro/\(live.id)") ?? URL(string: "https://hairdone.app")! }
+    private var shareURL: URL { app.shareURL(for: live) }
     private var shareText: String {
         "\(live.firstName), \(live.primaryCategory.specialtyTitle.lowercased()) in \(live.suburb), on Hair Done."
     }
@@ -315,7 +349,7 @@ struct ProProfileView: View {
                     Haptics.light()
                     withAnimation(reduceMotion ? nil : Motion.spring) { bioExpanded = true }
                 } label: {
-                    (Text(preview).font(ProfileType.bio)
+                    (Text(preview).font(HDFont.quote)
                         + Text("  More").font(HDFont.sub).foregroundColor(Palette.inkSoft))
                         .foregroundStyle(Palette.ink)
                         .lineSpacing(3)
@@ -329,7 +363,7 @@ struct ProProfileView: View {
                 .accessibilityHint("Shows the rest")
             } else {
                 Text(live.bio)
-                    .font(ProfileType.bio)
+                    .font(HDFont.quote)
                     .foregroundStyle(Palette.ink)
                     .lineSpacing(3)
                     .fixedSize(horizontal: false, vertical: true)
@@ -355,7 +389,7 @@ struct ProProfileView: View {
     private var services: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(alignment: .firstTextBaseline, spacing: Space.m) {
-                Text("Services").profileEyebrow()
+                Text("Services").labelStyle().accessibilityAddTraits(.isHeader)
                 Spacer(minLength: 0)
                 Text(travelLine)
                     .font(HDFont.caption)
@@ -365,15 +399,16 @@ struct ProProfileView: View {
             .padding(.bottom, 10)
 
             if live.services.isEmpty {
-                ProfileRule()
+                Hairline(strong: true)
                 Text("She hasn't listed her services yet. Message her to ask.")
                     .font(HDFont.sub)
                     .foregroundStyle(Palette.inkSoft)
                     .padding(.vertical, Space.l)
             } else {
                 ForEach(live.services) { service in
-                    ProfileRule()
+                    Hairline(strong: true)
                     ProfileServiceRow(service: service, isSelected: selectedIDs.contains(service.id)) {
+                        guard !isSelf else { return }
                         withAnimation(reduceMotion ? nil : Motion.spring) {
                             if selectedIDs.contains(service.id) { selectedIDs.remove(service.id) } else { selectedIDs.insert(service.id) }
                         }
@@ -410,7 +445,7 @@ struct ProProfileView: View {
     private var work: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .firstTextBaseline) {
-                Text("Her work").profileEyebrow()
+                Text("Her work").labelStyle().accessibilityAddTraits(.isHeader)
                 Spacer(minLength: 0)
                 Text(live.work.count == 1 ? "1 photo" : "\(live.work.count) photos")
                     .font(HDFont.caption)
@@ -441,7 +476,7 @@ struct ProProfileView: View {
             Color.clear.frame(height: 1).id(ProfileSpace.reviews)
 
             HStack(alignment: .firstTextBaseline) {
-                Text("Reviews").profileEyebrow()
+                Text("Reviews").labelStyle().accessibilityAddTraits(.isHeader)
                 Spacer(minLength: 0)
                 if live.reviewCount > 0 {
                     Text("\(live.rating.ratingLabel) · \(live.reviewCount == 1 ? "1 review" : "\(live.reviewCount) reviews")")
@@ -454,19 +489,19 @@ struct ProProfileView: View {
             .accessibilityAddTraits(.isHeader)
 
             if live.reviews.isEmpty {
-                ProfileRule()
+                Hairline(strong: true)
                 Text("No reviews yet. Someone has to go first.")
-                    .font(ProfileType.quote)
+                    .font(HDFont.quote)
                     .foregroundStyle(Palette.inkSoft)
                     .padding(.vertical, 18)
             } else {
                 ForEach(live.reviews.prefix(3)) { review in
-                    ProfileRule()
+                    Hairline(strong: true)
                     ProfileReviewQuote(review: review, proName: live.firstName)
                         .padding(.vertical, 18)
                 }
                 if live.reviews.count > 3 {
-                    ProfileRule()
+                    Hairline(strong: true)
                     Button {
                         Haptics.light()
                         showAllReviews = true
@@ -492,9 +527,9 @@ struct ProProfileView: View {
     /// One quiet line: when she's next free.
     private var availability: some View {
         VStack(spacing: 0) {
-            ProfileRule()
+            Hairline(strong: true)
             HStack(alignment: .firstTextBaseline, spacing: Space.m) {
-                Text("Next free").profileEyebrow()
+                Text("Next free").labelStyle().accessibilityAddTraits(.isHeader)
                 Spacer(minLength: 0)
                 Text(ProfileNextFree.sectionLine(nextFree))
                     .font(HDFont.sub)
@@ -504,17 +539,17 @@ struct ProProfileView: View {
             }
             .padding(.vertical, Space.l)
             .accessibilityElement(children: .combine)
-            ProfileRule()
+            Hairline(strong: true)
         }
     }
 
-    // MARK: Book bar
+    // MARK: The bottom bar
 
-    private var barPrice: String {
+    private var barPrice: String? {
         if !selectedServices.isEmpty {
-            return "\(Money.format(totalCents)) · \(ProfileDuration.label(totalMinutes))"
+            return "\(Money.format(totalCents)) · \(ShortDuration.label(totalMinutes))"
         }
-        return live.services.isEmpty ? "" : "from \(Money.format(live.cheapestServiceCents))"
+        return live.services.isEmpty ? nil : "from \(Money.format(live.cheapestServiceCents))"
     }
 
     private var barAccessibilityLabel: String {
@@ -529,54 +564,54 @@ struct ProProfileView: View {
         return parts.joined(separator: ", ")
     }
 
-    /// Ink, paper text, her name and price on the left, a squared paper Book on the right.
-    private var bookBar: some View {
-        HStack(spacing: Space.l) {
-            VStack(alignment: .leading, spacing: 1) {
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Text(live.firstName)
-                        .font(ProfileType.barName)
-                        .lineLimit(1)
-                    if !barPrice.isEmpty {
-                        Text(barPrice)
-                            .font(HDFont.sub.monospacedDigit())
-                            .opacity(0.7)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.8)
-                            .contentTransition(.numericText())
-                    }
-                }
-                if let line = ProfileNextFree.barLine(nextFree) {
-                    Text(line)
-                        .font(HDFont.caption)
-                        .opacity(0.6)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.85)
-                }
-            }
-            .foregroundStyle(ProfileTone.paperOnInk)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel(barAccessibilityLabel)
-
-            Button {
-                Haptics.medium()
-                showBooking = true
-            } label: {
-                Text("Book")
-                    .font(HDFont.bodyStrong)
-                    .foregroundStyle(ProfileTone.inkFixed)
-                    .padding(.horizontal, Space.l)
-                    .frame(minWidth: 116, minHeight: 44)
-                    .background(ProfileTone.paperOnInk, in: RoundedRectangle(cornerRadius: Radius.button, style: .continuous))
-            }
-            .buttonStyle(PressLift())
-            .accessibilityLabel(selectedServices.isEmpty ? "Book \(live.firstName)" : "Book \(live.firstName), \(Money.format(totalCents))")
+    /// Ink, paper text, her name and price on the left, a squared paper Book on the right. On her own
+    /// profile it says so and offers Edit; for someone who isn't taking bookings, it says that.
+    @ViewBuilder
+    private var bottomBar: some View {
+        if isSelf {
+            BookBar(
+                name: "This is you.",
+                summary: nil,
+                detail: "It's what clients see.",
+                actionTitle: "Edit"
+            ) { editOwnProfile() }
+        } else if !live.isTakingBookings {
+            BookBar(
+                name: live.firstName,
+                summary: nil,
+                detail: "Not taking bookings right now.",
+                actionTitle: "See who's free"
+            ) { seeWhosFree() }
+        } else {
+            BookBar(
+                name: live.firstName,
+                summary: barPrice,
+                detail: app.isOffline ? "You're offline. Book when you're back." : ProfileNextFree.barLine(nextFree),
+                actionTitle: "Book",
+                isEnabled: !app.isOffline,
+                accessibilityText: barAccessibilityLabel,
+                actionAccessibilityLabel: selectedServices.isEmpty ? "Book \(live.firstName)" : "Book \(live.firstName), \(Money.format(totalCents))"
+            ) { showBooking = true }
+            .animation(reduceMotion ? nil : Motion.spring, value: selectedIDs)
         }
-        .padding(.horizontal, Space.gutter)
-        .padding(.vertical, 10)
-        .background(ProfileTone.inkGround.ignoresSafeArea(edges: .bottom))
-        .animation(reduceMotion ? nil : Motion.spring, value: selectedIDs)
+    }
+
+    /// Back to Profile edit: the screen under this one in Pro mode, or Pro mode's Profile tab from anywhere else.
+    private func editOwnProfile() {
+        if app.mode == .pro {
+            dismiss()
+        } else {
+            dismiss()
+            app.selectedProTab = .profile
+            app.pendingRoute = .proProfileEdit
+            app.switchMode(.pro)
+        }
+    }
+
+    /// Home, with Who's free at the top.
+    private func seeWhosFree() {
+        dismiss()
+        app.selectedTab = .home
     }
 }
 
@@ -585,66 +620,6 @@ struct ProProfileView: View {
 private enum ProfileSpace {
     static let scroll = "profileScroll"
     static let reviews = "reviews"
-}
-
-/// The few fixed colours this screen needs beyond the palette: ink that stays ink in dark mode,
-/// paper for type on ink and photos, and the stronger hairline from the price list mockup.
-private enum ProfileTone {
-    static let inkFixed = Color(hex: 0x241A16)
-    static let inkGround = Palette.dyn(light: 0x241A16, dark: 0x2E231E)
-    static let paperOnInk = Color(hex: 0xF4ECE4)
-    static let onPhoto = Color(hex: 0xFBF7F2)
-    static let viewerGround = Color(hex: 0x171210)
-    static let lineStrong = Palette.dyn(light: 0xDDD2C5, dark: 0x3A302B)
-}
-
-private enum ProfileType {
-    /// ~48 regular serif for her name on the hero; grows with Dynamic Type, capped so it stays one line.
-    static var heroName: Font {
-        let size = min(UIFontMetrics(forTextStyle: .largeTitle).scaledValue(for: 48), 64)
-        return Font.system(size: size, weight: .regular, design: .serif)
-    }
-    /// 19 regular serif for her bio.
-    static var bio: Font {
-        Font.system(size: UIFontMetrics(forTextStyle: .body).scaledValue(for: 19), weight: .regular, design: .serif)
-    }
-    /// 19 regular serif for review pull quotes.
-    static var quote: Font {
-        Font.system(size: UIFontMetrics(forTextStyle: .body).scaledValue(for: 19), weight: .regular, design: .serif)
-    }
-    /// 21 regular serif for her first name in the Book bar.
-    static var barName: Font {
-        Font.system(size: UIFontMetrics(forTextStyle: .title3).scaledValue(for: 21), weight: .regular, design: .serif)
-    }
-}
-
-private extension View {
-    /// Small tracked uppercase marker, "SERVICES".
-    func profileEyebrow() -> some View {
-        self.font(HDFont.eyebrow)
-            .textCase(.uppercase)
-            .tracking(1)
-            .foregroundStyle(Palette.inkSoft)
-            .accessibilityAddTraits(.isHeader)
-    }
-}
-
-/// The price list's hairline, a touch stronger than `Hairline` so it reads on paper.
-private struct ProfileRule: View {
-    var body: some View {
-        Rectangle().fill(ProfileTone.lineStrong).frame(height: 1)
-    }
-}
-
-/// "1 h 15", "1 h", "45 min".
-private enum ProfileDuration {
-    static func label(_ minutes: Int) -> String {
-        let h = minutes / 60
-        let m = minutes % 60
-        if h == 0 { return "\(m) min" }
-        if m == 0 { return "\(h) h" }
-        return "\(h) h " + String(format: "%02d", m)
-    }
 }
 
 /// Whole sentences from the start of a long bio, so "More" lands after a full stop.
@@ -671,13 +646,19 @@ private enum ProfileBio {
     }
 }
 
-/// When she's next free: an hour's notice today, else the first hour she works in the next week.
-/// A guide only; the slot picker in the booking flow has the real answer.
+/// When she's next free. Today comes from her real slots (`AppState.whosFree`); later days are a guide
+/// from her hours, and the slot picker in the booking flow has the real answer.
 private enum ProfileNextFree {
-    static func start(in availability: WeeklyAvailability, now: Date = Date()) -> Date? {
+    static func start(for pro: Pro, whosFree: [String: Date], now: Date = Date()) -> Date? {
+        if let today = whosFree[pro.id], today > now { return today }
+        // Who's free loaded and she isn't in it: nothing today, so look from tomorrow.
+        return start(in: pro.availability, now: now, skipToday: !whosFree.isEmpty)
+    }
+
+    static func start(in availability: WeeklyAvailability, now: Date = Date(), skipToday: Bool = false) -> Date? {
         let today = now.startOfDay
         let step = max(15, availability.stepMinutes)
-        for offset in 0..<7 {
+        for offset in (skipToday ? 1 : 0)..<7 {
             let day = today.adding(days: offset)
             let ranges = availability.ranges(on: day).sorted { $0.startMinutes < $1.startMinutes }
             for range in ranges {
@@ -738,7 +719,7 @@ private struct ProfileHeroPhoto: View {
 /// A paper icon in a small ink circle at 70%, for controls that sit on photos.
 private struct ProfileRoundIcon: View {
     var symbol: String
-    var tint: Color = ProfileTone.onPhoto
+    var tint: Color = Palette.onPhoto
     var weight: Font.Weight = .regular
 
     var body: some View {
@@ -746,7 +727,7 @@ private struct ProfileRoundIcon: View {
             .font(.system(size: 17, weight: weight))
             .foregroundStyle(tint)
             .frame(width: 38, height: 38)
-            .background(Circle().fill(ProfileTone.inkFixed.opacity(0.7)))
+            .background(Circle().fill(Palette.inkGround.opacity(0.7)))
             .frame(width: 44, height: 44)
             .contentShape(Rectangle())
     }
@@ -775,12 +756,12 @@ private struct ProfileServiceRow: View {
                     if isSelected {
                         Image(systemName: "checkmark")
                             .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(Palette.lacquer)
+                            .foregroundStyle(Palette.ink)
                             .transition(.opacity)
                     }
                 }
                 Spacer(minLength: Space.m)
-                Text(ProfileDuration.label(service.minutes))
+                Text(ShortDuration.label(service.minutes))
                     .font(HDFont.sub.monospacedDigit())
                     .foregroundStyle(Palette.inkSoft)
                     .lineLimit(1)
@@ -824,7 +805,7 @@ private struct ProfileReviewQuote: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("\u{201C}\(review.text)\u{201D}")
-                .font(ProfileType.quote)
+                .font(HDFont.quote)
                 .foregroundStyle(Palette.ink)
                 .lineSpacing(3)
                 .fixedSize(horizontal: false, vertical: true)
@@ -832,8 +813,7 @@ private struct ProfileReviewQuote: View {
             Text(attribution)
                 .font(HDFont.caption)
                 .foregroundStyle(Palette.inkSoft)
-                .lineLimit(1)
-                .minimumScaleFactor(0.85)
+                .fixedSize(horizontal: false, vertical: true)
 
             if let reply = review.proReply, !reply.isEmpty {
                 VStack(alignment: .leading, spacing: 3) {
@@ -847,7 +827,7 @@ private struct ProfileReviewQuote: View {
                 }
                 .padding(.leading, Space.m)
                 .overlay(alignment: .leading) {
-                    Rectangle().fill(ProfileTone.lineStrong).frame(width: 1)
+                    Rectangle().fill(Palette.lineStrong).frame(width: 1)
                 }
                 .padding(.top, 2)
             }
@@ -875,7 +855,7 @@ private struct ProfileWorkViewer: View {
 
     var body: some View {
         ZStack(alignment: .top) {
-            ProfileTone.viewerGround.ignoresSafeArea()
+            Palette.inkGround.ignoresSafeArea()
 
             TabView(selection: $index) {
                 ForEach(Array(items.enumerated()), id: \.element.id) { i, item in
@@ -885,7 +865,7 @@ private struct ProfileWorkViewer: View {
                             .aspectRatio(0.8, contentMode: .fit)
                         Text(item.caption)
                             .font(HDFont.italicSub)
-                            .foregroundStyle(ProfileTone.paperOnInk)
+                            .foregroundStyle(Palette.onInk)
                             .multilineTextAlignment(.center)
                             .padding(.horizontal, Space.xxl)
                             .fixedSize(horizontal: false, vertical: true)
@@ -899,7 +879,7 @@ private struct ProfileWorkViewer: View {
             HStack {
                 Text("\(index + 1) of \(items.count)")
                     .font(HDFont.caption.monospacedDigit())
-                    .foregroundStyle(ProfileTone.paperOnInk.opacity(0.6))
+                    .foregroundStyle(Palette.onInk.opacity(0.6))
                     .accessibilityLabel("Photo \(index + 1) of \(items.count)")
                 Spacer()
                 Button {
@@ -921,7 +901,7 @@ private struct ProfileWorkViewer: View {
 
 // MARK: - Sheets
 
-/// One short paragraph and a Got it. For the verified badge and instant book.
+/// One short paragraph and a quiet Got it, on a sheet sized to its words.
 private struct ProfileExplainerSheet: View {
     var title: String
     var text: String
@@ -935,13 +915,11 @@ private struct ProfileExplainerSheet: View {
                 .foregroundStyle(Palette.ink)
                 .fixedSize(horizontal: false, vertical: true)
                 .screenGutter()
-            PrimaryButton(title: "Got it") { dismiss() }
+            OutlineButton(title: "Got it") { dismiss() }
                 .screenGutter()
-            Spacer()
+                .padding(.bottom, Space.l)
         }
-        .paperBackground()
-        .presentationDetents([.height(280)])
-        .presentationDragIndicator(.visible)
+        .confirmSheetPresentation()
     }
 }
 
@@ -959,7 +937,7 @@ private struct ProfileAllReviewsSheet: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     ForEach(pro.reviews) { review in
-                        ProfileRule()
+                        Hairline(strong: true)
                         ProfileReviewQuote(review: review, proName: pro.firstName)
                             .padding(.vertical, 18)
                     }
@@ -969,22 +947,24 @@ private struct ProfileAllReviewsSheet: View {
             }
         }
         .paperBackground()
+        .presentationBackground(Palette.paper)
         .presentationDragIndicator(.visible)
     }
 }
 
-/// Report or block. Report asks why, block asks once.
+/// Report or block. Report asks why on hairline rows; block hands back to the profile, which asks once.
 private struct ProfileReportSheet: View {
     @Environment(AppState.self) private var app
     @Environment(\.dismiss) private var dismiss
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     var pro: Pro
+    /// "Block her": the profile asks with a ConfirmSheet once this sheet has gone.
+    var onBlock: () -> Void
 
     enum Mode { case pick, report }
     @State private var mode: Mode = .pick
     @State private var reason: String? = nil
     @State private var note = ""
-    @State private var confirmBlock = false
     @State private var sending = false
 
     private let reasons = [
@@ -1007,47 +987,35 @@ private struct ProfileReportSheet: View {
                 switch mode {
                 case .pick:
                     VStack(spacing: 0) {
-                        NavRow(symbol: "flag", title: "Report \(pro.firstName)") {
+                        Hairline(strong: true)
+                        HairlineRow(title: "Report \(pro.firstName)", symbol: "flag") {
                             withAnimation(reduceMotion ? nil : Motion.spring) { mode = .report }
                         }
-                        Hairline()
-                        NavRow(symbol: "hand.raised", title: "Block \(pro.firstName)", tint: Palette.lacquer) {
-                            confirmBlock = true
+                        HairlineRow(title: "Block \(pro.firstName)", subtitle: "She won't show up for you and can't message you.", symbol: "hand.raised") {
+                            onBlock()
                         }
                     }
-                    .card(padding: Space.m)
                     .screenGutter()
                     .padding(.top, Space.s)
+                    .padding(.bottom, Space.xl)
                     .transition(.opacity)
 
                 case .report:
                     VStack(alignment: .leading, spacing: Space.l) {
                         VStack(spacing: 0) {
-                            ForEach(Array(reasons.enumerated()), id: \.element) { i, r in
-                                Button {
-                                    Haptics.selection()
-                                    reason = r
-                                } label: {
-                                    HStack {
-                                        Text(r).font(HDFont.body).foregroundStyle(Palette.ink)
-                                        Spacer()
-                                        Image(systemName: reason == r ? "largecircle.fill.circle" : "circle")
-                                            .font(.system(size: 20, weight: .regular))
-                                            .foregroundStyle(reason == r ? Palette.lacquer : Palette.inkFaint)
-                                    }
-                                    .frame(minHeight: 48)
-                                    .contentShape(Rectangle())
+                            Hairline(strong: true)
+                            ForEach(reasons, id: \.self) { r in
+                                OptionBox(isSelected: reason == r, style: .row, action: { reason = r }) {
+                                    Text(r).font(HDFont.body).foregroundStyle(Palette.ink)
+                                        .fixedSize(horizontal: false, vertical: true)
                                 }
-                                .buttonStyle(.plain)
-                                .accessibilityAddTraits(reason == r ? .isSelected : [])
-                                if i < reasons.count - 1 { Hairline() }
                             }
                         }
-                        .card(padding: Space.m)
 
-                        HDTextField(label: "", placeholder: "Only we see this.", text: $note, axis: .vertical)
+                        HDTextField(label: "What happened", placeholder: "Only we see this.", text: $note, axis: .vertical)
+                            .lineLimit(2...6)
 
-                        PrimaryButton(title: "Send report", isLoading: sending, isEnabled: reason != nil) {
+                        InkButton(title: "Send report", isLoading: sending, isEnabled: reason != nil && !app.isOffline) {
                             guard let picked = reason else { return }
                             sending = true
                             Task {
@@ -1059,6 +1027,9 @@ private struct ProfileReportSheet: View {
                                 }
                             }
                         }
+                        if app.isOffline {
+                            FieldMessage(text: "You're offline. Send it when you're back.")
+                        }
                     }
                     .screenGutter()
                     .padding(.top, Space.s)
@@ -1069,22 +1040,10 @@ private struct ProfileReportSheet: View {
             .scrollDismissesKeyboard(.interactively)
         }
         .paperBackground()
+        .presentationBackground(Palette.paper)
         .holdsPushRoutes()
-        .presentationDetents(mode == .pick ? [.height(300)] : [.large])
+        .presentationDetents(mode == .pick ? [.medium, .large] : [.large])
         .presentationDragIndicator(.visible)
-        .confirmationDialog("Block \(pro.firstName)?", isPresented: $confirmBlock, titleVisibility: .visible) {
-            Button("Block", role: .destructive) {
-                Task {
-                    if await app.block(pro.id) {
-                        app.show("Blocked.")
-                        dismiss()
-                    }
-                }
-            }
-            Button("Leave it", role: .cancel) { }
-        } message: {
-            Text("She won't show up for you and can't message you. She won't be told.")
-        }
     }
 }
 

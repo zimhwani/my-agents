@@ -139,21 +139,57 @@ actor SupabaseAPI {
         baseURL.appendingPathComponent("storage/v1/object/public/\(bucket)/\(path)")
     }
 
+    // MARK: Storage
+
+    /// Puts a JPEG at `bucket/path`. `replace` overwrites a file already there (the ID photos keep
+    /// fixed names); everything else gets a fresh name, so it never needs to.
+    func upload(_ jpeg: Data, bucket: String, path: String, replace: Bool = false) async throws {
+        _ = try await call("POST", "storage/v1/object/\(bucket)/\(path)", body: jpeg, contentType: "image/jpeg",
+                           headers: replace ? ["x-upsert": "true"] : [:])
+    }
+
+    private struct SignedFile: Decodable {
+        let path: String?
+        let signedURL: String?
+        let signedUrl: String?
+    }
+
+    /// Links to private files that work for `seconds`, by path. Paths Storage wouldn't sign are left out.
+    func signedURLs(bucket: String, paths: [String], seconds: Int = 3600) async throws -> [String: URL] {
+        guard !paths.isEmpty else { return [:] }
+        let body = try SupabaseJSON.body(["expiresIn": seconds, "paths": paths])
+        let data = try await call("POST", "storage/v1/object/sign/\(bucket)", body: body)
+        let files = try SupabaseJSON.decode([SignedFile].self, from: data)
+        // The signed link comes back relative to storage/v1, query string and all.
+        let root = baseURL.absoluteString.hasSuffix("/") ? String(baseURL.absoluteString.dropLast()) : baseURL.absoluteString
+        var out: [String: URL] = [:]
+        for f in files {
+            guard let path = f.path, let relative = f.signedURL ?? f.signedUrl else { continue }
+            let slash = relative.hasPrefix("/") ? "" : "/"
+            if let url = URL(string: root + "/storage/v1" + slash + relative) { out[path] = url }
+        }
+        return out
+    }
+
     // MARK: Requests
 
     /// One call. `path` is relative to the project, e.g. "rest/v1/bookings" or "functions/v1/pay-booking".
-    /// Signed in, it carries the user's token; signed out, the publishable key alone.
+    /// Signed in, it carries the user's token; signed out, the publishable key alone. `headers` are
+    /// added as they are (Storage's "x-upsert", say).
     func call(_ method: String, _ path: String, query: [URLQueryItem] = [], body: Data? = nil,
-              prefer: String? = nil, contentType: String = "application/json", signedIn: Bool = true) async throws -> Data {
+              prefer: String? = nil, contentType: String = "application/json", signedIn: Bool = true,
+              headers: [String: String] = [:]) async throws -> Data {
         var token: String? = nil
         if signedIn, session != nil {
             token = try await freshSession()?.accessToken
         }
-        let first = try request(method, path, query: query, body: body, prefer: prefer, contentType: contentType, token: token)
+        let first = try request(method, path, query: query, body: body, prefer: prefer, contentType: contentType, token: token,
+                                headers: headers)
         let (data, status) = try await perform(first)
         if status == 401, token != nil {
             let renewed = try await refresh()
-            let second = try request(method, path, query: query, body: body, prefer: prefer, contentType: contentType, token: renewed.accessToken)
+            let second = try request(method, path, query: query, body: body, prefer: prefer, contentType: contentType,
+                                     token: renewed.accessToken, headers: headers)
             let (data2, status2) = try await perform(second)
             return try check(data2, status: status2)
         }
@@ -161,7 +197,7 @@ actor SupabaseAPI {
     }
 
     private func request(_ method: String, _ path: String, query: [URLQueryItem], body: Data?, prefer: String?,
-                         contentType: String, token: String?) throws -> URLRequest {
+                         contentType: String, token: String?, headers: [String: String] = [:]) throws -> URLRequest {
         var components = URLComponents(url: baseURL.appendingPathComponent(path), resolvingAgainstBaseURL: false)
         if !query.isEmpty { components?.queryItems = query }
         guard let url = components?.url else { throw DataError.network }
@@ -176,6 +212,7 @@ actor SupabaseAPI {
             r.setValue(contentType, forHTTPHeaderField: "Content-Type")
             r.httpBody = body
         }
+        for (name, value) in headers { r.setValue(value, forHTTPHeaderField: name) }
         return r
     }
 
@@ -327,6 +364,19 @@ actor SupabaseAPI {
         let body = try SupabaseJSON.body(["provider": provider, "id_token": idToken, "nonce": nonce])
         let data = try await call("POST", "auth/v1/token", query: [URLQueryItem(name: "grant_type", value: "id_token")],
                                   body: body, signedIn: false)
+        return try adopt(data)
+    }
+
+    /// Texts a code to a new number for the signed-in account. `phone` is E.164.
+    func changePhone(to phone: String) async throws {
+        let body = try SupabaseJSON.body(["phone": phone])
+        _ = try await call("PUT", "auth/v1/user", body: body)
+    }
+
+    /// The code from `changePhone`. GoTrue hands back a fresh session with the new number on it.
+    func verifyPhoneChange(phone: String, code: String) async throws -> SupabaseSession {
+        let body = try SupabaseJSON.body(["phone": phone, "token": code, "type": "phone_change"])
+        let data = try await call("POST", "auth/v1/verify", body: body, signedIn: false)
         return try adopt(data)
     }
 

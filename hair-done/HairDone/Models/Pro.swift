@@ -35,6 +35,15 @@ struct Pro: Identifiable, Hashable, Codable {
     var reliabilityScore: Double = 1.0
     var abn: String = ""
     var payoutsConnected: Bool = false
+    /// How much notice she needs before a job, in minutes (60 to 2880).
+    var noticeMinutes: Int = 90
+    /// False while she's still in onboarding: a draft clients can't see.
+    var isOnboarded: Bool = true
+    /// She closed her pro profile. Her work and prices are kept if she comes back.
+    var isClosed: Bool = false
+    /// She's sent photo ID and a selfie. `isVerified` is the server's yes, after a person has looked.
+    var idSubmitted: Bool = false
+    var avatarURL: URL? = nil
 
     var displayName: String { "\(firstName) \(lastInitial)." }
     var primaryCategory: Category { specialties.first ?? .hair }
@@ -56,6 +65,11 @@ struct Pro: Identifiable, Hashable, Codable {
 
     static func == (lhs: Pro, rhs: Pro) -> Bool { lhs.id == rhs.id }
     func hash(into hasher: inout Hasher) { hasher.combine(id) }
+}
+
+/// The two photos for the ID check. The raw value is the file name in her `id-docs` folder.
+enum IDDocumentKind: String, CaseIterable {
+    case photoID = "photo-id", selfie
 }
 
 /// Something a pro offers, with a price and how long it takes.

@@ -12,6 +12,8 @@ final class MockDataService: DataService {
     private var payouts: [Payout] = MockData.payouts()
     private var blocked: Set<String> = []
     private var signedIn = false
+    /// ID photos she's added.
+    private var idDocs: Set<IDDocumentKind> = []
 
     /// Set to 0 in previews/tests.
     var latencyMs: Int = 350
@@ -71,9 +73,14 @@ final class MockDataService: DataService {
 
     // MARK: Discovery
 
+    /// The pros a client can find: taking bookings, finished onboarding, not closed, not blocked.
+    private var listed: [Pro] {
+        pros.filter { $0.isActive && $0.isOnboarded && !$0.isClosed && !blocked.contains($0.id) }
+    }
+
     func pros(near coordinate: CLLocationCoordinate2D, category: Category?) async throws -> [Pro] {
         await pause()
-        var list = pros.filter { $0.isActive && !blocked.contains($0.id) }
+        var list = listed
         if let category { list = list.filter { $0.specialties.contains(category) } }
         return list.sorted { $0.distanceKm(from: coordinate) < $1.distanceKm(from: coordinate) }
     }
@@ -84,8 +91,37 @@ final class MockDataService: DataService {
 
     func clientNames(ids: [String]) async throws -> [String: String] { MockData.clientNames }
 
+    func whosFree(near coordinate: CLLocationCoordinate2D, category: Category?) async throws -> [String: Date] {
+        await pause(0.5)
+        var out: [String: Date] = [:]
+        for p in listed where category.map({ p.specialties.contains($0) }) ?? true {
+            let shortest = p.services.map(\.minutes).min() ?? 60
+            if let first = openings(for: p, on: Date(), minutes: shortest).first(where: \.isAvailable) {
+                out[p.id] = first.start
+            }
+        }
+        return out
+    }
+
+    func searchPros(_ query: String, near coordinate: CLLocationCoordinate2D) async throws -> [Pro] {
+        await pause(0.5)
+        let words = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard words.count >= 2 else { return [] }
+        return listed.filter { p in
+            var hay = [p.firstName, p.suburb, p.headline] + p.services.map(\.name)
+            hay += p.specialties.flatMap { [$0.label, $0.specialtyTitle] }
+            return hay.contains { $0.lowercased().contains(words) }
+        }
+        .sorted { $0.distanceKm(from: coordinate) < $1.distanceKm(from: coordinate) }
+    }
+
     func slots(for pro: Pro, on day: Date, minutes: Int) async throws -> [TimeSlot] {
         await pause(0.6)
+        return openings(for: pro, on: day, minutes: minutes)
+    }
+
+    /// Her start times on a day: her hours, less her notice and anything booked (with her buffer).
+    private func openings(for pro: Pro, on day: Date, minutes: Int) -> [TimeSlot] {
         let ranges = pro.availability.ranges(on: day)
         guard !ranges.isEmpty else { return [] }
         let taken = bookings.filter { $0.proID == pro.id && $0.status.isUpcoming && Calendar.current.isDate($0.start, inSameDayAs: day) }
@@ -99,8 +135,8 @@ final class MockDataService: DataService {
                 let end = start.adding(minutes: minutes)
                 var available = true
                 var reason: String? = nil
-                if start < Date().adding(minutes: 90) {
-                    available = false; reason = "Too soon, she needs 90 minutes' notice"
+                if start < Date().adding(minutes: pro.noticeMinutes) {
+                    available = false; reason = Self.noticeReason(pro.noticeMinutes)
                 } else if let clash = taken.first(where: { $0.start.adding(minutes: -buffer) < end && $0.end.adding(minutes: buffer) > start }) {
                     available = false
                     reason = clash.start <= start && clash.end >= end ? "She's booked" : "Too close to another job"
@@ -110,6 +146,14 @@ final class MockDataService: DataService {
             }
         }
         return slots
+    }
+
+    /// "Too soon, she needs 2 hours' notice"
+    private static func noticeReason(_ minutes: Int) -> String {
+        if minutes >= 1440 { return "Too soon, she needs a day's notice" }
+        if minutes == 60 { return "Too soon, she needs an hour's notice" }
+        if minutes % 60 == 0 { return "Too soon, she needs \(minutes / 60) hours' notice" }
+        return "Too soon, she needs \(minutes) minutes' notice"
     }
 
     // MARK: Bookings
@@ -139,7 +183,8 @@ final class MockDataService: DataService {
         let booking = Booking(
             id: id, proID: draft.pro.id, clientID: clientID, services: draft.services, start: start, address: address,
             notes: draft.notes, inspoSeeds: draft.inspoSeeds, status: status, price: draft.price, createdAt: now, events: events,
-            paymentMethodID: draft.paymentMethod?.id, reference: Self.reference()
+            paymentMethodID: draft.paymentMethod?.id, reference: Self.reference(),
+            inspoURLs: draft.inspoPhotos.compactMap { try? Self.saveToCaches($0) }
         )
         bookings.append(booking)
         let intro = status == .confirmed
@@ -171,12 +216,28 @@ final class MockDataService: DataService {
         return bookings[i]
     }
 
+    /// The server's rules: requested or confirmed, 24 hours out or more, and a time she's free.
     func reschedule(bookingID: String, to start: Date) async throws -> Booking {
         await pause()
         guard let i = bookings.firstIndex(where: { $0.id == bookingID }) else { throw DataError.notFound }
+        let b = bookings[i]
+        guard b.status == .requested || b.status == .confirmed else { throw DataError.alreadyMoved }
+        guard b.hoursUntil >= Double(Fees.freeCancellationHours) else { throw DataError.tooLateToMove }
+        let end = start.adding(minutes: b.minutes)
+        let buffer = pros.first { $0.id == b.proID }?.availability.bufferMinutes ?? 30
+        let clash = bookings.contains {
+            $0.id != b.id && $0.proID == b.proID && $0.status.isUpcoming
+                && $0.start.adding(minutes: -buffer) < end && $0.end.adding(minutes: buffer) > start
+        }
+        if clash { throw DataError.slotTaken }
         bookings[i].start = start
-        if bookings[i].status == .confirmed && !(pros.first { $0.id == bookings[i].proID }?.instantBook ?? true) {
-            bookings[i].status = .requested
+        if let t = threads.firstIndex(where: { $0.bookingID == bookingID }) {
+            let f = DateFormatter()
+            f.locale = Locale(identifier: "en_AU")
+            f.dateFormat = "EEEE d MMMM"
+            let line = "Moved to \(f.string(from: start)), \(start.clock)."
+            threads[t].messages.append(Message(id: UUID().uuidString, threadID: threads[t].id, senderID: "system", text: line,
+                                               sentAt: Date(), isSystem: true))
         }
         return bookings[i]
     }
@@ -193,6 +254,16 @@ final class MockDataService: DataService {
             let total = pros[p].rating * Double(pros[p].reviewCount) + Double(rating)
             pros[p].reviewCount += 1
             pros[p].rating = (total / Double(pros[p].reviewCount) * 10).rounded() / 10
+        }
+        return bookings[i]
+    }
+
+    func pay(bookingID: String, tipCents: Int) async throws -> Booking {
+        await pause()
+        guard let i = bookings.firstIndex(where: { $0.id == bookingID }) else { throw DataError.notFound }
+        if bookings[i].status == .done {
+            bookings[i].status = .paid
+            bookings[i].price.tipCents = max(0, tipCents)
         }
         return bookings[i]
     }
@@ -236,6 +307,79 @@ final class MockDataService: DataService {
 
     func payouts(proID: String) async throws -> [Payout] { await pause(); return payouts }
     func payoutStatus() async throws -> Bool { await pause(0.5); return proSelf.payoutsConnected }
+
+    func closeProProfile() async throws {
+        await pause()
+        let live = bookings.contains { $0.proID == proSelf.id && ($0.status.isUpcoming || $0.status == .done) }
+        if live { throw DataError.liveBooking }
+        proSelf.isClosed = true
+        proSelf.isActive = false
+        if let i = pros.firstIndex(where: { $0.id == proSelf.id }) { pros[i] = proSelf }
+    }
+
+    func reopenProProfile() async throws {
+        await pause()
+        proSelf.isClosed = false
+        proSelf.isActive = true
+        if let i = pros.firstIndex(where: { $0.id == proSelf.id }) { pros[i] = proSelf }
+    }
+
+    // MARK: Photos and ID
+
+    /// Writes the JPEG to the caches folder, so the photo really shows. Nothing leaves the phone.
+    private static func saveToCaches(_ jpeg: Data) throws -> URL {
+        guard let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first else {
+            throw DataError.uploadFailed
+        }
+        let folder = caches.appendingPathComponent("sample-uploads", isDirectory: true)
+        do {
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            let file = folder.appendingPathComponent(UUID().uuidString.lowercased() + ".jpg")
+            try jpeg.write(to: file, options: .atomic)
+            return file
+        } catch {
+            throw DataError.uploadFailed
+        }
+    }
+
+    func uploadWorkPhoto(_ jpeg: Data) async throws -> URL {
+        await pause(1.5)
+        return try Self.saveToCaches(jpeg)
+    }
+
+    func uploadAvatar(_ jpeg: Data) async throws -> URL {
+        await pause(1.2)
+        let url = try Self.saveToCaches(jpeg)
+        client?.avatarURL = url
+        proSelf.avatarURL = url
+        if let i = pros.firstIndex(where: { $0.id == proSelf.id }) { pros[i].avatarURL = url }
+        return url
+    }
+
+    func uploadIDDocument(_ jpeg: Data, kind: IDDocumentKind) async throws {
+        await pause(1.2)
+        _ = try Self.saveToCaches(jpeg)
+        idDocs.insert(kind)
+    }
+
+    func submitIDCheck() async throws {
+        await pause()
+        guard idDocs.count == IDDocumentKind.allCases.count else { throw DataError.idDocsMissing }
+        proSelf.idSubmitted = true
+    }
+
+    // MARK: Phone
+
+    func changePhone(to phone: String) async throws { await pause(1.5) }
+
+    /// Any six digits, the same as signing in.
+    func verifyPhoneChange(phone: String, code: String) async throws -> Client {
+        await pause(1.5)
+        var c = client ?? MockData.client
+        c.phone = AUPhone.display(phone)
+        client = c
+        return c
+    }
 
     static func reference() -> String {
         let letters = Array("ABCDEFGHJKLMNPQRSTUVWXYZ23456789")

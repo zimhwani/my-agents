@@ -1,17 +1,22 @@
 import SwiftUI
 import MapKit
 
-/// One booking, top to bottom: who, where it's up to, when, where, what, and what you can do about it.
+/// One booking, top to bottom. It opens on the same record she was handed when she booked (her
+/// pro's photo, the name in serif, when, where and what), then what she can do about it, where
+/// it's up to, and the receipt. Refreshes itself on the day.
 struct BookingDetailView: View {
     @Environment(AppState.self) private var app
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.scenePhase) private var scenePhase
     var bookingID: String
 
     @State private var showReschedule = false
     @State private var showCancel = false
     @State private var showReview = false
+    @State private var showPay = false
     @State private var cancelling = false
-    @State private var showFlag = false
+    @State private var cancelProblem: String? = nil
+    @State private var confirmFlag = false
 
     private var booking: Booking? { app.bookings.first { $0.id == bookingID } }
 
@@ -19,12 +24,21 @@ struct BookingDetailView: View {
         Group {
             if let booking {
                 content(booking)
-            } else {
-                EmptyState(symbol: "questionmark.circle", title: "We couldn't find that one.", actionTitle: "Back") { dismiss() }
+            } else if app.bookingsLoadFailed {
+                ErrorState { Task { await app.loadBookings() } }
+                    .frame(maxHeight: .infinity, alignment: .top)
                     .paperBackground()
+                    .hdNavHeader()
+            } else {
+                EmptyState(title: "We couldn't find that one.", message: "It might have been moved or cancelled.", actionTitle: "Back") { dismiss() }
+                    .frame(maxHeight: .infinity, alignment: .top)
+                    .paperBackground()
+                    .hdNavHeader()
             }
         }
-        .navigationBarTitleDisplayMode(.inline)
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { Task { await app.loadBookings(people: false) } }
+        }
     }
 
     // MARK: Content
@@ -33,119 +47,281 @@ struct BookingDetailView: View {
         let pro = app.pro(booking.proID)
         let proName = pro?.firstName ?? "her"
         return ScrollView {
-            VStack(alignment: .leading, spacing: Space.section) {
-                header(booking, pro: pro, proName: proName)
-                BookingTimeline(booking: booking, pro: pro)
-                whenSection(booking)
-                whereSection(booking)
-                whatSection(booking)
-                if !booking.notes.isEmpty || !booking.inspoSeeds.isEmpty { notesSection(booking) }
-                if let review = booking.review { reviewSection(review, proName: proName) }
-                actions(booking, pro: pro, proName: proName)
+            VStack(alignment: .leading, spacing: 0) {
+                if app.isOffline { OfflineBar() }
+                cover(booking, pro: pro)
+                VStack(alignment: .leading, spacing: Space.section) {
+                    header(booking, pro: pro, proName: proName)
+                    actions(booking, pro: pro, proName: proName)
+                    timeline(booking, pro: pro)
+                    receipt(booking)
+                    whereSection(booking)
+                    if !booking.notes.isEmpty || !booking.inspoSeeds.isEmpty || !booking.inspoURLs.isEmpty { notesSection(booking) }
+                    if let review = booking.review { reviewSection(review, proName: proName) }
+                    after(booking, pro: pro, proName: proName)
+                }
+                .screenGutter()
+                .padding(.top, Space.l)
+                .padding(.bottom, Space.section)
             }
-            .screenGutter()
-            .padding(.top, Space.s)
-            .padding(.bottom, Space.section)
         }
         .paperBackground()
-        .navigationTitle(booking.cardTitle(proName: proName))
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) { simulateMenu(booking) }
+        .refreshable { await app.loadBookings() }
+        .hdNavHeader(nil) { simulateMenu(booking) }
+        .animation(Motion.gentle, value: app.isOffline)
+        // On the day, between confirmed and done, look for her moves every 30 seconds.
+        .task(id: booking.status) {
+            guard Self.polls(booking) else { return }
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(30))
+                if Task.isCancelled { break }
+                await app.loadBookings(people: false)
+            }
         }
         .sheet(isPresented: $showReschedule) {
             RescheduleSheet(booking: booking)
-                .presentationDragIndicator(.visible)
         }
         .sheet(isPresented: $showReview) {
             ReviewSheet(booking: booking)
-                .presentationDetents([.large])
-                .presentationDragIndicator(.visible)
+        }
+        .sheet(isPresented: $showPay) {
+            PaySheet(booking: booking)
         }
         .sheet(isPresented: $showCancel) {
-            CancelBookingSheet(booking: booking, proName: proName, isWorking: cancelling) {
-                cancelling = true
-                Task {
-                    let line = booking.cancelDoneLine(proName: proName)
-                    if await app.update(booking, to: .cancelledByClient) != nil {
-                        showCancel = false
-                        app.show(line)
-                    }
-                    // A failure shows as a toast on the sheet (holdsPushRoutes carries it).
-                    cancelling = false
-                }
-            }
-            .presentationDetents([.medium])
-            .presentationDragIndicator(.visible)
+            cancelSheet(booking, proName: proName)
         }
-        .confirmationDialog("Something wrong?", isPresented: $showFlag, titleVisibility: .visible) {
-            Button("Hold off the charge") {
-                Task {
-                    if await app.flag(booking, detail: "") {
-                        app.show("Held off. A person will be in touch within two days.")
-                    }
+        .confirmSheet(isPresented: $confirmFlag,
+                      title: "Something wrong?",
+                      message: "We'll hold off charging your card for up to 48 hours while a person looks. Then message us from Help and say what happened.",
+                      confirmTitle: "Hold off the charge",
+                      cancelTitle: "Leave it") {
+            Task {
+                if await app.flag(booking, detail: "") {
+                    app.show("Held off. A person will be in touch within two days.")
                 }
             }
-            Button("Leave it", role: .cancel) {}
-        } message: {
-            Text("We'll hold off charging your card for up to 48 hours while a person looks. Then message us from Help and say what happened.")
         }
     }
 
-    // MARK: Header
+    private static func polls(_ b: Booking) -> Bool {
+        b.isToday && [.confirmed, .onHerWay, .arrived, .inProgress, .done].contains(b.status)
+    }
+
+    // MARK: The record
+
+    private func cover(_ booking: Booking, pro: Pro?) -> some View {
+        Group {
+            if let pro {
+                NavigationLink(value: Route.pro(pro)) { coverPhoto(booking, pro: pro) }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("\(pro.displayName)'s work")
+                    .accessibilityHint("Opens her profile")
+            } else {
+                coverPhoto(booking, pro: nil)
+            }
+        }
+    }
+
+    private func coverPhoto(_ booking: Booking, pro: Pro?) -> some View {
+        Color.clear
+            .aspectRatio(3.0 / 2.0, contentMode: .fit)
+            .overlay { BookingPhoto(item: booking.coverItem(pro: pro), cornerRadius: 0) }
+            .clipped()
+            .opacity(booking.status.isCancelled ? 0.7 : 1)
+    }
 
     private func header(_ booking: Booking, pro: Pro?, proName: String) -> some View {
-        VStack(alignment: .leading, spacing: Space.m) {
-            if let pro {
-                NavigationLink(value: Route.pro(pro)) {
-                    HStack(spacing: Space.m) {
-                        Avatar(name: pro.firstName, seed: pro.seed, size: 56)
-                        VStack(alignment: .leading, spacing: 3) {
-                            HStack(spacing: 6) {
-                                Text(pro.displayName).font(HDFont.heading).foregroundStyle(Palette.ink)
-                                if pro.isVerified { VerifiedBadge(compact: true) }
-                            }
-                            Text(pro.specialtyLine).font(HDFont.sub).foregroundStyle(Palette.inkSoft)
-                            RatingLine(rating: pro.rating, count: pro.reviewCount)
-                        }
-                        Spacer(minLength: 0)
-                        Image(systemName: "chevron.right").font(.system(size: 13, weight: .semibold)).foregroundStyle(Palette.inkFaint)
-                    }
-                    .card()
-                }
-                .buttonStyle(PressLift(scale: 0.985))
-                .accessibilityElement(children: .combine)
-                .accessibilityHint("Opens her profile")
-            }
-
-            HStack(alignment: .firstTextBaseline, spacing: Space.m) {
-                StatusBadge(status: booking.status)
-                Spacer(minLength: 0)
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(alignment: .firstTextBaseline) {
+                BookingStatusEyebrow(status: booking.status, live: booking.isToday && booking.status.isActiveDay)
+                Spacer(minLength: Space.s)
                 Text(booking.reference)
-                    .font(HDFont.label.monospacedDigit())
+                    .font(HDFont.caption.monospacedDigit())
                     .foregroundStyle(Palette.inkSoft)
                     .accessibilityLabel("Reference \(booking.reference)")
             }
-            HStack(spacing: Space.s) {
-                if booking.isToday && booking.status.isUpcoming { LiveDot(color: booking.status.color) }
-                Text(booking.status.clientLine(pro: proName))
-                    .font(HDFont.body)
-                    .foregroundStyle(Palette.ink)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
+            Text(pro?.displayName ?? "Your booking")
+                .font(HDFont.title)
+                .foregroundStyle(Palette.ink)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.top, Space.s)
+                .accessibilityAddTraits(.isHeader)
+            recordLines(booking)
+                .font(HDFont.quote)
+                .lineSpacing(4)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.top, Space.s)
+            Text(statusLine(booking, proName: proName))
+                .font(HDFont.body)
+                .foregroundStyle(Palette.ink)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.top, Space.l)
             if booking.status == .declined, let reason = booking.declineReason, !reason.isEmpty {
-                Text(reason).italic().font(HDFont.sub).foregroundStyle(Palette.inkSoft)
+                Text(reason).font(HDFont.italicSub).foregroundStyle(Palette.inkSoft).padding(.top, Space.xs)
+            }
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    /// "Thursday 23 October, 6:15 pm / at yours in Fitzroy North / BIAB overlay · $113 held."
+    /// The full stop is lacquer, as on You're booked, except when Pay is the lacquer on screen.
+    private func recordLines(_ booking: Booking) -> Text {
+        let when = "\(booking.start.hdLongDay), \(booking.start.clock)"
+        let label = booking.address.label.trimmingCharacters(in: .whitespaces)
+        let place: String
+        switch label.lowercased() {
+        case "", "home": place = "at yours"
+        case "work": place = "at work"
+        default: place = "at \(label)"
+        }
+        let whereLine = "\(place) in \(booking.address.suburb)"
+        let total = Money.format(booking.price.clientTotalCents)
+        let money: String
+        switch booking.status {
+        case .done: money = " · \(total) to pay"
+        case .paid: money = " · \(total) paid"
+        case .cancelledByClient, .cancelledByPro, .declined, .noShow: money = ""
+        default: money = " · \(total) held"
+        }
+        let lines = Text(verbatim: "\(when)\n\(whereLine)\n\(booking.servicesLine)\(money)").foregroundStyle(Palette.ink)
+        let stopColor = booking.status == .done ? Palette.ink : Palette.lacquer
+        return lines + Text(verbatim: ".").foregroundStyle(stopColor)
+    }
+
+    private func statusLine(_ booking: Booking, proName: String) -> String {
+        if booking.status == .done {
+            return "Done. Pay \(proName) now, or we'll charge your card at \(booking.autoChargeAt.clock)."
+        }
+        return booking.status.clientLine(pro: proName)
+    }
+
+    // MARK: What she can do
+
+    @ViewBuilder
+    private func actions(_ booking: Booking, pro: Pro?, proName: String) -> some View {
+        VStack(spacing: Space.s) {
+            switch booking.status {
+            case .requested, .confirmed:
+                messageButton(booking, proName: proName)
+                OutlineButton(title: "Reschedule", isEnabled: !app.isOffline) { showReschedule = true }
+                cancelLink(booking)
+
+            case .onHerWay, .arrived, .inProgress:
+                messageButton(booking, proName: proName)
+                ShareLink(item: booking.shareText(proName: proName)) {
+                    outlineLabel("Share with a friend")
+                }
+                .buttonStyle(PressLift())
+                .simultaneousGesture(TapGesture().onEnded { Haptics.light() })
+                if booking.clientCanCancel { cancelLink(booking) }
+
+            case .done:
+                PrimaryButton(title: "Pay \(Money.format(booking.price.clientTotalCents))", isEnabled: !app.isOffline) { showPay = true }
+                TertiaryButton(title: "Something wrong?") { confirmFlag = true }
+                    .disabled(app.isOffline)
+
+            case .paid:
+                if booking.review == nil {
+                    InkButton(title: "Rate \(proName)") { showReview = true }
+                }
+
+            case .cancelledByClient, .cancelledByPro, .declined, .noShow:
+                EmptyView()
             }
         }
     }
 
-    // MARK: When
-
-    private func whenSection(_ booking: Booking) -> some View {
-        VStack(alignment: .leading, spacing: Space.s) {
-            Text("When").labelStyle()
-            Text(booking.start.friendlyDayTime).font(HDFont.heading).foregroundStyle(Palette.ink)
-            Text("Till about \(booking.end.clock) · \(booking.minutes.minutesLabel)").font(HDFont.sub).foregroundStyle(Palette.inkSoft)
+    private func cancelLink(_ booking: Booking) -> some View {
+        TertiaryButton(title: "Cancel booking") {
+            cancelProblem = nil
+            showCancel = true
         }
+        .disabled(app.isOffline)
+        .accessibilityHint(booking.cancelChargeCents > 0 ? "Costs \(Money.format(booking.cancelChargeCents))" : "Free")
+    }
+
+    @ViewBuilder
+    private func messageButton(_ booking: Booking, proName: String) -> some View {
+        if let thread = app.thread(for: booking) {
+            NavigationLink(value: Route.thread(thread.id)) {
+                Text("Message \(proName)")
+                    .font(HDFont.bodyStrong)
+                    .foregroundStyle(Palette.paper)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, Space.l)
+                    .padding(.vertical, Space.m)
+                    .frame(maxWidth: .infinity, minHeight: 52)
+                    .background(Palette.ink, in: RoundedRectangle(cornerRadius: Radius.button, style: .continuous))
+            }
+            .buttonStyle(PressLift())
+            .simultaneousGesture(TapGesture().onEnded { Haptics.medium() })
+        }
+    }
+
+    private func outlineLabel(_ title: String) -> some View {
+        Text(title)
+            .font(HDFont.bodyStrong)
+            .foregroundStyle(Palette.ink)
+            .multilineTextAlignment(.center)
+            .padding(.horizontal, Space.l)
+            .padding(.vertical, Space.m)
+            .frame(maxWidth: .infinity, minHeight: 52)
+            .overlay(RoundedRectangle(cornerRadius: Radius.button, style: .continuous).strokeBorder(Palette.ink, lineWidth: 1))
+            .contentShape(RoundedRectangle(cornerRadius: Radius.button, style: .continuous))
+    }
+
+    // MARK: Where it's up to
+
+    private func timeline(_ booking: Booking, pro: Pro?) -> some View {
+        VStack(alignment: .leading, spacing: Space.m) {
+            Text("Where it's up to").labelStyle()
+            BookingTimeline(booking: booking, pro: pro)
+        }
+    }
+
+    // MARK: Receipt
+
+    private func receipt(_ booking: Booking) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text("The details").labelStyle().padding(.bottom, Space.s)
+            row("When", value: booking.start.friendlyDayTime,
+                note: "Till about \(booking.end.clock) · \(booking.minutes.minutesLabel)")
+            ForEach(booking.services) { s in
+                row(s.name, value: Money.format(s.priceCents), note: s.durationLabel, money: true)
+            }
+            row("Travel fee", value: Money.format(booking.price.travelFeeCents), money: true)
+            row("Booking fee", value: Money.format(booking.price.bookingFeeCents), money: true)
+            if booking.price.tipCents > 0 {
+                row("Tip", value: Money.format(booking.price.tipCents), note: "All of it went to her", money: true)
+            }
+            HStack(alignment: .firstTextBaseline) {
+                Text(booking.status == .paid ? "Paid" : "Total").font(HDFont.body).foregroundStyle(Palette.ink)
+                Spacer(minLength: Space.m)
+                Text(Money.format(booking.price.clientTotalCents)).font(HDFont.priceTotal).foregroundStyle(Palette.ink)
+            }
+            .padding(.top, Space.m)
+            .accessibilityElement(children: .combine)
+        }
+    }
+
+    private func row(_ label: String, value: String, note: String? = nil, money: Bool = false) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: Space.m) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(label).font(HDFont.sub).foregroundStyle(Palette.inkSoft)
+                    .fixedSize(horizontal: false, vertical: true)
+                if let note {
+                    Text(note).font(HDFont.caption).foregroundStyle(Palette.inkSoft)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            Spacer(minLength: Space.s)
+            Text(value)
+                .font(money ? HDFont.price : HDFont.body)
+                .foregroundStyle(Palette.ink)
+                .multilineTextAlignment(.trailing)
+        }
+        .padding(.vertical, Space.m)
+        .overlay(alignment: .bottom) { Hairline(strong: true) }
         .accessibilityElement(children: .combine)
     }
 
@@ -155,57 +331,37 @@ struct BookingDetailView: View {
         let coordinate = CLLocationCoordinate2D(latitude: booking.address.latitude, longitude: booking.address.longitude)
         return VStack(alignment: .leading, spacing: Space.s) {
             Text("Where").labelStyle()
-            Text(booking.address.label).font(HDFont.bodyStrong).foregroundStyle(Palette.ink)
             Text(booking.address.full).font(HDFont.body).foregroundStyle(Palette.ink)
+                .fixedSize(horizontal: false, vertical: true)
             if !booking.address.instructions.isEmpty {
                 Text(booking.address.instructions).font(HDFont.sub).foregroundStyle(Palette.inkSoft)
+                    .fixedSize(horizontal: false, vertical: true)
             }
+            Map(initialPosition: .region(MKCoordinateRegion(center: coordinate, latitudinalMeters: 900, longitudinalMeters: 900))) {
+                Marker(booking.address.label, coordinate: coordinate).tint(Palette.ink)
+            }
+            .mapStyle(.standard(pointsOfInterest: .excludingAll))
+            .allowsHitTesting(false)
+            .frame(height: 160)
+            .photoShape()
+            .padding(.top, Space.xs)
+            .accessibilityLabel("Map of \(booking.address.short)")
             Button {
                 Haptics.light()
                 let item = MKMapItem(placemark: MKPlacemark(coordinate: coordinate))
                 item.name = booking.address.label
                 item.openInMaps(launchOptions: [MKLaunchOptionsDirectionsModeKey: MKLaunchOptionsDirectionsModeDriving])
             } label: {
-                Map(initialPosition: .region(MKCoordinateRegion(center: coordinate, latitudinalMeters: 900, longitudinalMeters: 900))) {
-                    Marker(booking.address.label, coordinate: coordinate).tint(Palette.lacquer)
+                HStack(spacing: 6) {
+                    Text("Open in Maps").font(HDFont.subMedium)
+                    Image(systemName: "arrow.up.right").font(.system(size: 13, weight: .regular))
                 }
-                .mapStyle(.standard(pointsOfInterest: .excludingAll))
-                .allowsHitTesting(false)
-                .frame(height: 150)
-                .clipShape(RoundedRectangle(cornerRadius: Radius.tile, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: Radius.tile, style: .continuous).strokeBorder(Palette.line, lineWidth: 1))
-                .overlay(alignment: .bottomTrailing) {
-                    Text("Open in Maps")
-                        .font(HDFont.label)
-                        .foregroundStyle(Palette.ink)
-                        .padding(.horizontal, 10).padding(.vertical, 6)
-                        .background(Palette.paper.opacity(0.92), in: Capsule())
-                        .padding(10)
-                }
+                .foregroundStyle(Palette.ink)
+                .frame(minHeight: 44)
+                .contentShape(Rectangle())
             }
-            .buttonStyle(PressLift(scale: 0.985))
-            .padding(.top, Space.xs)
-            .accessibilityLabel("Map of \(booking.address.short)")
-            .accessibilityHint("Opens in Apple Maps")
-        }
-    }
-
-    // MARK: What
-
-    private func whatSection(_ booking: Booking) -> some View {
-        VStack(alignment: .leading, spacing: Space.m) {
-            Text("What").labelStyle()
-            VStack(spacing: Space.m) {
-                ForEach(booking.services) { s in
-                    PriceRow(label: s.name, cents: s.priceCents, note: s.durationLabel)
-                }
-                PriceRow(label: "Travel fee", cents: booking.price.travelFeeCents)
-                PriceRow(label: "Hair Done fee", cents: booking.price.bookingFeeCents)
-                if booking.price.tipCents > 0 { PriceRow(label: "Tip", cents: booking.price.tipCents, note: "All of it went to her") }
-                Hairline()
-                PriceRow(label: "Total", cents: booking.price.clientTotalCents, emphasis: true)
-            }
-            .card()
+            .buttonStyle(.plain)
+            .accessibilityHint("Opens Apple Maps")
         }
     }
 
@@ -215,14 +371,30 @@ struct BookingDetailView: View {
         VStack(alignment: .leading, spacing: Space.m) {
             if !booking.notes.isEmpty {
                 Text("Notes").labelStyle()
-                Text(booking.notes).font(HDFont.body).foregroundStyle(Palette.ink).fixedSize(horizontal: false, vertical: true)
+                Text(booking.notes).font(HDFont.italicSub).foregroundStyle(Palette.ink).fixedSize(horizontal: false, vertical: true)
             }
-            if !booking.inspoSeeds.isEmpty {
+            if !booking.inspoURLs.isEmpty || !booking.inspoSeeds.isEmpty {
                 Text("Your photos").labelStyle().padding(.top, booking.notes.isEmpty ? 0 : Space.s)
-                HStack(spacing: Space.s) {
-                    ForEach(Array(booking.inspoSeeds.enumerated()), id: \.offset) { i, seed in
-                        WorkTile(item: WorkItem(id: "inspo_\(booking.id)_\(i)", category: booking.primaryCategory, caption: "Inspo photo \(i + 1)", seed: seed))
-                            .aspectRatio(1, contentMode: .fit)
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: Space.s) {
+                        if !booking.inspoURLs.isEmpty {
+                            ForEach(Array(booking.inspoURLs.enumerated()), id: \.offset) { i, url in
+                                AsyncImage(url: url) { image in
+                                    image.resizable().scaledToFill()
+                                } placeholder: {
+                                    SkeletonBlock(width: 104, height: 130)
+                                }
+                                .frame(width: 104, height: 130)
+                                .clipped()
+                                .photoShape()
+                                .accessibilityLabel("Inspo photo \(i + 1)")
+                            }
+                        } else {
+                            ForEach(Array(booking.inspoSeeds.enumerated()), id: \.offset) { i, seed in
+                                WorkTile(item: WorkItem(id: "inspo_\(booking.id)_\(i)", category: booking.primaryCategory, caption: "Inspo photo \(i + 1)", seed: seed), cornerRadius: Radius.photo)
+                                    .frame(width: 104, height: 130)
+                            }
+                        }
                     }
                 }
             }
@@ -233,104 +405,86 @@ struct BookingDetailView: View {
 
     private func reviewSection(_ review: Review, proName: String) -> some View {
         VStack(alignment: .leading, spacing: Space.s) {
-            Text("What you said").labelStyle()
+            HStack {
+                Text("What you said").labelStyle()
+                Spacer()
+                Text(review.date.shortDay).font(HDFont.caption).foregroundStyle(Palette.inkSoft)
+            }
+            StarsRow(rating: review.rating, size: 14)
+            if !review.text.isEmpty {
+                Text(review.text).font(HDFont.quote).foregroundStyle(Palette.ink).fixedSize(horizontal: false, vertical: true)
+            }
+            if let reply = review.proReply, !reply.isEmpty {
+                Text("\(proName) replied").labelStyle().padding(.top, Space.s)
+                Text(reply).font(HDFont.sub).foregroundStyle(Palette.ink).fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    // MARK: After
+
+    @ViewBuilder
+    private func after(_ booking: Booking, pro: Pro?, proName: String) -> some View {
+        if booking.status.isFinished || booking.status.isCancelled {
             VStack(alignment: .leading, spacing: Space.s) {
-                HStack {
-                    StarsRow(rating: review.rating, size: 14)
-                    Spacer()
-                    Text(review.date.shortDay).font(HDFont.caption).foregroundStyle(Palette.inkSoft)
-                }
-                if !review.text.isEmpty {
-                    Text(review.text).font(HDFont.body).foregroundStyle(Palette.ink).fixedSize(horizontal: false, vertical: true)
-                }
-                if let reply = review.proReply, !reply.isEmpty {
-                    Hairline()
-                    Text("\(proName) replied").font(HDFont.caption).foregroundStyle(Palette.inkSoft)
-                    Text(reply).font(HDFont.sub).foregroundStyle(Palette.ink).fixedSize(horizontal: false, vertical: true)
-                }
-            }
-            .card()
-        }
-    }
-
-    // MARK: Actions
-
-    @ViewBuilder
-    private func actions(_ booking: Booking, pro: Pro?, proName: String) -> some View {
-        VStack(spacing: Space.m) {
-            switch booking.status {
-            case .requested, .confirmed:
-                messageButton(booking, proName: proName)
-                SecondaryButton(title: "Reschedule", symbol: "calendar") { showReschedule = true }
-                TertiaryButton(title: "Cancel booking", tint: Palette.lacquer) { showCancel = true }
-
-            case .onHerWay, .arrived, .inProgress:
-                messageButton(booking, proName: proName)
-                ShareLink(item: booking.shareText(proName: proName)) {
-                    shareLabel("Share with a friend", symbol: "square.and.arrow.up")
-                }
-                .buttonStyle(PressLift())
-                .simultaneousGesture(TapGesture().onEnded { Haptics.light() })
-
-            case .done, .paid:
-                if booking.review == nil {
-                    PrimaryButton(title: "Rate \(proName)", symbol: "star") { showReview = true }
-                }
                 if let pro {
-                    NavigationLink(value: Route.pro(pro)) { secondaryLabel("Book again", symbol: "arrow.counterclockwise") }
+                    NavigationLink(value: Route.pro(pro)) { outlineLabel("Book \(proName) again") }
                         .buttonStyle(PressLift())
                         .simultaneousGesture(TapGesture().onEnded { Haptics.light() })
                 }
-                ShareLink(item: booking.receiptText(proName: proName), subject: Text("Hair Done receipt \(booking.reference)")) {
-                    Text("Get receipt").font(HDFont.subStrong).foregroundStyle(Palette.inkSoft).frame(minHeight: 44)
-                }
-                .simultaneousGesture(TapGesture().onEnded { Haptics.light() })
-                if booking.status == .done {
-                    TertiaryButton(title: "Something wrong?") { showFlag = true }
-                }
-
-            case .cancelledByClient, .cancelledByPro, .declined, .noShow:
-                if let pro {
-                    NavigationLink(value: Route.pro(pro)) { secondaryLabel("Book again", symbol: "arrow.counterclockwise") }
-                        .buttonStyle(PressLift())
-                        .simultaneousGesture(TapGesture().onEnded { Haptics.light() })
+                if booking.status == .paid {
+                    ShareLink(item: booking.receiptText(proName: proName), subject: Text("Hair Done receipt \(booking.reference)")) {
+                        Text("Get receipt").font(HDFont.subMedium).foregroundStyle(Palette.ink)
+                            .frame(minHeight: 44)
+                            .frame(maxWidth: .infinity)
+                    }
+                    .simultaneousGesture(TapGesture().onEnded { Haptics.light() })
                 }
             }
         }
-        .padding(.top, Space.s)
     }
 
-    @ViewBuilder
-    private func messageButton(_ booking: Booking, proName: String) -> some View {
-        if let thread = app.thread(for: booking) {
-            NavigationLink(value: Route.thread(thread.id)) {
-                Text("Message \(proName)")
-                    .font(HDFont.bodyStrong)
-                    .foregroundStyle(Palette.onLacquer)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 52)
-                    .background(Palette.lacquer, in: Capsule())
+    // MARK: Cancel
+
+    private func cancelSheet(_ booking: Booking, proName: String) -> some View {
+        ConfirmSheet(title: "Cancel this booking?",
+                     message: booking.cancelBody(proName: proName),
+                     confirmTitle: booking.cancelButtonTitle,
+                     cancelTitle: "Keep it",
+                     isWorking: cancelling,
+                     onConfirm: { cancel(booking, proName: proName) },
+                     onCancel: { showCancel = false }) {
+            VStack(alignment: .leading, spacing: Space.s) {
+                if booking.cancelChargeCents > 0 {
+                    HStack(alignment: .firstTextBaseline) {
+                        Text("You'll pay").font(HDFont.sub).foregroundStyle(Palette.inkSoft)
+                        Spacer()
+                        Text(Money.format(booking.cancelChargeCents)).font(HDFont.priceTotal).foregroundStyle(Palette.ink)
+                    }
+                    .accessibilityElement(children: .combine)
+                }
+                if let cancelProblem { FieldMessage(text: cancelProblem) }
             }
-            .buttonStyle(PressLift())
-            .simultaneousGesture(TapGesture().onEnded { Haptics.medium() })
         }
+        .confirmSheetPresentation()
+        .holdsPushRoutes()
     }
 
-    private func secondaryLabel(_ title: String, symbol: String) -> some View {
-        HStack(spacing: 8) {
-            Image(systemName: symbol)
-            Text(title)
+    private func cancel(_ booking: Booking, proName: String) {
+        guard !cancelling else { return }
+        cancelling = true
+        cancelProblem = nil
+        let line = booking.cancelDoneLine(proName: proName)
+        Task { @MainActor in
+            let done = await app.update(booking, to: .cancelledByClient) != nil
+            cancelling = false
+            if done {
+                showCancel = false
+                app.show(line)
+            } else {
+                cancelProblem = app.lastError ?? "That didn't go through. Nothing's changed. Try again."
+            }
         }
-        .font(HDFont.bodyStrong)
-        .foregroundStyle(Palette.ink)
-        .frame(maxWidth: .infinity)
-        .frame(height: 52)
-        .background(Palette.card, in: Capsule())
-        .overlay(Capsule().strokeBorder(Palette.line, lineWidth: 1))
-    }
-
-    private func shareLabel(_ title: String, symbol: String) -> some View {
-        secondaryLabel(title, symbol: symbol)
     }
 
     // MARK: Simulate (debug only)
@@ -352,8 +506,10 @@ struct BookingDetailView: View {
                     Text("Nothing further to simulate")
                 }
             } label: {
-                Image(systemName: "ellipsis.circle")
+                Image(systemName: "ellipsis")
+                    .font(.system(size: 17, weight: .light))
                     .foregroundStyle(Palette.inkSoft)
+                    .frame(width: 44, height: 44)
             }
             .accessibilityLabel("Simulate")
         }
@@ -376,8 +532,9 @@ struct BookingDetailView: View {
 
 // MARK: - Timeline
 
-/// requested → confirmed → on her way → here → done → paid, as a vertical stepper.
-/// A cancelled or declined booking ends on a grey step with the reason.
+/// requested → confirmed → on her way → here → done → paid, in ink. Reached dots are solid ink,
+/// the current one sits in a `line` ring, future ones are hollow. A cancelled or declined booking
+/// ends on its own step with the reason.
 struct BookingTimeline: View {
     var booking: Booking
     var pro: Pro?
@@ -404,12 +561,12 @@ struct BookingTimeline: View {
                 let isLast = i == steps.count - 1
                 HStack(alignment: .top, spacing: Space.m) {
                     VStack(spacing: 0) {
-                        dot(reached: reached, current: isCurrent, grey: step.isCancelled)
+                        dot(reached: reached, current: isCurrent)
                         if !isLast {
                             Rectangle()
-                                .fill(reached && !(isOffPath && step == booking.status) ? Palette.lacquer.opacity(0.5) : Palette.line)
-                                .frame(width: 2)
-                                .frame(minHeight: 22)
+                                .fill(Palette.line)
+                                .frame(width: 1)
+                                .frame(minHeight: 18)
                         }
                     }
                     .frame(width: 16)
@@ -417,7 +574,7 @@ struct BookingTimeline: View {
                         HStack(alignment: .firstTextBaseline) {
                             Text(step.timelineTitle)
                                 .font(isCurrent ? HDFont.bodyStrong : HDFont.body)
-                                .foregroundStyle(reached ? Palette.ink : Palette.inkFaint)
+                                .foregroundStyle(reached ? Palette.ink : Palette.inkSoft)
                             Spacer(minLength: 0)
                             if let at = booking.eventTime(for: step) {
                                 Text(at.friendlyDay == "Today" ? at.clock : "\(at.friendlyDay), \(at.clock)")
@@ -432,21 +589,21 @@ struct BookingTimeline: View {
                     .padding(.bottom, isLast ? 0 : Space.m)
                 }
                 .accessibilityElement(children: .combine)
-                .accessibilityLabel("\(step.timelineTitle)\(reached ? "" : ", not yet")\(isCurrent ? ", current" : "")")
+                .accessibilityLabel("\(step.timelineTitle)\(reached ? "" : ", not yet")\(isCurrent ? ", now" : "")")
             }
         }
-        .card()
     }
 
-    private func dot(reached: Bool, current: Bool, grey: Bool) -> some View {
+    private func dot(reached: Bool, current: Bool) -> some View {
         ZStack {
-            if current && !grey {
-                Circle().fill(Palette.lacquerSoft).frame(width: 16, height: 16)
+            if current {
+                Circle().strokeBorder(Palette.line, lineWidth: 1).frame(width: 16, height: 16)
             }
-            Circle()
-                .fill(reached ? (grey ? Palette.inkFaint : Palette.lacquer) : Palette.card)
-                .frame(width: 10, height: 10)
-                .overlay(Circle().strokeBorder(reached ? Color.clear : Palette.line, lineWidth: 1.5))
+            if reached {
+                Circle().fill(Palette.ink).frame(width: 8, height: 8)
+            } else {
+                Circle().strokeBorder(Palette.line, lineWidth: 1).frame(width: 8, height: 8)
+            }
         }
         .frame(width: 16, height: 22)
     }
@@ -458,16 +615,14 @@ struct BookingTimeline: View {
             let mins = pro?.responseMinutes ?? 60
             return "She usually replies within \(mins.minutesLabel)."
         case .confirmed:
-            let day = booking.start.friendlyDay
-            let spoken = (day == "Today" || day == "Tomorrow") ? day.lowercased() : day
-            return "See you \(spoken) at \(booking.start.clock)."
+            return "See you \(booking.start.hdSpokenDay.replacingOccurrences(of: "on ", with: "")) at \(booking.start.clock)."
         case .onHerWay:
             if let pro { return "About \(booking.travelMinutes(from: pro)) minutes out." }
             return "She's on the road."
         case .arrived:
             return booking.status == .inProgress ? "Happening now." : "Put the kettle on."
         case .done:
-            return "Charging \(Money.format(booking.price.clientTotalCents)) now."
+            return "Pay now, or it's charged at \(booking.autoChargeAt.clock)."
         case .paid:
             return "\(Money.format(booking.price.clientTotalCents)) to \(proName). Receipt's in your inbox."
         case .declined:
@@ -481,43 +636,6 @@ struct BookingTimeline: View {
         case .inProgress:
             return "Happening now."
         }
-    }
-}
-
-// MARK: - Cancel sheet
-
-/// Says exactly what cancelling costs before you do it.
-struct CancelBookingSheet: View {
-    @Environment(\.dismiss) private var dismiss
-    var booking: Booking
-    var proName: String
-    var isWorking: Bool
-    var onConfirm: () -> Void
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: Space.l) {
-            SheetHeader(title: "Cancel this booking?", onClose: { dismiss() })
-            VStack(alignment: .leading, spacing: Space.m) {
-                Text(booking.cancelBody(proName: proName))
-                    .font(HDFont.body)
-                    .foregroundStyle(Palette.ink)
-                    .fixedSize(horizontal: false, vertical: true)
-                if booking.cancellationChargeCents > 0 {
-                    PriceRow(label: "You'll pay", cents: booking.cancellationChargeCents, emphasis: true)
-                        .card()
-                }
-            }
-            .screenGutter()
-            Spacer(minLength: 0)
-            VStack(spacing: Space.s) {
-                PrimaryButton(title: booking.cancelButtonTitle, isLoading: isWorking, action: onConfirm)
-                TertiaryButton(title: "Keep it") { dismiss() }
-            }
-            .screenGutter()
-            .padding(.bottom, Space.l)
-        }
-        .paperBackground()
-        .holdsPushRoutes()
     }
 }
 

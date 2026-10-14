@@ -49,6 +49,7 @@ struct Client: Identifiable, Hashable, Codable {
     var seed: Int
     var notificationsOn: Bool = true
     var joined: Date
+    var avatarURL: URL? = nil
 
     var fullName: String { "\(firstName) \(lastName)" }
     var defaultAddress: Address? { addresses.first }
@@ -74,6 +75,23 @@ enum BookingStatus: String, Codable, CaseIterable, Hashable {
         case .cancelledByPro: return "She cancelled"
         case .declined: return "Declined"
         case .noShow: return "Missed"
+        }
+    }
+
+    /// The same, in the pro's words. "You" is always her.
+    var proLabel: String {
+        switch self {
+        case .requested: return "Waiting on you"
+        case .confirmed: return "Confirmed"
+        case .onHerWay: return "On your way"
+        case .arrived: return "You're there"
+        case .inProgress: return "In progress"
+        case .done: return "Done"
+        case .paid: return "Paid"
+        case .cancelledByClient: return "Client cancelled"
+        case .cancelledByPro: return "You cancelled"
+        case .declined: return "You declined"
+        case .noShow: return "No show"
         }
     }
 
@@ -193,6 +211,8 @@ struct Booking: Identifiable, Hashable, Codable {
     var paymentMethodID: String? = nil
     /// A short code you can read out or share. "HD-4K2P"
     var reference: String
+    /// Her inspo photos, signed to load for an hour. Empty means the tiles use `inspoSeeds` as before.
+    var inspoURLs: [URL] = []
 
     var minutes: Int { services.reduce(0) { $0 + $1.minutes } }
     var end: Date { start.adding(minutes: minutes) }
@@ -211,7 +231,11 @@ struct Booking: Identifiable, Hashable, Codable {
         return Int((Double(price.servicesCents + price.travelFeeCents) * Fees.lateCancellationRate).rounded())
     }
 
-    static func == (lhs: Booking, rhs: Booking) -> Bool { lhs.id == rhs.id && lhs.status == rhs.status && lhs.start == rhs.start && lhs.review == rhs.review && lhs.price == rhs.price }
+    static func == (lhs: Booking, rhs: Booking) -> Bool {
+        lhs.id == rhs.id && lhs.status == rhs.status && lhs.start == rhs.start && lhs.review == rhs.review && lhs.price == rhs.price
+            // Paths, not whole URLs: a fresh signature on the same photo isn't a change.
+            && lhs.inspoURLs.map(\.path) == rhs.inspoURLs.map(\.path)
+    }
     func hash(into hasher: inout Hasher) { hasher.combine(id) }
 }
 

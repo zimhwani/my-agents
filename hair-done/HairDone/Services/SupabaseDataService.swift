@@ -105,6 +105,9 @@ final class SupabaseDataService: DataService {
         if f.says("pro_not_found") || f.says("blocked") || f.says("address_not_found") || f.says("not_found") { return DataError.notFound }
         if f.says("bad_transition") || f.says("forbidden") { return DataError.alreadyMoved }
         if f.says("live_booking") { return DataError.liveBooking }
+        if f.says("too_late_to_move") { return DataError.tooLateToMove }
+        if f.says("too_far_to_move") { return DataError.tooFarToMove }
+        if f.says("id_docs_missing") { return DataError.idDocsMissing }
         if f.says("not_signed_in") { return DataError.notSignedIn }
         if f.says("otp_expired") || f.says("invalid_credentials") || f.message.lowercased().contains("token has expired") {
             return DataError.wrongCode
@@ -197,6 +200,21 @@ final class SupabaseDataService: DataService {
         return client
     }
 
+    func changePhone(to phone: String) async throws {
+        do { try await api.changePhone(to: Self.e164(phone)) } catch { throw Self.translate(error) }
+    }
+
+    /// Adopts the new session (it carries the new number) and saves the number with her contact details.
+    func verifyPhoneChange(phone: String, code: String) async throws -> Client {
+        let number = Self.e164(phone)
+        let session: SupabaseSession
+        do { session = try await api.verifyPhoneChange(phone: number, code: code) } catch { throw Self.translate(error) }
+        let email = synced?.email ?? session.email
+        try await writeContacts(session.userID, phone: Self.localPhone(number), email: email)
+        if var c = synced { c.phone = Self.localPhone(number); synced = c }
+        return try await loadClient(session)
+    }
+
     func currentClient() async -> Client? {
         guard let session = await api.currentSession else { return nil }
         let first = try? await loadClient(session)
@@ -211,7 +229,7 @@ final class SupabaseDataService: DataService {
     private func loadClient(_ session: SupabaseSession) async throws -> Client {
         let id = session.userID
         async let profiles = get([DBProfile].self, "profiles",
-                                 [q("id", "eq.\(id)"), q("select", "id,first_name,last_name,seed,notifications_on,created_at")])
+                                 [q("id", "eq.\(id)"), q("select", "id,first_name,last_name,seed,notifications_on,created_at,avatar_url")])
         async let contacts = get([DBContact].self, "profile_contacts", [q("profile_id", "eq.\(id)"), q("select", "phone,email")])
         async let addresses = get([DBAddress].self, "addresses",
                                   [q("profile_id", "eq.\(id)"), q("select", DBAddress.columns), q("order", "created_at.asc")])
@@ -234,7 +252,8 @@ final class SupabaseDataService: DataService {
             favouriteProIDs: Set(try await favourites.map(\.proId)),
             seed: profile?.seed ?? id.hdSeed,
             notificationsOn: profile?.notificationsOn ?? true,
-            joined: profile?.createdAt ?? Date()
+            joined: profile?.createdAt ?? Date(),
+            avatarURL: DBMap.url(profile?.avatarUrl)
         )
         synced = profile == nil ? nil : client
         return client
@@ -252,15 +271,18 @@ final class SupabaseDataService: DataService {
         async let reviews = rpc([DBProReview].self, "pro_reviews", ["p": id, "limit_n": 50])
         var name = synced?.firstName ?? ""
         var seed = synced?.seed ?? id.hdSeed
+        var avatar = synced?.avatarURL
         if name.isEmpty {
-            let profile = try? await get([DBProfile].self, "profiles", [q("id", "eq.\(id)"), q("select", "id,first_name,seed")]).first
+            let profile = try? await get([DBProfile].self, "profiles",
+                                         [q("id", "eq.\(id)"), q("select", "id,first_name,seed,avatar_url")]).first
             name = profile?.firstName ?? ""
             seed = profile?.seed ?? seed
+            avatar = DBMap.url(profile?.avatarUrl) ?? avatar
         }
         let p = try await parts
         let availability = DBMap.availability(p.hours[id] ?? [], daysOff: p.daysOff[id] ?? [],
                                               buffer: row.bufferMinutes ?? 30, step: row.stepMinutes ?? 30)
-        return DBMap.ownPro(row, firstName: name, seed: seed, services: p.services[id] ?? [], work: p.work[id] ?? [],
+        return DBMap.ownPro(row, firstName: name, seed: seed, avatarURL: avatar, services: p.services[id] ?? [], work: p.work[id] ?? [],
                             availability: availability, reviews: try await reviews.map(DBMap.review))
     }
 
@@ -354,7 +376,8 @@ final class SupabaseDataService: DataService {
             "instant_book": pro.instantBook,
             "years_experience": pro.yearsExperience,
             "buffer_minutes": pro.availability.bufferMinutes,
-            "step_minutes": pro.availability.stepMinutes
+            "step_minutes": pro.availability.stepMinutes,
+            "notice_minutes": min(2880, max(60, pro.noticeMinutes))
         ]
         if pro.abn.isEmpty {
             fields["abn"] = NSNull()
@@ -366,7 +389,19 @@ final class SupabaseDataService: DataService {
         if try await patchCount("pros", query: [q("id", "eq.\(id)")], body: update) == 0 {
             var insert = fields
             insert["id"] = id
+            if pro.isOnboarded { insert["onboarded_at"] = SupabaseJSON.string(from: Date()) }
             try await write("POST", "pros", body: insert)
+        } else if pro.isOnboarded {
+            // Set once, the first save after she finishes onboarding. Already set, this touches nothing.
+            try await write("PATCH", "pros", query: [q("id", "eq.\(id)"), q("onboarded_at", "is.null")],
+                            body: ["onboarded_at": SupabaseJSON.string(from: Date())])
+        }
+
+        // Her name lives on her profile, shared with the client side.
+        let name = pro.firstName.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !name.isEmpty, name != synced?.firstName {
+            try await write("PATCH", "profiles", query: [q("id", "eq.\(id)")], body: ["first_name": name])
+            if var c = synced { c.firstName = name; synced = c }
         }
 
         // Services: upsert what's there, delete what's gone. Ids made on the phone become uuids.
@@ -386,14 +421,15 @@ final class SupabaseDataService: DataService {
         let goneServices = existingServices.filter { !keptServices.contains($0.lowercased()) }
         if !goneServices.isEmpty { try await write("DELETE", "services", query: [q("id", inList(goneServices))]) }
 
-        // Work: same. Photos themselves aren't uploaded yet; the tiles keep their placeholder art.
+        // Work: same. A photo she uploaded keeps its place in the `work` bucket; anything else draws placeholder art.
         let existingWork = try await get([DBID].self, "work_items", [q("pro_id", "eq.\(id)"), q("select", "id")]).map(\.id)
         var workRows: [[String: Any]] = []
         for (i, w) in pro.work.enumerated() {
+            let path: Any = workPath(w.imageURL) ?? NSNull()
             workRows.append([
                 "id": Self.isUUID(w.id) ? w.id.lowercased() : UUID().uuidString.lowercased(),
                 "pro_id": id, "category": w.category.rawValue, "caption": w.caption, "seed": w.seed,
-                "is_pinned": w.isPinned, "sort_order": i
+                "is_pinned": w.isPinned, "sort_order": i, "image_path": path
             ])
         }
         if !workRows.isEmpty {
@@ -403,25 +439,51 @@ final class SupabaseDataService: DataService {
         let goneWork = existingWork.filter { !keptWork.contains($0.lowercased()) }
         if !goneWork.isEmpty { try await write("DELETE", "work_items", query: [q("id", inList(goneWork))]) }
 
-        // Hours and days off: replaced whole. Postgres weekdays are 0 = Sunday.
-        try await write("DELETE", "availability", query: [q("pro_id", "eq.\(id)")])
-        var hourRows: [[String: Any]] = []
-        for (day, ranges) in pro.availability.hours {
+        try await saveSchedule(id, pro.availability)
+
+        return try await loadOwnPro(id) ?? pro
+    }
+
+    /// The path inside the `work` bucket, when the URL is one of our public work photos.
+    private func workPath(_ url: URL?) -> String? {
+        guard let url else { return nil }
+        let marker = "/storage/v1/object/public/work/"
+        let raw = url.absoluteString
+        guard url.host == api.publicURL(bucket: "work", path: "").host, let range = raw.range(of: marker) else { return nil }
+        let path = String(raw[range.upperBound...])
+        return path.isEmpty ? nil : path
+    }
+
+    /// Hours and days off, replaced whole in one go by `save_pro_schedule`. Until that function is on
+    /// the server, the old way: delete, then insert. Postgres weekdays are 0 = Sunday.
+    private func saveSchedule(_ id: String, _ availability: WeeklyAvailability) async throws {
+        var spans: [(weekday: Int, start: Int, end: Int)] = []
+        for (day, ranges) in availability.hours {
             for r in ranges where r.endMinutes > r.startMinutes {
-                hourRows.append(["pro_id": id, "weekday": day.rawValue - 1, "start_minutes": r.startMinutes, "end_minutes": r.endMinutes])
+                spans.append((day.rawValue - 1, r.startMinutes, r.endMinutes))
             }
+        }
+        let offDays = Array(Set(availability.daysOff.map { SupabaseJSON.day($0) })).sorted()
+        let hours: [[String: Any]] = spans.map { ["weekday": $0.weekday, "start": $0.start, "end": $0.end] }
+        do {
+            _ = try await api.call("POST", "rest/v1/rpc/save_pro_schedule",
+                                   body: try SupabaseJSON.body(["p_hours": hours, "p_days_off": offDays]))
+            return
+        } catch let failure as SupabaseFailure where failure.status == 404 || failure.code == "PGRST202" {
+            // Not on the server yet. Fall through.
+        } catch {
+            throw Self.translate(error)
+        }
+
+        try await write("DELETE", "availability", query: [q("pro_id", "eq.\(id)")])
+        let hourRows: [[String: Any]] = spans.map {
+            ["pro_id": id, "weekday": $0.weekday, "start_minutes": $0.start, "end_minutes": $0.end]
         }
         if !hourRows.isEmpty { try await write("POST", "availability", body: hourRows) }
 
         try await write("DELETE", "days_off", query: [q("pro_id", "eq.\(id)")])
-        var offRows: [[String: Any]] = []
-        let offDays: Set<String> = Set(pro.availability.daysOff.map { SupabaseJSON.day($0) })
-        for day in offDays {
-            offRows.append(["pro_id": id, "day": day])
-        }
+        let offRows: [[String: Any]] = offDays.map { ["pro_id": id, "day": $0] }
         if !offRows.isEmpty { try await write("POST", "days_off", body: offRows) }
-
-        return try await loadOwnPro(id) ?? pro
     }
 
     func signOut() async {
@@ -509,6 +571,23 @@ final class SupabaseDataService: DataService {
         return try await pros(from: cards)
     }
 
+    func whosFree(near coordinate: CLLocationCoordinate2D, category: Category?) async throws -> [String: Date] {
+        var args: [String: Any] = ["lat": coordinate.latitude, "lng": coordinate.longitude, "limit_n": 20]
+        if let category { args["cat"] = category.rawValue }
+        let rows = try await rpc([DBFree].self, "whos_free", args)
+        var out: [String: Date] = [:]
+        for r in rows { out[r.proId] = r.firstFree }
+        return out
+    }
+
+    func searchPros(_ query: String, near coordinate: CLLocationCoordinate2D) async throws -> [Pro] {
+        let words = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard words.count >= 2 else { return [] }
+        let args: [String: Any] = ["q": words, "lat": coordinate.latitude, "lng": coordinate.longitude, "limit_n": 40]
+        let cards = try await rpc([DBProCard].self, "pros_search", args)
+        return try await pros(from: cards)
+    }
+
     func pro(id: String) async throws -> Pro? {
         guard Self.isUUID(id) else { return nil }
         async let cards = rpc([DBProCard].self, "pro_card", ["p": id])
@@ -570,14 +649,35 @@ final class SupabaseDataService: DataService {
             names = (try? await clientNames(ids: rows.compactMap(\.clientId))) ?? [:]
         }
         let mine = synced
+        let photos = await inspoLinks(rows)
         var out: [Booking] = []
         var lookups = 0
         for r in rows {
             let reviewer = forPro ? (names[r.clientId ?? ""] ?? "Client") : (mine?.firstName ?? "You")
             let pin = await coordinate(for: r, saved: mine?.addresses ?? [], lookups: &lookups)
-            out.append(DBMap.booking(r, coordinate: pin, reviewer: reviewer))
+            var booking = DBMap.booking(r, coordinate: pin, reviewer: reviewer)
+            booking.inspoURLs = Self.inspoPaths(r).compactMap { photos[$0] }
+            out.append(booking)
         }
         return out
+    }
+
+    /// Her inspo photos on a booking, in the order she picked them.
+    private static func inspoPaths(_ r: DBBooking) -> [String] {
+        let photos = (r.bookingInspo ?? []).sorted { a, b in
+            let first = a.createdAt ?? .distantPast
+            let second = b.createdAt ?? .distantPast
+            return first == second ? a.imagePath < b.imagePath : first < second
+        }
+        return photos.map(\.imagePath)
+    }
+
+    /// Signed links for every inspo photo on these bookings, in one call. If signing fails the
+    /// bookings still load, with the placeholder tiles.
+    private func inspoLinks(_ rows: [DBBooking]) async -> [String: URL] {
+        let paths = Array(Set(rows.flatMap(Self.inspoPaths)))
+        guard !paths.isEmpty else { return [:] }
+        return (try? await api.signedURLs(bucket: "inspo", paths: paths)) ?? [:]
     }
 
     /// Bookings keep the address as text. The pin comes from the matching saved address, or Apple's
@@ -637,10 +737,30 @@ final class SupabaseDataService: DataService {
         }
         if let temporary { try? await write("DELETE", "addresses", query: [q("id", "eq.\(temporary)")]) }
         guard let row = made.items.first else { throw DataError.server }
+        await addInspo(draft.inspoPhotos, bookingID: row.id, uid: id)
         let full = try? await booking(id: row.id)
         if let full { return full }
         let mapped = await toBookings([row], forPro: false)
         return mapped.first ?? DBMap.booking(row, coordinate: nil, reviewer: "You")
+    }
+
+    /// Uploads her inspo photos for a booking that's just been made and links them to it. Best effort:
+    /// a photo that doesn't go is left off, and the booking stands either way.
+    private func addInspo(_ photos: [Data], bookingID: String, uid: String) async {
+        guard !photos.isEmpty else { return }
+        var rows: [[String: Any]] = []
+        for (n, jpeg) in photos.enumerated() {
+            let path = "\(uid)/\(bookingID)/\(n).jpg"
+            do {
+                try await api.upload(jpeg, bucket: "inspo", path: path)
+                rows.append(["booking_id": bookingID, "image_path": path])
+            } catch {
+                #if DEBUG
+                print("Inspo photo \(n) didn't upload: \(error)")
+                #endif
+            }
+        }
+        if !rows.isEmpty { try? await write("POST", "booking_inspo", body: rows) }
     }
 
     /// Nothing to do: the server lets an unpaid booking lapse after 30 minutes.
@@ -656,9 +776,32 @@ final class SupabaseDataService: DataService {
         return DBMap.booking(row, coordinate: nil, reviewer: "You")
     }
 
-    /// There's no way to move a booking's time on the server yet.
+    /// Same services, same price, so the hold stands. The server writes the new time in the thread and tells her.
     func reschedule(bookingID: String, to start: Date) async throws -> Booking {
-        throw DataError.cantReschedule
+        let args: [String: Any] = ["b_id": bookingID, "new_start": SupabaseJSON.string(from: start)]
+        let moved = try await rpc(OneOrMany<DBBooking>.self, "reschedule_booking", args)
+        let full = try await booking(id: bookingID)
+        if let full { return full }
+        guard let row = moved.items.first else { throw DataError.notFound }
+        return DBMap.booking(row, coordinate: nil, reviewer: "You")
+    }
+
+    func pay(bookingID: String, tipCents: Int) async throws -> Booking {
+        _ = try await me()
+        guard let current = try await booking(id: bookingID) else { throw DataError.notFound }
+        guard current.status == .done else { return current }
+        let pay: [String: Any] = ["booking_id": bookingID, "tip_cents": max(0, tipCents)]
+        do {
+            _ = try await callFunction("pay-booking", body: pay)
+        } catch let failure as SupabaseFailure {
+            throw failure.status == 401 ? DataError.notSignedIn : DataError.payFailed
+        }
+        let fresh = try? await booking(id: bookingID)
+        if let fresh { return fresh }
+        var paid = current
+        paid.status = .paid
+        paid.price.tipCents = max(0, tipCents)
+        return paid
     }
 
     func submitReview(bookingID: String, rating: Int, text: String, tipCents: Int) async throws -> Booking {
@@ -760,6 +903,55 @@ final class SupabaseDataService: DataService {
                                  [q("select", "id,amount_cents,status,arrives_on,created_at,payout_items(booking_id)"),
                                   q("order", "created_at.desc")])
         return rows.map(DBMap.payout)
+    }
+
+    func closeProProfile() async throws {
+        try await rpcVoid("close_pro_profile", [:])
+    }
+
+    func reopenProProfile() async throws {
+        try await rpcVoid("reopen_pro_profile", [:])
+    }
+
+    // MARK: Photos and ID
+
+    /// A Storage upload, with any failure but "signed out" said as "didn't upload".
+    private func upload(_ jpeg: Data, bucket: String, path: String, replace: Bool = false) async throws {
+        do {
+            try await api.upload(jpeg, bucket: bucket, path: path, replace: replace)
+        } catch {
+            let translated = Self.translate(error)
+            if (translated as? DataError) == .notSignedIn { throw translated }
+            throw DataError.uploadFailed
+        }
+    }
+
+    private static func fileName() -> String { UUID().uuidString.lowercased() + ".jpg" }
+
+    func uploadWorkPhoto(_ jpeg: Data) async throws -> URL {
+        let id = try await me()
+        let path = "\(id)/\(Self.fileName())"
+        try await upload(jpeg, bucket: "work", path: path)
+        return api.publicURL(bucket: "work", path: path)
+    }
+
+    func uploadAvatar(_ jpeg: Data) async throws -> URL {
+        let id = try await me()
+        let path = "\(id)/\(Self.fileName())"
+        try await upload(jpeg, bucket: "avatars", path: path)
+        let url = api.publicURL(bucket: "avatars", path: path)
+        try await write("PATCH", "profiles", query: [q("id", "eq.\(id)")], body: ["avatar_url": url.absoluteString])
+        if var c = synced { c.avatarURL = url; synced = c }
+        return url
+    }
+
+    func uploadIDDocument(_ jpeg: Data, kind: IDDocumentKind) async throws {
+        let id = try await me()
+        try await upload(jpeg, bucket: "id-docs", path: "\(id)/\(kind.rawValue).jpg", replace: true)
+    }
+
+    func submitIDCheck() async throws {
+        try await rpcVoid("submit_id_check", [:])
     }
 
     private struct PayoutStatusReply: Decodable { let payoutsConnected: Bool }

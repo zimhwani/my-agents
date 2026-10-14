@@ -1,9 +1,11 @@
 import SwiftUI
 
-/// Her money. This week big, seven bars, what's pending, what's landed, and how the fee works.
+/// Her money. This week as the one big number, seven bars, what's on its way, how the 12% works,
+/// and the payouts that have landed (once there are any).
 struct ProEarningsView: View {
     @Environment(AppState.self) private var app
     @State private var showPayoutDetails = false
+    @State private var path = NavigationPath()
 
     private var monday: Date { ProWeek.monday(of: Date()) }
     private var thisWeek: Int { ProMoney.payout(app.proBookings, weekOf: monday) }
@@ -14,30 +16,36 @@ struct ProEarningsView: View {
     private var days: [(day: Date, cents: Int)] {
         ProWeek.days(from: monday).map { ($0, ProMoney.payout(app.proBookings, on: $0)) }
     }
-    private var pending: Payout? { app.payouts.first { $0.status == .pending } }
     private var history: [Payout] { app.payouts.sorted { $0.date > $1.date } }
     private var nothingYet: Bool { ProMoney.earning(app.proBookings).isEmpty && app.payouts.isEmpty }
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $path) {
             ScrollView {
-                VStack(alignment: .leading, spacing: Space.xl) {
-                    Text("Earnings").font(HDFont.hero).foregroundStyle(Palette.ink)
-                    if nothingYet {
-                        EmptyState(symbol: "dollarsign.circle", title: "Nothing yet.", message: "It'll be here the day after your first booking.")
+                VStack(alignment: .leading, spacing: 0) {
+                    if app.isOffline { OfflineBar().padding(.horizontal, -Space.gutter) }
+                    ProTabHeader("Earnings.").padding(.top, Space.s)
+                    if app.proSideLoadFailed && app.proBookings.isEmpty {
+                        ErrorState { Task { await app.loadProSide() } }
+                            .padding(.horizontal, -Space.gutter)
+                    } else if nothingYet {
+                        EmptyState(title: "Nothing yet.", message: "It'll be here the day after your first booking.")
+                            .padding(.horizontal, -Space.gutter)
                     } else {
-                        weekCard
-                        pendingCard
-                        breakdownCard
-                        historySection
+                        VStack(alignment: .leading, spacing: Space.section) {
+                            week
+                            pending
+                            breakdown
+                            if !history.isEmpty { historySection }
+                        }
+                        .padding(.top, Space.xl)
                     }
-                    NavRow(symbol: "building.columns", title: "Payout details", value: app.proSelf?.payoutsConnected == true ? "On" : "Not set up") {
+                    HairlineRow(title: "Payout details", value: app.proSelf?.payoutsConnected == true ? "On" : "Not set up") {
                         showPayoutDetails = true
                     }
-                    .card(padding: Space.s)
+                    .padding(.top, Space.section)
                 }
                 .screenGutter()
-                .padding(.top, Space.s)
                 .padding(.bottom, Space.section)
             }
             .paperBackground()
@@ -45,27 +53,28 @@ struct ProEarningsView: View {
             .toolbar(.hidden, for: .navigationBar)
             .hdDestinations()
             .sheet(isPresented: $showPayoutDetails) { PayoutDetailsSheet() }
+            .proSideBanner()
         }
     }
 
     // MARK: This week
 
-    private var weekCard: some View {
+    private var week: some View {
         VStack(alignment: .leading, spacing: Space.l) {
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: Space.xs) {
                 Text("This week").labelStyle()
-                Text(Money.format(thisWeek)).font(HDFont.hero).foregroundStyle(Palette.ink).monospacedDigit()
+                Text(Money.format(thisWeek)).font(HDFont.priceHero).foregroundStyle(Palette.ink)
                     .lineLimit(1).minimumScaleFactor(0.6)
                 Text(weekLine).font(HDFont.sub).foregroundStyle(Palette.inkSoft)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             .accessibilityElement(children: .combine)
             bars
         }
-        .card()
     }
 
     private var weekLine: String {
-        let count = weekBookings.count == 1 ? "1 booking" : "\(weekBookings.count) bookings"
+        let count = ProFlow.count(weekBookings.count, "booking", "bookings")
         let diff = thisWeek - lastWeek
         let vs: String
         if lastWeek == 0 && thisWeek == 0 { vs = "Nothing last week either." }
@@ -82,17 +91,19 @@ struct ProEarningsView: View {
         return HStack(alignment: .bottom, spacing: 6) {
             ForEach(days, id: \.day) { entry in
                 let isToday = Calendar.current.isDateInToday(entry.day)
-                let h = max(CGFloat(entry.cents) / CGFloat(maxCents) * height, entry.cents > 0 ? 6 : 0)
+                let h = entry.cents > 0 ? max(CGFloat(entry.cents) / CGFloat(maxCents) * height, 6) : 2
                 VStack(spacing: 6) {
-                    ZStack(alignment: .bottom) {
-                        Rectangle().fill(Palette.lacquerSoft).frame(height: height)
-                        Rectangle().fill(Palette.lacquer).frame(height: h)
+                    VStack(spacing: 0) {
+                        Spacer(minLength: 0)
+                        RoundedRectangle(cornerRadius: Radius.photo, style: .continuous)
+                            .fill(entry.cents > 0 ? Palette.ink : Palette.line)
+                            .frame(height: h)
                     }
-                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                    .frame(height: height)
                     Text(entry.day.weekday.short.prefix(1))
                         .font(HDFont.caption)
-                        .foregroundStyle(isToday ? Palette.lacquer : Palette.inkSoft)
                         .fontWeight(isToday ? .semibold : .regular)
+                        .foregroundStyle(isToday ? Palette.ink : Palette.inkSoft)
                 }
                 .frame(maxWidth: .infinity)
                 .accessibilityElement(children: .ignore)
@@ -102,111 +113,118 @@ struct ProEarningsView: View {
         .animation(Motion.spring, value: days.map(\.cents))
     }
 
-    // MARK: Pending
+    // MARK: On its way
 
-    private var pendingCard: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("Pending").labelStyle()
-            if let pending {
-                Text(Money.format(pending.amountCents)).font(HDFont.priceLarge).foregroundStyle(Palette.ink)
-                Text("Arrives \(ProFlow.inSentence(pending.date)). Daily payouts by Stripe.")
-                    .font(HDFont.sub).foregroundStyle(Palette.inkSoft)
-            } else {
-                Text("Nothing waiting").font(HDFont.heading).foregroundStyle(Palette.ink)
-                Text("Paid out daily. Lands the next business day.").font(HDFont.sub).foregroundStyle(Palette.inkSoft)
-            }
+    private var pending: some View {
+        let cents = app.pendingEarningsCents
+        let title: String
+        let sub: String
+        if cents > 0 {
+            title = app.nextPayoutDate.map { "\(Money.format(cents)) on its way. Lands \($0.shortDay)." } ?? "\(Money.format(cents)) on its way."
+            sub = "Paid out daily by Stripe. Lands the next business day."
+        } else {
+            title = "Nothing on its way."
+            sub = "Paid out daily. Lands the next business day."
         }
+        return VStack(alignment: .leading, spacing: Space.xs) {
+            Text("Pending").labelStyle()
+            Text(title).font(HDFont.body).foregroundStyle(Palette.ink)
+                .monospacedDigit()
+                .fixedSize(horizontal: false, vertical: true)
+            Text(sub).font(HDFont.sub).foregroundStyle(Palette.inkSoft)
+        }
+        .padding(.bottom, Space.m)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .card()
+        .overlay(alignment: .bottom) { Rectangle().fill(Palette.lineStrong).frame(height: 0.5) }
         .accessibilityElement(children: .combine)
     }
 
     // MARK: Breakdown
 
-    private var breakdownCard: some View {
+    private var breakdown: some View {
         let services = weekBookings.reduce(0) { $0 + $1.price.servicesCents }
         let travel = weekBookings.reduce(0) { $0 + $1.price.travelFeeCents }
         let fee = weekBookings.reduce(0) { $0 + $1.price.platformFeeCents }
         let tips = weekBookings.reduce(0) { $0 + $1.price.tipCents }
-        return VStack(alignment: .leading, spacing: Space.s) {
-            Text("How it breaks down").font(HDFont.heading).foregroundStyle(Palette.ink).padding(.bottom, 4)
-            PriceRow(label: "Services", cents: services)
-            PriceRow(label: "Travel fees", cents: travel)
-            HStack {
-                Text("Hair Done fee, 12%").font(HDFont.body).foregroundStyle(Palette.ink)
+        return VStack(alignment: .leading, spacing: 0) {
+            Text("How it breaks down").font(HDFont.section).foregroundStyle(Palette.ink).padding(.bottom, Space.xs)
+            receiptRow("Services", value: Money.format(services))
+            receiptRow("Travel fees", value: Money.format(travel))
+            receiptRow("Hair Done's 12%", value: "−" + Money.format(fee), soft: true)
+            receiptRow("Tips", sub: "All yours, no fee.", value: "+" + Money.format(tips))
+            HStack(alignment: .firstTextBaseline) {
+                Text("To you").font(HDFont.bodyStrong).foregroundStyle(Palette.ink)
                 Spacer()
-                Text("−" + Money.format(fee)).font(HDFont.price).foregroundStyle(Palette.inkSoft)
+                Text(Money.format(thisWeek)).font(HDFont.priceTotal).foregroundStyle(Palette.ink)
             }
+            .padding(.top, Space.m)
             .accessibilityElement(children: .combine)
-            HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Tips").font(HDFont.body).foregroundStyle(Palette.ink)
-                    Text("All yours, no fee.").font(HDFont.caption).foregroundStyle(Palette.inkSoft)
-                }
-                Spacer()
-                Text("+" + Money.format(tips)).font(HDFont.price).foregroundStyle(Palette.success)
-            }
-            .accessibilityElement(children: .combine)
-            Hairline().padding(.vertical, 4)
-            PriceRow(label: "To you", cents: thisWeek, emphasis: true)
             Text("The 12% comes off services and travel. The $3 booking fee is paid by the client, not you.")
                 .font(HDFont.caption).foregroundStyle(Palette.inkSoft)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.top, Space.s)
         }
-        .card()
+    }
+
+    private func receiptRow(_ label: String, sub: String? = nil, value: String, soft: Bool = false) -> some View {
+        HStack(alignment: .firstTextBaseline) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(label).font(HDFont.body).foregroundStyle(Palette.ink)
+                if let sub { Text(sub).font(HDFont.caption).foregroundStyle(Palette.inkSoft) }
+            }
+            Spacer()
+            Text(value).font(HDFont.price).foregroundStyle(soft ? Palette.inkSoft : Palette.ink)
+        }
+        .padding(.vertical, Space.m)
+        .overlay(alignment: .bottom) { Rectangle().fill(Palette.lineStrong).frame(height: 0.5) }
+        .accessibilityElement(children: .combine)
     }
 
     // MARK: History
 
     private var historySection: some View {
-        VStack(alignment: .leading, spacing: Space.m) {
+        VStack(alignment: .leading, spacing: 0) {
             SectionHeader(title: "History")
-            if history.isEmpty {
-                Text("No payouts yet.").font(HDFont.sub).foregroundStyle(Palette.inkSoft)
-            }
             ForEach(history) { payout in
                 VStack(alignment: .leading, spacing: 0) {
                     HStack(alignment: .firstTextBaseline) {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(payout.date.longDate).font(HDFont.bodyStrong).foregroundStyle(Palette.ink)
-                            Text(payout.status == .paid ? "Paid out \(ProFlow.inSentence(payout.date))" : "Paying out \(ProFlow.inSentence(payout.date))")
-                                .font(HDFont.caption).foregroundStyle(Palette.inkSoft)
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(payout.date.longDate).font(HDFont.body).foregroundStyle(Palette.ink)
+                            HStack(spacing: 6) {
+                                Circle().fill(payout.status == .paid ? Palette.success : Palette.warn).frame(width: 6, height: 6)
+                                Text(payout.status == .paid ? "Paid out \(ProFlow.inSentence(payout.date))" : "Paying out \(ProFlow.inSentence(payout.date))")
+                                    .font(HDFont.caption).foregroundStyle(Palette.inkSoft)
+                            }
                         }
                         Spacer()
                         Text(Money.format(payout.amountCents)).font(HDFont.price).foregroundStyle(Palette.ink)
-                        Tag(text: payout.status == .paid ? "Paid" : "Pending",
-                            color: payout.status == .paid ? Palette.success : Palette.warn,
-                            background: payout.status == .paid ? Palette.successSoft : Palette.warnSoft)
                     }
+                    .padding(.vertical, Space.m)
                     .accessibilityElement(children: .combine)
                     let rows = payout.bookingIDs.compactMap { id in app.proBookings.first { $0.id == id } }
-                    if !rows.isEmpty {
-                        Hairline().padding(.top, Space.m)
-                        ForEach(rows) { b in
-                            NavigationLink(value: Route.proBooking(b.id)) {
-                                HStack(alignment: .firstTextBaseline) {
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text("\(app.clientName(b.clientID)) · \(b.servicesLine)").font(HDFont.sub).foregroundStyle(Palette.ink).lineLimit(1)
-                                        HStack(spacing: 6) {
-                                            Text(b.start.friendlyDay).font(HDFont.caption).foregroundStyle(Palette.inkSoft)
-                                            if b.price.tipCents > 0 {
-                                                Text("Tip \(Money.format(b.price.tipCents))").font(HDFont.caption).foregroundStyle(Palette.success)
-                                            }
-                                        }
-                                    }
-                                    Spacer()
-                                    Text(Money.format(b.price.proPayoutCents)).font(HDFont.sub).foregroundStyle(Palette.inkSoft).monospacedDigit()
-                                    Image(systemName: "chevron.right").font(.system(size: 12, weight: .semibold)).foregroundStyle(Palette.inkFaint)
+                    ForEach(rows) { b in
+                        NavigationLink(value: Route.proBooking(b.id)) {
+                            HStack(alignment: .firstTextBaseline) {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("\(app.clientName(b.clientID)) · \(b.servicesLine)").font(HDFont.sub).foregroundStyle(Palette.ink).lineLimit(1)
+                                    Text(b.price.tipCents > 0 ? "\(b.start.friendlyDay) · tip \(Money.format(b.price.tipCents))" : b.start.friendlyDay)
+                                        .font(HDFont.caption).foregroundStyle(Palette.inkSoft)
                                 }
-                                .padding(.vertical, Space.s)
-                                .contentShape(Rectangle())
+                                Spacer()
+                                Text(Money.format(b.price.proPayoutCents)).font(HDFont.priceSmall).foregroundStyle(Palette.inkSoft)
+                                Image(systemName: "chevron.right").font(.system(size: 13, weight: .regular)).foregroundStyle(Palette.inkFaint)
                             }
-                            .buttonStyle(.plain)
-                            .accessibilityElement(children: .combine)
-                            .accessibilityHint("Opens the booking")
+                            .padding(.leading, Space.l)
+                            .padding(.vertical, Space.s)
+                            .frame(minHeight: 44)
+                            .contentShape(Rectangle())
                         }
+                        .buttonStyle(.plain)
+                        .accessibilityElement(children: .combine)
+                        .accessibilityHint("Opens the booking")
                     }
                 }
-                .card()
+                .overlay(alignment: .bottom) { Rectangle().fill(Palette.lineStrong).frame(height: 0.5) }
             }
         }
     }
@@ -222,36 +240,39 @@ struct PayoutDetailsSheet: View {
     private var connected: Bool { app.proSelf?.payoutsConnected ?? false }
 
     var body: some View {
-        VStack(spacing: 0) {
-            SheetHeader(title: "Payout details", onClose: { dismiss() })
-            VStack(alignment: .leading, spacing: Space.xl) {
-                VStack(alignment: .leading, spacing: Space.s) {
-                    HStack(spacing: 8) {
-                        Image(systemName: connected ? "checkmark.seal.fill" : "building.columns")
-                            .foregroundStyle(connected ? Palette.success : Palette.inkSoft)
-                        Text(connected ? "Payouts on" : "Not set up yet").font(HDFont.heading).foregroundStyle(Palette.ink)
-                    }
+        VStack(alignment: .leading, spacing: 0) {
+            SheetHeader(title: "Payouts", onClose: { dismiss() })
+            VStack(alignment: .leading, spacing: Space.l) {
+                VStack(alignment: .leading, spacing: Space.xs) {
+                    Text(connected ? "On." : "Not set up yet.").font(HDFont.name).foregroundStyle(Palette.ink)
                     Text(connected
                          ? "Daily, to your bank, through Stripe. Each payout lands the next business day."
-                         : "Payouts go to your bank daily through Stripe. About two minutes to set up. You'll need this before your first payout lands.")
+                         : "Payouts go to your bank daily through Stripe. About two minutes to set up. Clients can't book you until it's done.")
                         .font(HDFont.sub).foregroundStyle(Palette.inkSoft)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .card()
-                PrimaryButton(title: connected ? "Manage payouts in Stripe" : "Set up payouts", symbol: "arrow.up.right", isLoading: fetching) {
-                    Task { await open() }
+                if connected {
+                    OutlineButton(title: "Manage payouts in Stripe", symbol: "arrow.up.right", isLoading: fetching, isEnabled: !app.isOffline) {
+                        Task { await open() }
+                    }
+                } else {
+                    InkButton(title: "Set up payouts", symbol: "arrow.up.right", isLoading: fetching, isEnabled: !app.isOffline) {
+                        Task { await open() }
+                    }
                 }
-                Text("Stripe holds your bank details, not us.").font(HDFont.caption).foregroundStyle(Palette.inkSoft)
-                    .frame(maxWidth: .infinity).multilineTextAlignment(.center)
-                Spacer()
+                Text(app.isOffline ? "You're offline. Try again when you're back." : "Stripe holds your bank details, not us.")
+                    .font(HDFont.caption).foregroundStyle(Palette.inkSoft)
             }
             .screenGutter()
-            .padding(.vertical, Space.l)
+            .padding(.top, Space.s)
+            .padding(.bottom, Space.xl)
+            Spacer(minLength: 0)
         }
         .paperBackground()
         .holdsPushRoutes()
         .presentationDetents([.medium])
         .presentationDragIndicator(.visible)
+        .presentationBackground(Palette.paper)
         .payoutNoticeAlert()
     }
 
@@ -272,8 +293,8 @@ struct PayoutDetailsSheet: View {
     }
 }
 
-/// The alert for `AppState.payoutNotice`. The payout screens (onboarding, Payout details) show it
-/// themselves; the root shows it only when neither is up, since an alert can't show under a sheet.
+/// What `AppState.payoutNotice` says, on a short paper sheet (no system alert). The payout screens
+/// (pro setup, Payouts) show it themselves; the root shows it only when neither is up.
 struct PayoutNoticeAlert: ViewModifier {
     @Environment(AppState.self) private var app
     @Environment(\.openURL) private var openURL
@@ -286,31 +307,68 @@ struct PayoutNoticeAlert: ViewModifier {
         )
     }
 
+    func body(content: Content) -> some View {
+        content
+            .sheet(isPresented: isShown) {
+                PayoutNoticeSheet()
+            }
+            .onAppear { if !isFallback { app.payoutSurfaces += 1 } }
+            .onDisappear { if !isFallback { app.payoutSurfaces = max(0, app.payoutSurfaces - 1) } }
+    }
+}
+
+private struct PayoutNoticeSheet: View {
+    @Environment(AppState.self) private var app
+    @Environment(\.openURL) private var openURL
+    /// Kept so the words don't vanish while the sheet slides away.
+    @State private var notice: PayoutNotice? = nil
+
     private var title: String {
-        switch app.payoutNotice {
-        case .didntOpen: return "Stripe didn't open. Try again in a minute."
-        case .stillChecking: return "Stripe's still checking your details. This usually takes a minute."
+        switch notice ?? app.payoutNotice {
+        case .didntOpen: return "Stripe didn't open."
+        case .stillChecking: return "Stripe's still checking."
         case .linkExpired: return "That Stripe link ran out."
         case nil: return ""
         }
     }
 
-    func body(content: Content) -> some View {
-        content
-            .alert(Text(title), isPresented: isShown) {
-                if app.payoutNotice == .linkExpired {
-                    Button("Open Stripe") { Task { await reopen() } }
-                    Button("Not now", role: .cancel) {}
-                } else {
-                    Button("Got it", role: .cancel) {}
+    private var message: String {
+        switch notice ?? app.payoutNotice {
+        case .didntOpen: return "Try again in a minute."
+        case .stillChecking: return "It's looking over your details. This usually takes a minute, and we'll show it here when it's on."
+        case .linkExpired: return "Open it again to pick up where you left off."
+        case nil: return ""
+        }
+    }
+
+    var body: some View {
+        Group {
+            if (notice ?? app.payoutNotice) == .linkExpired {
+                ConfirmSheet(title: title, message: message, confirmTitle: "Open Stripe", cancelTitle: "Not now",
+                             onConfirm: {
+                                 app.payoutNotice = nil
+                                 Task { await reopen() }
+                             },
+                             onCancel: { app.payoutNotice = nil }) { EmptyView() }
+            } else {
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(title).font(HDFont.titleSmall).foregroundStyle(Palette.ink)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityAddTraits(.isHeader)
+                    Text(message).font(HDFont.sub).foregroundStyle(Palette.inkSoft)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.top, Space.s)
+                    InkButton(title: "Got it") { app.payoutNotice = nil }
+                        .padding(.top, Space.xl)
                 }
-            } message: {
-                if app.payoutNotice == .linkExpired {
-                    Text("Open it again to pick up where you left off.")
-                }
+                .padding(.horizontal, Space.gutter)
+                .padding(.top, Space.xl + Space.s)
+                .padding(.bottom, Space.l)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .onAppear { if !isFallback { app.payoutSurfaces += 1 } }
-            .onDisappear { if !isFallback { app.payoutSurfaces = max(0, app.payoutSurfaces - 1) } }
+        }
+        .confirmSheetPresentation()
+        .onAppear { notice = app.payoutNotice }
     }
 
     private func reopen() async {
