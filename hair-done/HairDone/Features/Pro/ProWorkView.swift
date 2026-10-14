@@ -115,39 +115,40 @@ struct ProWorkView: View {
 
     // MARK: Mutations
 
-    private func mutate(_ change: (inout Pro) -> Void) async {
-        guard var p = app.proSelf else { return }
+    /// False if it didn't save; the toast from AppState says why, so callers just skip their own.
+    @discardableResult
+    private func mutate(_ change: (inout Pro) -> Void) async -> Bool {
+        guard var p = app.proSelf else { return false }
         change(&p)
-        await app.saveProSelf(p)
+        return await app.saveProSelf(p)
     }
 
     private func add(count: Int) async {
         let category = filter ?? pro?.primaryCategory ?? .hair
         let fresh = (0..<count).map { _ in WorkItem.placeholder(category: category) }
-        await mutate { $0.work.append(contentsOf: fresh) }
+        guard await mutate({ $0.work.append(contentsOf: fresh) }) else { return }
         Haptics.success()
         app.show(count == 1 ? "Added. Tap it to tag it." : "\(count) added. Tap one to tag it.")
     }
 
     private func save(_ updated: WorkItem) async {
-        await mutate { p in
+        let saved = await mutate { p in
             if let i = p.work.firstIndex(where: { $0.id == updated.id }) { p.work[i] = updated }
         }
-        app.show("Saved.")
+        if saved { app.show("Saved.") }
     }
 
     private func moveToFront(_ item: WorkItem) async {
-        await mutate { p in
+        let saved = await mutate { p in
             guard let i = p.work.firstIndex(where: { $0.id == item.id }) else { return }
             let moved = p.work.remove(at: i)
             p.work.insert(moved, at: 0)
         }
-        app.show("Moved to the front.")
+        if saved { app.show("Moved to the front.") }
     }
 
     private func delete(_ item: WorkItem) async {
-        await mutate { $0.work.removeAll { $0.id == item.id } }
-        app.show("Deleted.")
+        if await mutate({ $0.work.removeAll { $0.id == item.id } }) { app.show("Deleted.") }
     }
 }
 
@@ -228,6 +229,7 @@ struct WorkDetailSheet: View {
             .padding(.vertical, Space.l)
         }
         .paperBackground()
+        .holdsPushRoutes()
         .presentationDragIndicator(.visible)
         .confirmationDialog("Delete this photo?", isPresented: $confirmDelete, titleVisibility: .visible) {
             Button("Delete", role: .destructive) { onDelete(); dismiss() }

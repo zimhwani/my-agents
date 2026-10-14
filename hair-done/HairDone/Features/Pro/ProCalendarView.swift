@@ -267,8 +267,7 @@ struct ProCalendarView: View {
         saving = true
         defer { saving = false }
         pro.availability = draft
-        await app.saveProSelf(pro)
-        app.show("Saved.")
+        if await app.saveProSelf(pro) { app.show("Saved.") }
     }
 }
 

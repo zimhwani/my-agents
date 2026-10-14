@@ -27,6 +27,8 @@ struct ProOnboardingFlow: View {
     @State private var payoutsOn = false
     @State private var fetchingURL = false
     @State private var saving = false
+    /// A save that didn't go through. Shown above the button; a toast would sit under this cover.
+    @State private var problem: String? = nil
 
     private var abnDigits: String { abn.filter(\.isNumber) }
     private var abnOK: Bool { abnDigits.isEmpty || abnDigits.count == 11 }
@@ -88,6 +90,9 @@ struct ProOnboardingFlow: View {
                 if let i = services.firstIndex(where: { $0.id == s.id }) { services[i] = updated }
             }
         }
+        .onChange(of: step) { _, _ in problem = nil }
+        .payoutNoticeAlert()
+        .holdsPushRoutes()
     }
 
     // MARK: Chrome
@@ -109,6 +114,7 @@ struct ProOnboardingFlow: View {
     private var footer: some View {
         if step <= totalSteps {
             VStack(spacing: Space.xs) {
+                if let problem { InlineNote(text: problem, tone: .warn).padding(.bottom, Space.xs) }
                 PrimaryButton(title: footerTitle, isLoading: saving, isEnabled: canContinue) { advance() }
                 if step == 6 && idState != .checked {
                     TertiaryButton(title: "Do this later") { advance(skipping: true) }
@@ -355,6 +361,7 @@ struct ProOnboardingFlow: View {
             Text("You're on.").font(HDFont.hero).foregroundStyle(Palette.ink)
             Text("Your profile's live in \(suburb). The first request could be today.")
                 .font(HDFont.body).foregroundStyle(Palette.inkSoft).multilineTextAlignment(.center)
+            if let problem { InlineNote(text: problem, tone: .warn).padding(.top, Space.l) }
             PrimaryButton(title: "Go to Today", isLoading: saving) { Task { await finish() } }
                 .padding(.top, Space.l)
         }
@@ -379,24 +386,35 @@ struct ProOnboardingFlow: View {
     }
 
     private func setUpPayouts() async {
+        guard !fetchingURL else { return }
         fetchingURL = true
         defer { fetchingURL = false }
+        problem = nil
         // The payout link belongs to a pro profile, so on the real backend she's saved as one first.
-        if app.isLive && app.proSelf == nil { await app.saveProSelf(draftPro()) }
-        do {
-            let url = try await app.payments.payoutOnboardingURL(proID: app.proSelf?.id ?? app.client?.id ?? "new")
-            openURL(url)
-            // The sample data says yes straight away; the real answer comes back from Stripe.
-            if !app.isLive { withAnimation(Motion.spring) { payoutsOn = true } }
-        } catch {
-            app.show("That didn't work. Try again.")
+        if app.isLive && app.proSelf == nil {
+            guard await app.saveProSelf(draftPro()) else {
+                withAnimation(Motion.gentle) { problem = app.lastError ?? "That didn't save. Try again." }
+                return
+            }
         }
+        // A failure here puts up "Stripe didn't open" (PayoutNoticeAlert).
+        guard let url = await app.payoutLink() else { return }
+        openURL(url) { accepted in
+            if !accepted { app.payoutNotice = .didntOpen }
+        }
+        // The sample data says yes straight away; the real answer comes back from Stripe.
+        if !app.isLive { withAnimation(Motion.spring) { payoutsOn = true } }
     }
 
     private func finish() async {
+        guard !saving else { return }
         saving = true
         defer { saving = false }
-        await app.saveProSelf(draftPro())
+        problem = nil
+        guard await app.saveProSelf(draftPro()) else {
+            withAnimation(Motion.gentle) { problem = app.lastError ?? "That didn't save. Try again." }
+            return
+        }
         Haptics.success()
         onFinished()
     }

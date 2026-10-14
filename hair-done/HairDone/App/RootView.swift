@@ -25,6 +25,8 @@ struct RootView: View {
         .animation(Motion.springSlow, value: app.stage)
         .animation(Motion.springSlow, value: app.mode)
         .overlay(alignment: .bottom) { ToastView() }
+        // Back from Stripe with nothing payout-related on screen (the app was closed in between).
+        .payoutNoticeAlert(fallback: true)
         .preferredColorScheme(nil)
     }
 }

@@ -1,31 +1,46 @@
 import SwiftUI
 import AuthenticationServices
 
-/// Welcome → phone → code → your name → location → home.
-/// `app.stage` decides which half you're in: `.welcome` covers welcome, phone and code;
+/// Welcome (Apple, or email) → email → code → your name → location → home. Phone is still there,
+/// a step to the side of email ("Use your phone instead"), for the test numbers.
+/// `app.stage` decides which half you're in: `.welcome` covers welcome, email, phone and code;
 /// `.signedIn` covers name and location. Local `step` moves within each half.
 struct OnboardingFlow: View {
     @Environment(AppState.self) private var app
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    enum Step: Int { case welcome, phone, code, name, location }
+    enum Step: Int { case welcome, email, phone, code, name, location }
 
     @State private var step: Step = .welcome
     @State private var forward = true
+    @State private var email = ""
     @State private var phone = ""
+    /// Where the code went: email unless she took the phone way.
+    @State private var viaPhone = false
 
     var body: some View {
         ZStack {
             switch step {
             case .welcome:
-                OnboardingWelcome(onPhone: { go(.phone) })
+                OnboardingWelcome(onEmail: { go(.email) })
                     .transition(slide)
+            case .email:
+                OnboardingEmail(
+                    email: $email,
+                    onBack: { go(.welcome, forward: false) },
+                    onNext: { viaPhone = false; go(.code) },
+                    onPhone: { go(.phone) }
+                )
+                .transition(slide)
             case .phone:
-                OnboardingPhone(phone: $phone, onBack: { go(.welcome, forward: false) }, onNext: { go(.code) })
+                OnboardingPhone(phone: $phone, onBack: { go(.email, forward: false) }, onNext: { viaPhone = true; go(.code) })
                     .transition(slide)
             case .code:
-                OnboardingCode(phone: phone, onBack: { go(.phone, forward: false) })
-                    .transition(slide)
+                OnboardingCode(
+                    destination: viaPhone ? .phone(phone) : .email(email),
+                    onBack: { go(viaPhone ? .phone : .email, forward: false) }
+                )
+                .transition(slide)
             case .name:
                 OnboardingName(onNext: { go(.location) })
                     .transition(slide)
@@ -124,7 +139,7 @@ private struct OnboardingError: View {
 private struct OnboardingWelcome: View {
     @Environment(AppState.self) private var app
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    var onPhone: () -> Void
+    var onEmail: () -> Void
 
     @State private var appeared = false
     @State private var appleError: String? = nil
@@ -168,8 +183,6 @@ private struct OnboardingWelcome: View {
                     .padding(.bottom, Space.xxl)
 
                 VStack(spacing: Space.m) {
-                    PrimaryButton(title: "Continue with phone", isLoading: false, isEnabled: !isSigningIn, action: onPhone)
-
                     SignInWithAppleButton(.continue) { request in
                         let raw = AppleNonce.make()
                         nonce = raw
@@ -182,6 +195,8 @@ private struct OnboardingWelcome: View {
                     .frame(height: 52)
                     .clipShape(Capsule())
                     .accessibilityLabel("Continue with Apple")
+
+                    PrimaryButton(title: "Continue with email", isLoading: false, isEnabled: !isSigningIn, action: onEmail)
 
                     OnboardingError(text: appleError)
 
@@ -209,7 +224,7 @@ private struct OnboardingWelcome: View {
         switch result {
         case .success(let authorization):
             guard let credential = AppleCredential(authorization: authorization, rawNonce: nonce) else {
-                withAnimation(Motion.gentle) { appleError = "Apple didn't come back to us. Try again, or use your phone." }
+                withAnimation(Motion.gentle) { appleError = "Apple didn't come back to us. Try again, or use your email." }
                 return
             }
             isSigningIn = true
@@ -218,13 +233,112 @@ private struct OnboardingWelcome: View {
                 await app.signInWithApple(credential)
                 isSigningIn = false
                 if app.stage == .welcome {
-                    withAnimation(Motion.gentle) { appleError = "Apple didn't come back to us. Try again, or use your phone." }
+                    withAnimation(Motion.gentle) { appleError = "Apple didn't come back to us. Try again, or use your email." }
                 }
             }
         case .failure(let error):
             if let e = error as? ASAuthorizationError, e.code == .canceled { return }
-            withAnimation(Motion.gentle) { appleError = "Apple didn't come back to us. Try again, or use your phone." }
+            withAnimation(Motion.gentle) { appleError = "Apple didn't come back to us. Try again, or use your email." }
         }
+    }
+}
+
+// MARK: - Email
+
+private struct OnboardingEmail: View {
+    @Environment(AppState.self) private var app
+    @Binding var email: String
+    var onBack: () -> Void
+    var onNext: () -> Void
+    var onPhone: () -> Void
+
+    @FocusState private var focused: Bool
+    @State private var error: String? = nil
+    @State private var sending = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            OnboardingTopBar(onBack: onBack)
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: Space.xl) {
+                    OnboardingHeadline(title: "Your email", sub: "We'll email you a code. No newsletters, no spam.")
+                        .padding(.top, Space.l)
+
+                    VStack(alignment: .leading, spacing: Space.s) {
+                        TextField("you@example.com", text: $email)
+                            .font(HDFont.body)
+                            .keyboardType(.emailAddress)
+                            .textContentType(.emailAddress)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                            .submitLabel(.send)
+                            .focused($focused)
+                            .padding(.horizontal, 14)
+                            .frame(height: 52)
+                            .background(Palette.card, in: RoundedRectangle(cornerRadius: Radius.input, style: .continuous))
+                            .overlay(RoundedRectangle(cornerRadius: Radius.input, style: .continuous).strokeBorder(error == nil ? Palette.line : Palette.lacquer, lineWidth: 1))
+                            .onChange(of: email) { _, _ in
+                                if error != nil { withAnimation(Motion.gentle) { error = nil } }
+                            }
+                            .accessibilityLabel("Your email")
+                        OnboardingError(text: error)
+                    }
+                }
+                .screenGutter()
+            }
+            .scrollDismissesKeyboard(.interactively)
+        }
+        .safeAreaInset(edge: .bottom) {
+            VStack(spacing: Space.xs) {
+                PrimaryButton(title: "Continue", isLoading: sending, isEnabled: !email.trimmingCharacters(in: .whitespaces).isEmpty, action: submit)
+                // Still here for the test numbers.
+                TertiaryButton(title: "Use your phone instead", action: onPhone)
+            }
+            .screenGutter()
+            .padding(.vertical, Space.m)
+            .background(Palette.paper)
+        }
+        .onAppear { focused = true }
+        .onSubmit(submit)
+    }
+
+    private func submit() {
+        let cleaned = EmailAddress.clean(email)
+        guard EmailAddress.isValid(cleaned) else {
+            Haptics.warning()
+            withAnimation(Motion.gentle) { error = "That email doesn't look right. Have another look." }
+            return
+        }
+        guard !sending else { return }
+        email = cleaned
+        focused = false
+        sending = true
+        Task { @MainActor in
+            let sent = await app.sendEmailCode(to: cleaned)
+            sending = false
+            if sent {
+                onNext()
+            } else {
+                Haptics.warning()
+                withAnimation(Motion.gentle) { error = app.lastError ?? "That didn't work. Try again." }
+            }
+        }
+    }
+}
+
+/// Light checks only: something before an @, and a dot somewhere after it. The code proves the rest.
+enum EmailAddress {
+    static func clean(_ raw: String) -> String {
+        raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    }
+
+    static func isValid(_ raw: String) -> Bool {
+        let s = clean(raw)
+        guard !s.contains(" "), let at = s.firstIndex(of: "@"), at != s.startIndex else { return false }
+        let domain = s[s.index(after: at)...]
+        guard let dot = domain.lastIndex(of: "."), dot != domain.startIndex else { return false }
+        return domain.index(after: dot) != domain.endIndex
     }
 }
 
@@ -356,7 +470,14 @@ enum AUPhone {
 private struct OnboardingCode: View {
     @Environment(AppState.self) private var app
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    var phone: String
+
+    /// Where the code went.
+    enum Destination {
+        case email(String)
+        case phone(String)
+    }
+
+    var destination: Destination
     var onBack: () -> Void
 
     @State private var code = ""
@@ -364,9 +485,25 @@ private struct OnboardingCode: View {
     @State private var error: String? = nil
     @State private var resendIn = 30
     @State private var resendCycle = 0
+    /// When the code in hand was sent. GoTrue says "expired or invalid" for both, so an old code is
+    /// told apart by its age (Supabase's email codes last an hour by default).
+    @State private var sentAt = Date()
     @FocusState private var focused: Bool
 
     private let length = 6
+    private let emailCodeLifetime: TimeInterval = 3600
+
+    private var isEmail: Bool {
+        if case .email = destination { return true }
+        return false
+    }
+
+    private var address: String {
+        switch destination {
+        case .email(let e): return e
+        case .phone(let p): return p
+        }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -374,7 +511,8 @@ private struct OnboardingCode: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: Space.xl) {
-                    OnboardingHeadline(title: "Check your texts", sub: "We sent a 6-digit code to \(phone).")
+                    OnboardingHeadline(title: isEmail ? "Check your email" : "Check your texts",
+                                       sub: "We sent a 6-digit code to \(address).")
                         .padding(.top, Space.l)
 
                     VStack(alignment: .leading, spacing: Space.m) {
@@ -392,19 +530,11 @@ private struct OnboardingCode: View {
                                 .padding(.horizontal, 8)
                         } else {
                             TertiaryButton(title: "Send it again", tint: Palette.lacquer) {
-                                resendIn = 30
-                                resendCycle += 1
-                                code = ""
                                 withAnimation(Motion.gentle) { error = nil }
-                                Task {
-                                    let sent = await app.sendCode(to: phone)
-                                    if !sent {
-                                        withAnimation(Motion.gentle) { error = app.lastError ?? "That didn't work. Try again." }
-                                    }
-                                }
+                                resend()
                             }
                         }
-                        TertiaryButton(title: "Wrong number", action: onBack)
+                        TertiaryButton(title: isEmail ? "Use a different email" : "Wrong number", action: onBack)
                     }
                     .padding(.horizontal, -8)
 
@@ -474,19 +604,46 @@ private struct OnboardingCode: View {
         }
     }
 
+    /// A fresh code, and the 30 seconds before another. Says so if it didn't go.
+    private func resend() {
+        resendIn = 30
+        resendCycle += 1
+        code = ""
+        sentAt = Date()
+        Task { @MainActor in
+            let sent: Bool
+            switch destination {
+            case .email(let e): sent = await app.sendEmailCode(to: e)
+            case .phone(let p): sent = await app.sendCode(to: p)
+            }
+            if !sent {
+                withAnimation(Motion.gentle) { error = app.lastError ?? "That didn't work. Try again." }
+            }
+        }
+    }
+
     private func verify() {
         guard !isVerifying else { return }
         isVerifying = true
         focused = false
-        Task {
-            await app.verifyCode(code, phone: phone)
-            isVerifying = false
-            if app.stage == .welcome {
-                Haptics.error()
-                withAnimation(Motion.gentle) { error = app.lastError ?? "That code's not right. Have another look." }
-                code = ""
-                focused = true
+        Task { @MainActor in
+            switch destination {
+            case .email(let e): await app.verifyEmailCode(code, email: e)
+            case .phone(let p): await app.verifyCode(code, phone: p)
             }
+            isVerifying = false
+            guard app.stage == .welcome else { return }
+            Haptics.error()
+            let stale = isEmail && app.signInFailure == .wrongCode && Date().timeIntervalSince(sentAt) > emailCodeLifetime
+            if stale {
+                // "That code's expired. We've sent a new one." So send one.
+                resend()
+                withAnimation(Motion.gentle) { error = DataError.codeExpired.errorDescription }
+            } else {
+                withAnimation(Motion.gentle) { error = app.lastError ?? "That code's not right. Have another look." }
+            }
+            code = ""
+            focused = true
         }
     }
 }

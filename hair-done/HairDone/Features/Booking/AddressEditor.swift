@@ -97,6 +97,7 @@ struct AddressEditor: View {
             }
         }
         .paperBackground()
+        .holdsPushRoutes()
         .presentationDetents([.large])
         .presentationDragIndicator(.visible)
         .onChange(of: postcode) { _, new in

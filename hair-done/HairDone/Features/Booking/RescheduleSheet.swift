@@ -19,6 +19,7 @@ struct RescheduleSheet: View {
                     .paperBackground()
             }
         }
+        .holdsPushRoutes()
         .presentationDetents([.large])
         .presentationDragIndicator(.visible)
     }

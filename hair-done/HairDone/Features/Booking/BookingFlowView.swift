@@ -41,6 +41,7 @@ struct BookingFlowView: View {
     @State private var booked: Booking? = nil
     @State private var isPaying = false
     @State private var payError: BookingFlowError? = nil
+    @State private var askForPush = false
 
     init(pro: Pro, preselected: [Service] = [], onBooked: ((Booking) -> Void)? = nil) {
         self.pro = pro
@@ -74,6 +75,8 @@ struct BookingFlowView: View {
         } message: {
             Text("Nothing's booked yet, and your picks won't be kept.")
         }
+        .sheet(isPresented: $askForPush) { PushPrePrompt(side: .client) }
+        .holdsPushRoutes()
     }
 
     // MARK: Header
@@ -274,6 +277,15 @@ struct BookingFlowView: View {
         app.selectedTab = .inbox
     }
 
+    /// Her first booking is the moment notifications explain themselves. After the check has drawn.
+    private func askForPushSoon() {
+        Task { @MainActor in
+            guard await app.shouldAskForPush(.client) else { return }
+            try? await Task.sleep(for: .seconds(1.4))
+            if step == .booked { askForPush = true }
+        }
+    }
+
     // MARK: Paying
 
     private func pay() {
@@ -286,6 +298,7 @@ struct BookingFlowView: View {
                 let booking = try await app.book(draft)
                 booked = booking
                 go(to: .booked)
+                askForPushSoon()
             } catch PaymentError.declined {
                 withAnimation(Motion.spring) { payError = .declined }
             } catch DataError.slotTaken {

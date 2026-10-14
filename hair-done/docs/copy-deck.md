@@ -44,12 +44,22 @@ Conventions:
 |---|---|---|
 | welcome.wordmark | hair done.<br>nails done.<br>everything done. | Stacked form. See brand.md |
 | welcome.sub | A vetted pro comes to you. Melbourne, for now. | |
-| welcome.phone | Continue with phone | |
+| welcome.email | Continue with email | Primary, under the Apple button. Email is the main way in |
 | welcome.apple | Continue with Apple | Apple's required string. Use `SignInWithAppleButton(.continue)` |
 | welcome.legal | By continuing you agree to the terms and privacy policy. | "terms" and "privacy policy" are links |
 | welcome.legal.terms | Terms | |
 | welcome.legal.privacy | Privacy policy | |
-| welcome.error.apple | Apple didn't come back to us. Try again, or use your phone. | |
+| welcome.error.apple | Apple didn't come back to us. Try again, or use your email. | |
+| email.title | Your email | |
+| email.sub | We'll email you a code. No newsletters, no spam. | |
+| email.placeholder | you@example.com | |
+| email.cta | Continue | Sends the code |
+| email.phone | Use your phone instead | Tertiary. Phone stays for the test numbers |
+| email.error.invalid | That email doesn't look right. Have another look. | Light check: an @ and a dot after it |
+| email.error.notSent | We couldn't send a code to that email. Check it, or use Apple. | |
+| code.title.email | Check your email | |
+| code.sub.email | We sent a 6-digit code to {email}. | |
+| code.changeEmail | Use a different email | Goes back |
 | phone.title | Your number | |
 | phone.sub | We'll text you a code. No calls, no spam. | |
 | phone.placeholder | 04xx xxx xxx | |
@@ -62,8 +72,8 @@ Conventions:
 | code.resend.wait | Send again in {seconds}s | Countdown from 30 |
 | code.changeNumber | Wrong number | Goes back |
 | code.error.wrong | That code's not right. Have another look. | |
-| code.error.expired | That code's expired. We've sent a new one. | |
-| code.error.tooMany | Too many goes. Wait a couple of minutes and try again. | |
+| code.error.expired | That code's expired. We've sent a new one. | Email codes: told apart from a wrong one by age (an hour) |
+| code.error.tooMany | Too many tries. Wait a minute and ask for a new code. | |
 | name.title | And you are | Serif. No question mark, no full stop |
 | name.sub | First name's fine. It's what she'll see when you book. | |
 | name.placeholder | Your first name | |
@@ -800,3 +810,16 @@ Pre-permission screens are ours and come first. The system string is what iOS sh
 | perm.notifications.pre.cta | Turn on | |
 | perm.notifications.pre.skip | Not now | |
 | perm.notifications.system | | iOS has no custom string for notifications. Everything we want to say is on the pre-permission screen |
+| perm.notifications.sheet.title | Booking updates | Client pre-prompt sheet, after her first booking |
+| perm.notifications.sheet.body | So you know when she's confirmed and on her way. | |
+| perm.notifications.sheet.note | Nothing else unless you turn it on. | Caption |
+| perm.notifications.sheet.title.pro | New requests and messages | Pro pre-prompt sheet, first time on Today |
+| perm.notifications.sheet.body.pro | So you see requests in time. They lapse after two hours. | |
+| you.notifications.off | Notifications are off for Hair Done in Settings, so none of these come through. | With "Open Settings" |
+| you.notifications.notYet | Notifications aren't on yet, so none of these come through. | With "Turn on" |
+| push.waiting | {lead} We'll open it when you're done here. | Toast when a notification is tapped mid-booking, mid-setup or in a sheet with unsaved input. `{lead}` is "New request from {client}.", "Update on {client}'s booking.", "{pro} has an update on your booking." or "New message from {name}." |
+| payouts.error.didntOpen | Stripe didn't open. Try again in a minute. | Alert |
+| payouts.stillChecking | Stripe's still checking your details. This usually takes a minute. | Alert, back from Stripe and not on yet |
+| payouts.linkExpired | That Stripe link ran out. | Alert title, back through /refresh |
+| payouts.linkExpired.body | Open it again to pick up where you left off. | Buttons "Open Stripe" and "Not now" |
+| rate.paidNotReviewed | Paid. Your review didn't save. Try again from the booking. | Toast; the pay sheet closes |

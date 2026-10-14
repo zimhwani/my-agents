@@ -2,6 +2,9 @@ import SwiftUI
 
 @main
 struct HairDoneApp: App {
+    /// The push token and notification taps come in through here.
+    @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+    @Environment(\.scenePhase) private var scenePhase
     /// The real backend when HairDone.xcconfig has its keys, the sample data when it doesn't.
     @State private var app = AppState.configured()
 
@@ -10,8 +13,14 @@ struct HairDoneApp: App {
             RootView()
                 .environment(app)
                 .tint(Palette.lacquer)
-                .task { await app.restoreSession() }
+                .task {
+                    PushCenter.shared.attach(app)
+                    await app.restoreSession()
+                }
                 .onOpenURL { url in open(url) }
+                .onChange(of: scenePhase) { _, phase in
+                    if phase == .active { app.becameActive() }
+                }
         }
     }
 
@@ -20,6 +29,7 @@ struct HairDoneApp: App {
     private func open(_ url: URL) {
         if PaymentRedirect.handle(url) { return }
         guard url.scheme == "hairdone", url.host == "payouts" else { return }
-        Task { await app.payoutsReturned() }
+        let finished = url.path != "/refresh"
+        Task { await app.payoutsReturned(finished: finished) }
     }
 }

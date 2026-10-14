@@ -70,6 +70,7 @@ struct BookingDetailView: View {
                         showCancel = false
                         app.show(line)
                     }
+                    // A failure shows as a toast on the sheet (holdsPushRoutes carries it).
                     cancelling = false
                 }
             }
@@ -516,6 +517,7 @@ struct CancelBookingSheet: View {
             .padding(.bottom, Space.l)
         }
         .paperBackground()
+        .holdsPushRoutes()
     }
 }
 

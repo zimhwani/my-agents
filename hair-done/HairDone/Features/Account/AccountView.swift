@@ -1,4 +1,5 @@
 import SwiftUI
+import UserNotifications
 
 /// The You tab: who you are, where she comes to, how you pay, who you'd book again, and the switch to Pro mode.
 struct AccountView: View {
@@ -103,7 +104,8 @@ struct AccountView: View {
             Avatar(name: client.fullName, seed: client.seed, size: 72)
             VStack(alignment: .leading, spacing: 3) {
                 Text(client.fullName).font(HDFont.heading).foregroundStyle(Palette.ink)
-                Text(client.phone).font(HDFont.sub).foregroundStyle(Palette.inkSoft)
+                // Email sign-in has no mobile until she adds one.
+                Text(client.phone.isEmpty ? client.email : client.phone).font(HDFont.sub).foregroundStyle(Palette.inkSoft)
                 Text("Booking since \(client.joined.monthShort) \(String(client.joined.yearNumber))")
                     .font(HDFont.caption)
                     .foregroundStyle(Palette.inkFaint)
@@ -201,6 +203,7 @@ struct AccountDetailsSheet: View {
     @State private var email = ""
     @State private var phone = ""
     @State private var saving = false
+    @State private var problem: String? = nil
 
     private var canSave: Bool { !first.trimmingCharacters(in: .whitespaces).isEmpty }
 
@@ -218,6 +221,7 @@ struct AccountDetailsSheet: View {
                         HDTextField(label: "Email", text: $email, keyboard: .emailAddress, contentType: .emailAddress)
                         Text("Receipts go here.").font(HDFont.caption).foregroundStyle(Palette.inkSoft)
                     }
+                    if let problem { InlineNote(text: problem, tone: .warn) }
                 }
                 .screenGutter()
                 .padding(.top, Space.s)
@@ -229,6 +233,7 @@ struct AccountDetailsSheet: View {
                 .padding(.bottom, Space.l)
         }
         .paperBackground()
+        .holdsPushRoutes()
         .onAppear {
             guard let c = app.client else { return }
             first = c.firstName; last = c.lastName; email = c.email; phone = c.phone
@@ -242,11 +247,18 @@ struct AccountDetailsSheet: View {
         c.email = email.trimmingCharacters(in: .whitespaces)
         c.phone = phone.trimmingCharacters(in: .whitespaces)
         saving = true
-        Task {
-            try? await app.data.updateClient(c)
-            app.client = c
-            saving = false
-            dismiss()
+        problem = nil
+        Task { @MainActor in
+            do {
+                try await app.data.updateClient(c)
+                app.client = c
+                saving = false
+                dismiss()
+            } catch {
+                // Was swallowed before: the sheet closed as if it had saved.
+                saving = false
+                withAnimation(Motion.gentle) { problem = error.localizedDescription }
+            }
         }
     }
 }
@@ -453,11 +465,27 @@ struct AccountNotificationsSheet: View {
     @AppStorage("notify.messages") private var messages = true
     @AppStorage("notify.reminders") private var reminders = true
     @AppStorage("notify.whosFree") private var whosFree = false
+    /// What iOS says. The toggles below only matter once this is on.
+    @State private var system: UNAuthorizationStatus = .authorized
 
     var body: some View {
         VStack(spacing: 0) {
             SheetHeader(title: "Notifications", onClose: { dismiss() })
             ScrollView {
+                if system == .denied || system == .notDetermined {
+                    VStack(alignment: .leading, spacing: Space.xs) {
+                        InlineNote(text: system == .denied
+                                   ? "Notifications are off for Hair Done in Settings, so none of these come through."
+                                   : "Notifications aren't on yet, so none of these come through.",
+                                   tone: .warn)
+                        TertiaryButton(title: system == .denied ? "Open Settings" : "Turn on", tint: Palette.lacquer) {
+                            Task { @MainActor in await turnOn() }
+                        }
+                        .padding(.horizontal, -8)
+                    }
+                    .screenGutter()
+                    .padding(.top, Space.s)
+                }
                 VStack(spacing: 0) {
                     toggleRow("Booking updates", sub: "Can't turn these off, sorry. They're the useful ones.", isOn: .constant(true), locked: true)
                     Hairline()
@@ -473,6 +501,7 @@ struct AccountNotificationsSheet: View {
             }
         }
         .paperBackground()
+        .task { system = await PushCenter.shared.status() }
         .onChange(of: messages) { _, _ in syncMaster() }
         .onChange(of: reminders) { _, _ in syncMaster() }
         .onChange(of: whosFree) { _, _ in syncMaster() }
@@ -489,6 +518,17 @@ struct AccountNotificationsSheet: View {
         .disabled(locked)
         .padding(.vertical, Space.m)
         .onChange(of: isOn.wrappedValue) { _, _ in Haptics.selection() }
+    }
+
+    @MainActor
+    private func turnOn() async {
+        if system == .denied {
+            if let url = URL(string: UIApplication.openSettingsURLString) { _ = await UIApplication.shared.open(url) }
+            return
+        }
+        PushCenter.shared.markAsked(.client)
+        await PushCenter.shared.requestPermission()
+        system = await PushCenter.shared.status()
     }
 
     /// `client.notificationsOn` mirrors the optional ones: on if any of them is.

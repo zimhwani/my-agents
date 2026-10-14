@@ -29,6 +29,16 @@ final class MockDataService: DataService {
         signedIn = true
         return client ?? MockData.client
     }
+    /// Any email works, and any six digits after it, the same as the phone.
+    func sendEmailCode(email: String) async throws { await pause(1.5) }
+    func verifyEmailCode(email: String, code: String) async throws -> Client {
+        await pause(2)
+        signedIn = true
+        var signedInClient = client ?? MockData.client
+        if signedInClient.email.isEmpty { signedInClient.email = email }
+        client = signedInClient
+        return signedInClient
+    }
     func signInWithApple(_ credential: AppleCredential) async throws -> Client {
         await pause(1.5)
         signedIn = true
@@ -52,6 +62,12 @@ final class MockDataService: DataService {
         }
         signedIn = false
     }
+
+    // MARK: Push
+
+    /// Nothing to send pushes from in the sample data.
+    func registerDevice(token: String, environment: String) async throws {}
+    func unregisterDevice(token: String) async throws {}
 
     // MARK: Discovery
 
@@ -219,6 +235,7 @@ final class MockDataService: DataService {
     // MARK: Pro
 
     func payouts(proID: String) async throws -> [Payout] { await pause(); return payouts }
+    func payoutStatus() async throws -> Bool { await pause(0.5); return proSelf.payoutsConnected }
 
     static func reference() -> String {
         let letters = Array("ABCDEFGHJKLMNPQRSTUVWXYZ23456789")

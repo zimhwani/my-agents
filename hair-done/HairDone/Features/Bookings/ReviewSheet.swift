@@ -13,6 +13,8 @@ struct ReviewSheet: View {
     @State private var customTip = ""
     @State private var sending = false
     @State private var sent = false
+    /// Why the last go didn't work, shown above the button. A toast would sit under this sheet.
+    @State private var problem: String? = nil
     @FocusState private var focus: Field?
 
     enum Field { case review, tip }
@@ -86,6 +88,7 @@ struct ReviewSheet: View {
         }
         .paperBackground()
         .animation(Motion.springSlow, value: sent)
+        .holdsPushRoutes()
     }
 
     // MARK: Form
@@ -140,6 +143,10 @@ struct ReviewSheet: View {
             .animation(reduceMotion ? nil : Motion.spring, value: rating > 0)
 
             VStack(spacing: Space.s) {
+                if let problem {
+                    InlineNote(text: problem, tone: .warn)
+                        .transition(.opacity)
+                }
                 PrimaryButton(title: sendTitle, isLoading: sending, isEnabled: rating > 0) { send() }
                 TertiaryButton(title: "Not now") { dismiss() }
             }
@@ -217,10 +224,21 @@ struct ReviewSheet: View {
         guard rating > 0, !sending else { return }
         sending = true
         focus = nil
-        Task {
-            let done = await app.review(booking, rating: rating, text: text.trimmingCharacters(in: .whitespacesAndNewlines), tipCents: tipCents)
+        withAnimation(Motion.gentle) { problem = nil }
+        Task { @MainActor in
+            let outcome = await app.review(booking, rating: rating, text: text.trimmingCharacters(in: .whitespacesAndNewlines), tipCents: tipCents)
             sending = false
-            if done { sent = true }
+            switch outcome {
+            case .saved:
+                sent = true
+            case .paidOnly:
+                // The money's gone through; the booking shows as paid and the toast says the review
+                // needs another go, from the booking.
+                dismiss()
+            case .failed(let line):
+                Haptics.warning()
+                withAnimation(Motion.gentle) { problem = line }
+            }
         }
     }
 }

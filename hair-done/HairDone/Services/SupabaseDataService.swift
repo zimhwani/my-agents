@@ -150,6 +150,35 @@ final class SupabaseDataService: DataService {
         return try await loadClient(session)
     }
 
+    func sendEmailCode(email: String) async throws {
+        do {
+            try await api.sendEmailCode(email: email)
+        } catch {
+            let translated = Self.translate(error)
+            // Throttled stays "too many tries"; no connection stays as it is. Anything else GoTrue
+            // says about sending (a bad address, the mail server) is "couldn't send".
+            if (translated as? DataError) == .tooManyTries { throw translated }
+            if error is SupabaseFailure { throw DataError.emailNotSent }
+            throw translated
+        }
+    }
+
+    func verifyEmailCode(email: String, code: String) async throws -> Client {
+        let session: SupabaseSession
+        do { session = try await api.verifyEmailCode(email: email, code: code) } catch { throw Self.translate(error) }
+        let client = try await loadClient(session)
+        // A brand-new account saves its email with the profile, after the name step. An account that
+        // already has a profile but no email on file gets this one now.
+        if synced != nil, !session.email.isEmpty {
+            let saved = try? await get([DBContact].self, "profile_contacts",
+                                       [q("profile_id", "eq.\(session.userID)"), q("select", "phone,email")]).first
+            if (saved?.email ?? "").isEmpty {
+                try? await writeContacts(session.userID, phone: client.phone, email: session.email)
+            }
+        }
+        return client
+    }
+
     func signInWithApple(_ credential: AppleCredential) async throws -> Client {
         let session: SupabaseSession
         do {
@@ -252,12 +281,7 @@ final class SupabaseDataService: DataService {
         }
 
         if before == nil || before?.phone != client.phone || before?.email != client.email {
-            let fields: [String: Any] = ["phone": client.phone, "email": client.email]
-            if try await patchCount("profile_contacts", query: [q("profile_id", "eq.\(id)")], body: fields) == 0 {
-                var insert = fields
-                insert["profile_id"] = id
-                try await write("POST", "profile_contacts", body: insert)
-            }
+            try await writeContacts(id, phone: client.phone, email: client.email)
         }
 
         // Addresses: add, change, remove. Only ids the server could hold are sent.
@@ -304,6 +328,16 @@ final class SupabaseDataService: DataService {
         }
 
         synced = client
+    }
+
+    /// Mobile and email, kept apart from the profile so only she can read them.
+    private func writeContacts(_ id: String, phone: String, email: String) async throws {
+        let fields: [String: Any] = ["phone": phone, "email": email]
+        if try await patchCount("profile_contacts", query: [q("profile_id", "eq.\(id)")], body: fields) == 0 {
+            var insert = fields
+            insert["profile_id"] = id
+            try await write("POST", "profile_contacts", body: insert)
+        }
     }
 
     func updatePro(_ pro: Pro) async throws -> Pro {
@@ -399,6 +433,18 @@ final class SupabaseDataService: DataService {
         try await rpcVoid("delete_my_account", [:])
         await api.forget()
         synced = nil
+    }
+
+    // MARK: Push
+
+    func registerDevice(token: String, environment: String) async throws {
+        guard await api.userID != nil else { return }
+        try await rpcVoid("register_device", ["p_token": token, "p_environment": environment])
+    }
+
+    func unregisterDevice(token: String) async throws {
+        guard await api.userID != nil else { return }
+        try await rpcVoid("unregister_device", ["p_token": token])
     }
 
     // MARK: Discovery
@@ -618,6 +664,7 @@ final class SupabaseDataService: DataService {
     func submitReview(bookingID: String, rating: Int, text: String, tipCents: Int) async throws -> Booking {
         let id = try await me()
         guard var current = try await booking(id: bookingID) else { throw DataError.notFound }
+        var paidNow = false
         if current.status == .done {
             // "Pay" on a done booking: the hold is charged, and the tip goes as its own charge.
             let pay: [String: Any] = ["booking_id": bookingID, "tip_cents": max(0, tipCents)]
@@ -626,16 +673,27 @@ final class SupabaseDataService: DataService {
             } catch let failure as SupabaseFailure {
                 throw failure.status == 401 ? DataError.notSignedIn : DataError.payFailed
             }
-            current = try await booking(id: bookingID) ?? current
+            // From here the money's gone through, so nothing below may throw anything but
+            // "paid, review didn't save".
+            paidNow = true
+            current.status = .paid
+            current.price.tipCents = max(0, tipCents)
+            let fresh = try? await booking(id: bookingID)
+            if let fresh { current = fresh }
         }
         if current.review == nil {
             let review: [String: Any] = [
                 "booking_id": bookingID, "pro_id": current.proID, "client_id": id, "rating": rating,
                 "text": text, "service_name": current.services.first?.name ?? ""
             ]
-            try await write("POST", "reviews", body: review)
+            do {
+                try await write("POST", "reviews", body: review)
+            } catch {
+                throw paidNow ? DataError.paidReviewNotSaved : error
+            }
         }
-        return try await booking(id: bookingID) ?? current
+        let after = try? await booking(id: bookingID)
+        return after ?? current
     }
 
     func flagBooking(bookingID: String, detail: String) async throws -> Booking {
@@ -702,5 +760,16 @@ final class SupabaseDataService: DataService {
                                  [q("select", "id,amount_cents,status,arrives_on,created_at,payout_items(booking_id)"),
                                   q("order", "created_at.desc")])
         return rows.map(DBMap.payout)
+    }
+
+    private struct PayoutStatusReply: Decodable { let payoutsConnected: Bool }
+
+    func payoutStatus() async throws -> Bool {
+        do {
+            let data = try await api.call("GET", "functions/v1/connect-onboarding", query: [q("status", "1")])
+            return try SupabaseJSON.decode(PayoutStatusReply.self, from: data).payoutsConnected
+        } catch {
+            throw Self.translate(error)
+        }
     }
 }

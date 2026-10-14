@@ -46,6 +46,7 @@ struct BookingsView: View {
                     .presentationDragIndicator(.visible)
             }
         }
+        .receivesPendingRoutes($path) { $0.isBooking }
     }
 
     // MARK: Upcoming

@@ -1069,6 +1069,7 @@ private struct ProfileReportSheet: View {
             .scrollDismissesKeyboard(.interactively)
         }
         .paperBackground()
+        .holdsPushRoutes()
         .presentationDetents(mode == .pick ? [.height(300)] : [.large])
         .presentationDragIndicator(.visible)
         .confirmationDialog("Block \(pro.firstName)?", isPresented: $confirmBlock, titleVisibility: .visible) {

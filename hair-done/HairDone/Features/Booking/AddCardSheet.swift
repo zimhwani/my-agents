@@ -74,6 +74,7 @@ struct AddCardSheet: View {
             }
         }
         .paperBackground()
+        .holdsPushRoutes()
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
         .onChange(of: number) { _, new in

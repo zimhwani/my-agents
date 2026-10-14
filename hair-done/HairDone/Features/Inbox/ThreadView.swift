@@ -119,8 +119,12 @@ struct ThreadView: View {
         .onAppear {
             app.markRead(thread)
             app.hideTabBar()
+            app.openThreadID = thread.id
         }
-        .onDisappear { app.showTabBar() }
+        .onDisappear {
+            app.showTabBar()
+            if app.openThreadID == thread.id { app.openThreadID = nil }
+        }
         .onChange(of: thread.messages.count) { _, _ in app.markRead(thread) }
         // No live connection yet: on the real backend an open thread looks for new messages every 8 seconds.
         .task(id: thread.id) {
@@ -246,8 +250,10 @@ struct ThreadView: View {
         sending = true
         draft = ""
         Task {
-            await app.send(line, in: thread)
+            let sent = await app.send(line, in: thread)
             sending = false
+            // Didn't go: put the words back so she doesn't have to type them again.
+            if !sent && draft.isEmpty { draft = line }
         }
     }
 }

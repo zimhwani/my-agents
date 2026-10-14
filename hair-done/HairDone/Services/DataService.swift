@@ -8,6 +8,9 @@ protocol DataService: AnyObject {
     /// Texts a six-digit code to an Australian mobile ("0412 345 678").
     func sendCode(phone: String) async throws
     func verifyCode(phone: String, code: String) async throws -> Client
+    /// Emails a six-digit code. The account is made the first time.
+    func sendEmailCode(email: String) async throws
+    func verifyEmailCode(email: String, code: String) async throws -> Client
     func signInWithApple(_ credential: AppleCredential) async throws -> Client
     /// The signed-in client, if there's a session to pick up. Nil when signed out.
     func currentClient() async -> Client?
@@ -18,6 +21,12 @@ protocol DataService: AnyObject {
     func updatePro(_ pro: Pro) async throws -> Pro
     func signOut() async
     func deleteAccount() async throws
+
+    // Push
+    /// Ties this phone's APNs token (hex) to the signed-in account. `environment` is "sandbox" or "production".
+    func registerDevice(token: String, environment: String) async throws
+    /// Takes the token off the account. Called before signing out, while there's still a session.
+    func unregisterDevice(token: String) async throws
 
     // Discovery
     func pros(near coordinate: CLLocationCoordinate2D, category: Category?) async throws -> [Pro]
@@ -40,6 +49,7 @@ protocol DataService: AnyObject {
     func updateStatus(bookingID: String, to status: BookingStatus, reason: String?) async throws -> Booking
     func reschedule(bookingID: String, to start: Date) async throws -> Booking
     /// Pays for a done booking (with the tip) if it isn't paid yet, then leaves the review.
+    /// If the payment goes through and the review doesn't, throws `DataError.paidReviewNotSaved`.
     func submitReview(bookingID: String, rating: Int, text: String, tipCents: Int) async throws -> Booking
     /// "Something wrong?" on a done booking: holds off the charge while a person looks.
     func flagBooking(bookingID: String, detail: String) async throws -> Booking
@@ -57,6 +67,8 @@ protocol DataService: AnyObject {
 
     // Pro side
     func payouts(proID: String) async throws -> [Payout]
+    /// Asks Stripe (through the server) whether payouts are on yet. The server records the answer too.
+    func payoutStatus() async throws -> Bool
 }
 
 /// What the booking flow builds up before it's confirmed.
@@ -84,6 +96,8 @@ enum DataError: LocalizedError {
     case wrongCode
     case tooManyTries
     case codeNotSent
+    case emailNotSent
+    case codeExpired
     case outsideTravelArea
     case servicesChanged
     case ownBooking
@@ -91,6 +105,7 @@ enum DataError: LocalizedError {
     case cantReschedule
     case liveBooking
     case payFailed
+    case paidReviewNotSaved
 
     var errorDescription: String? {
         switch self {
@@ -100,8 +115,10 @@ enum DataError: LocalizedError {
         case .network: return "That didn't go through. Check your connection and try again."
         case .server: return "Something's up on our end. Give it a minute."
         case .wrongCode: return "That code's not right. Have another look."
-        case .tooManyTries: return "Too many goes. Wait a couple of minutes and try again."
+        case .tooManyTries: return "Too many tries. Wait a minute and ask for a new code."
         case .codeNotSent: return "We couldn't text that number. Check it, or use Apple."
+        case .emailNotSent: return "We couldn't send a code to that email. Check it, or use Apple."
+        case .codeExpired: return "That code's expired. We've sent a new one."
         case .outsideTravelArea: return "That's outside where she travels. Nothing's been charged. Pick another address, or someone closer."
         case .servicesChanged: return "Her prices changed while you were booking. Nothing's been charged. Go back and pick again."
         case .ownBooking: return "That's your own profile. Nothing's been charged. Book someone else."
@@ -109,6 +126,7 @@ enum DataError: LocalizedError {
         case .cantReschedule: return "The time didn't change. Your hold's the same as before. Message her to sort a new one."
         case .liveBooking: return "You've still got a booking that isn't finished. Nothing's been deleted. Once it's paid or cancelled, try again."
         case .payFailed: return "That didn't go through. Your card hasn't been charged. Try again in a minute."
+        case .paidReviewNotSaved: return "Paid. Your review didn't save. Try again from the booking."
         }
     }
 }

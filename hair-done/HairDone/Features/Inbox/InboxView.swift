@@ -3,13 +3,14 @@ import SwiftUI
 /// Threads, one per booking. The same screen on both sides; only who's "the other person" changes.
 struct InboxView: View {
     @Environment(AppState.self) private var app
+    @State private var path = NavigationPath()
 
     private var sortedThreads: [MessageThread] {
         app.threads.sorted { ($0.last?.sentAt ?? .distantPast) > ($1.last?.sentAt ?? .distantPast) }
     }
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $path) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     Text("Inbox")
@@ -40,6 +41,7 @@ struct InboxView: View {
             .toolbar(.hidden, for: .navigationBar)
             .hdDestinations()
         }
+        .receivesPendingRoutes($path) { $0.isThread }
     }
 
     private func booking(for thread: MessageThread) -> Booking? {

@@ -212,6 +212,7 @@ struct DeclineSheet: View {
             .padding(.vertical, Space.l)
         }
         .paperBackground()
+        .holdsPushRoutes()
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
     }
@@ -221,6 +222,7 @@ struct DeclineSheet: View {
         busy = true
         defer { busy = false }
         let reason = isOther ? other.trimmingCharacters(in: .whitespacesAndNewlines) : ProFlow.declineReasons[picked]
+        // A failure shows as a toast on this sheet (holdsPushRoutes carries it) and the sheet stays.
         if await app.update(booking, to: .declined, reason: reason) != nil {
             app.show("Declined. She's been told and her hold's released.")
             dismiss()
@@ -422,6 +424,7 @@ struct ServiceEditorSheet: View {
             .padding(.vertical, Space.l)
         }
         .paperBackground()
+        .holdsPushRoutes()
         .presentationDragIndicator(.visible)
     }
 }

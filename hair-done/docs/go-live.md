@@ -1,7 +1,7 @@
 # Going live: the settings only you can switch on
 
 The backend is built and deployed: the Supabase project `hair-done` (Sydney, ref `yohqeunmgrxyakviofua`),
-its database rules, six functions and two timers. These are the switches in Stripe, Supabase and Apple
+its database rules, seven functions and three timers. These are the switches in Stripe, Supabase and Apple
 that need your logins. Do them in test mode first. Nothing here needs code.
 
 Never paste a secret key into a chat, an issue or the repo. They go straight into the dashboards below.
@@ -62,6 +62,23 @@ Never paste a secret key into a chat, an issue or the repo. They go straight int
 - **Apple.** Turn it on. In **Client IDs** put `com.keithchinyanda.hairdone`. The app signs in natively, so no
   secret key is needed for the iPhone.
 - **URL configuration.** Set the site URL to `hairdone://auth`.
+- **Email codes** (the main way in, with Apple). Run `tools/setup-email.sh`. Without a Resend key it uses
+  Supabase's own mailer, which only emails your Supabase team members: fine for testing on yourself. For
+  real people, make a free Resend account, verify your domain there (Resend → Domains, then the DNS
+  records it lists), and run the script again with the Resend key and an address on that domain. It
+  sets a 6-digit code that lasts an hour, and the "Your Hair Done code" email.
+- An email account and a phone account are separate people for now. Sign in the same way each time.
+
+## 3b. Push notifications
+
+1. developer.apple.com → Keys → + → tick **Apple Push Notifications service (APNs)** → download the
+   `AuthKey_….p8`. Apple lets you download it once.
+2. Identifiers → `com.keithchinyanda.hairdone` → tick **Push Notifications**.
+3. Run `tools/setup-push.sh ~/Downloads/AuthKey_….p8`. It reads the key from the file and stores it as
+   the project's function secrets. Nothing to paste.
+
+Until then the `notify` function answers "not configured" and nothing is sent; the rest of the app works.
+Bookings, messages and reminders (unanswered requests, the day before, two hours before) all push.
 
 ## 4. The app on your Mac
 
@@ -88,7 +105,7 @@ There's no admin screen yet. Until there is, you do these in Supabase → SQL ed
   `select * from reports where handled_at is null order by created_at;`
 - **See stuck payments:** `select reference, status, hold_state, settle_error from bookings where settle_error is not null;`
 
-A pro can't be booked until she's finished Stripe payout setup in the app (Pro mode → payouts). In test
+A pro isn't shown to clients, or bookable, until she's verified (above) and has finished Stripe payout setup in the app (Pro mode → payouts). In test
 mode, Stripe's onboarding accepts its test data: phone `000 000 0000`, code `000000`, and the test bank details it offers.
 
 ## 6. Try it end to end (test mode)
@@ -105,6 +122,7 @@ Then repeat with a late cancel and a request left unanswered, to see the timers 
 ## 7. Before real money
 
 - Switch Stripe to live mode. Repeat steps 1.2 and 1.3 with the live keys and live webhook secrets.
-- Twilio live sender approved for Australia.
+- Email codes through Resend on your own domain (step 3), so they reach everyone.
+- Twilio live sender approved for Australia, if you keep phone sign-in.
 - Terms, privacy policy and the pro agreement, reviewed by a lawyer, linked from the app and the App Store listing.
 - The Supabase project on a paid plan. Free projects pause after a week without traffic, and the timers stop with them.

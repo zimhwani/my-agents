@@ -234,7 +234,8 @@ struct ProProfileEditView: View {
         var cleaned = p
         cleaned.firstName = p.firstName.trimmingCharacters(in: .whitespaces)
         cleaned.suburb = p.suburb.trimmingCharacters(in: .whitespaces)
-        await app.saveProSelf(cleaned)
+        // Didn't save: the toast says why, and her edits stay on screen to try again.
+        guard await app.saveProSelf(cleaned) else { return }
         Haptics.success()
         app.show("Saved.")
         dismiss()

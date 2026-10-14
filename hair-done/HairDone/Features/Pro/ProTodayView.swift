@@ -5,6 +5,8 @@ struct ProTodayView: View {
     @Environment(AppState.self) private var app
     @State private var declining: Booking? = nil
     @State private var accepting: String? = nil
+    @State private var path = NavigationPath()
+    @State private var askForPush = false
 
     private var today: Date { Date() }
     private var pro: Pro? { app.proSelf }
@@ -38,7 +40,7 @@ struct ProTodayView: View {
     private var pending: Payout? { app.payouts.first { $0.status == .pending } }
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $path) {
             ScrollView {
                 VStack(alignment: .leading, spacing: Space.section) {
                     header
@@ -60,6 +62,15 @@ struct ProTodayView: View {
             .sheet(item: $declining) { b in
                 DeclineSheet(booking: b, clientName: app.clientName(b.clientID))
             }
+            .sheet(isPresented: $askForPush) { PushPrePrompt(side: .pro) }
+        }
+        .receivesPendingRoutes($path) { $0.isProBooking }
+        // Her first time on Today (straight after pro onboarding, usually): ask about notifications,
+        // because requests lapse if she doesn't see them.
+        .task {
+            guard await app.shouldAskForPush(.pro) else { return }
+            try? await Task.sleep(for: .seconds(0.8))
+            askForPush = true
         }
     }
 

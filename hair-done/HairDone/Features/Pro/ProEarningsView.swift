@@ -249,27 +249,82 @@ struct PayoutDetailsSheet: View {
             .padding(.vertical, Space.l)
         }
         .paperBackground()
+        .holdsPushRoutes()
         .presentationDetents([.medium])
         .presentationDragIndicator(.visible)
+        .payoutNoticeAlert()
     }
 
     private func open() async {
         guard let pro = app.proSelf else { return }
         fetching = true
         defer { fetching = false }
-        do {
-            let url = try await app.payments.payoutOnboardingURL(proID: pro.id)
-            openURL(url)
-            // The real answer comes back from Stripe (AppState.payoutsReturned); the sample data says yes now.
-            if !connected && !app.isLive {
-                var updated = pro
-                updated.payoutsConnected = true
-                await app.saveProSelf(updated)
-                app.show("Payouts on. Daily, to your bank.")
-            }
-        } catch {
-            app.show("That didn't work. Try again.")
+        guard let url = await app.payoutLink() else { return }
+        openURL(url) { accepted in
+            if !accepted { app.payoutNotice = .didntOpen }
         }
+        // The real answer comes back from Stripe (AppState.payoutsReturned); the sample data says yes now.
+        if !connected && !app.isLive {
+            var updated = pro
+            updated.payoutsConnected = true
+            if await app.saveProSelf(updated) { app.show("Payouts on. Daily, to your bank.") }
+        }
+    }
+}
+
+/// The alert for `AppState.payoutNotice`. The payout screens (onboarding, Payout details) show it
+/// themselves; the root shows it only when neither is up, since an alert can't show under a sheet.
+struct PayoutNoticeAlert: ViewModifier {
+    @Environment(AppState.self) private var app
+    @Environment(\.openURL) private var openURL
+    var isFallback: Bool
+
+    private var isShown: Binding<Bool> {
+        Binding(
+            get: { app.payoutNotice != nil && (!isFallback || app.payoutSurfaces == 0) },
+            set: { if !$0 { app.payoutNotice = nil } }
+        )
+    }
+
+    private var title: String {
+        switch app.payoutNotice {
+        case .didntOpen: return "Stripe didn't open. Try again in a minute."
+        case .stillChecking: return "Stripe's still checking your details. This usually takes a minute."
+        case .linkExpired: return "That Stripe link ran out."
+        case nil: return ""
+        }
+    }
+
+    func body(content: Content) -> some View {
+        content
+            .alert(Text(title), isPresented: isShown) {
+                if app.payoutNotice == .linkExpired {
+                    Button("Open Stripe") { Task { await reopen() } }
+                    Button("Not now", role: .cancel) {}
+                } else {
+                    Button("Got it", role: .cancel) {}
+                }
+            } message: {
+                if app.payoutNotice == .linkExpired {
+                    Text("Open it again to pick up where you left off.")
+                }
+            }
+            .onAppear { if !isFallback { app.payoutSurfaces += 1 } }
+            .onDisappear { if !isFallback { app.payoutSurfaces = max(0, app.payoutSurfaces - 1) } }
+    }
+
+    private func reopen() async {
+        guard let url = await app.payoutLink() else { return }
+        openURL(url) { accepted in
+            if !accepted { app.payoutNotice = .didntOpen }
+        }
+    }
+}
+
+extension View {
+    /// See `PayoutNoticeAlert`. `fallback: true` on the root only.
+    func payoutNoticeAlert(fallback: Bool = false) -> some View {
+        modifier(PayoutNoticeAlert(isFallback: fallback))
     }
 }
 

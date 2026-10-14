@@ -23,6 +23,27 @@ struct PendingCheckout {
     }
 }
 
+/// How leaving a review went. Paying and reviewing are separate on the server, so the money can
+/// go through when the review doesn't.
+enum ReviewOutcome {
+    case saved
+    /// Paid, but the review needs another go. The booking shows as paid and a toast says so.
+    case paidOnly
+    case failed(String)
+}
+
+/// Something to say about payout setup, as an alert on whichever screen is up.
+enum PayoutNotice: Identifiable {
+    /// The link didn't come back from the server, or iOS wouldn't open it.
+    case didntOpen
+    /// Back from Stripe, finished, but Stripe hasn't switched payouts on yet.
+    case stillChecking
+    /// Back from Stripe through `/refresh`: the link ran out before she finished.
+    case linkExpired
+
+    var id: Self { self }
+}
+
 /// The one shared object. Views read from it and call its methods; it talks to the services.
 @Observable
 final class AppState {
@@ -56,10 +77,29 @@ final class AppState {
 
     var isLoadingPros = false
     var lastError: String? = nil
+    /// Why the last sign-in code didn't work, when it was one of ours (wrong, expired, too many tries).
+    var signInFailure: DataError? = nil
     /// A short line shown in a toast at the bottom of the screen, then cleared.
     var toast: String? = nil
 
     private var pendingCheckout: PendingCheckout? = nil
+
+    /// The thread on screen right now, so a push for it doesn't also show as a banner.
+    var openThreadID: String? = nil
+    /// A screen a notification asked for. The tab it belongs to pushes it and clears this.
+    var pendingRoute: Route? = nil
+    /// A tapped notification that's waiting: she wasn't signed in yet, or she was in the middle of
+    /// something (see `busySurfaces`). Opened once she's free.
+    private var pendingPush: PushTarget? = nil
+    /// Screens she's in the middle of (the booking flow, pro onboarding, payout setup, sheets with
+    /// unsaved input). While any is up, a tapped notification waits instead of switching sides or
+    /// moving things underneath her. Counted by `.holdsPushRoutes()`.
+    var busySurfaces = 0
+
+    /// Shown as an alert by the payout screens, or by the root when none of them is up.
+    var payoutNotice: PayoutNotice? = nil
+    /// How many payout screens are showing; the root only shows `payoutNotice` when it's 0.
+    var payoutSurfaces = 0
 
     /// Set when the client taps a pro from anywhere; the home tab pushes it.
     var selectedTab: ClientTab = .home
@@ -109,11 +149,19 @@ final class AppState {
 
     /// Picks up a saved session at launch. Straight to Home if she's finished onboarding before.
     func restoreSession() async {
-        defer { isRestoring = false }
-        guard let restored = await data.currentClient() else { return }
+        guard let restored = await data.currentClient() else {
+            isRestoring = false
+            return
+        }
         client = restored
         proSelf = await data.currentPro()
         stage = restored.firstName.isEmpty ? .signedIn : .ready
+        isRestoring = false
+        registerForPush()
+        if stage == .ready, let waiting = pendingPush {
+            pendingPush = nil
+            open(waiting)
+        }
     }
 
     /// Texts a code. False (with `lastError` set) if it didn't go.
@@ -132,19 +180,49 @@ final class AppState {
     func verifyCode(_ code: String, phone: String) async {
         do {
             client = try await data.verifyCode(phone: phone, code: code)
-            proSelf = await data.currentPro()
+            await signedIn()
+        } catch { signInFailed(error) }
+    }
+
+    /// Emails a code. False (with `lastError` and `signInFailure` set) if it didn't go.
+    @discardableResult
+    func sendEmailCode(to email: String) async -> Bool {
+        do {
+            try await data.sendEmailCode(email: email)
             lastError = nil
-            stage = .signedIn
-        } catch { lastError = error.localizedDescription }
+            signInFailure = nil
+            return true
+        } catch {
+            signInFailed(error)
+            return false
+        }
+    }
+
+    func verifyEmailCode(_ code: String, email: String) async {
+        do {
+            client = try await data.verifyEmailCode(email: email, code: code)
+            await signedIn()
+        } catch { signInFailed(error) }
     }
 
     func signInWithApple(_ credential: AppleCredential) async {
         do {
             client = try await data.signInWithApple(credential)
-            proSelf = await data.currentPro()
-            lastError = nil
-            stage = .signedIn
-        } catch { lastError = error.localizedDescription }
+            await signedIn()
+        } catch { signInFailed(error) }
+    }
+
+    private func signedIn() async {
+        proSelf = await data.currentPro()
+        lastError = nil
+        signInFailure = nil
+        stage = .signedIn
+        registerForPush()
+    }
+
+    private func signInFailed(_ error: Error) {
+        lastError = error.localizedDescription
+        signInFailure = error as? DataError
     }
 
     func finishOnboarding() {
@@ -159,7 +237,12 @@ final class AppState {
 
     func signOut() {
         let data = self.data
-        Task { await data.signOut() }
+        // The token comes off the account first, while there's still a session to do it with.
+        let token = PushCenter.savedToken
+        Task {
+            if let token { try? await data.unregisterDevice(token: token) }
+            await data.signOut()
+        }
         stage = .welcome
         mode = .client
         client = nil
@@ -167,6 +250,7 @@ final class AppState {
         bookings = []; proBookings = []; threads = []; pros = []; payouts = []
         knownPros = [:]; proDetails = [:]; clientNames = [:]; blockedIDs = []
         pendingCheckout = nil
+        pendingRoute = nil; pendingPush = nil; openThreadID = nil
     }
 
     /// App Store rule: an account can be deleted from the app. False (with `lastError`) if it wasn't.
@@ -266,17 +350,35 @@ final class AppState {
         proDetails[id] = full
     }
 
-    /// Back from Stripe's payout setup. Stripe tells the server a moment later, so look a few times.
-    func payoutsReturned() async {
-        for _ in 0..<3 {
-            if let fresh = await data.currentPro() {
-                proSelf = fresh
-                if fresh.payoutsConnected {
-                    show("Payouts on. Daily, to your bank.")
-                    return
-                }
-            }
-            try? await Task.sleep(for: .seconds(3))
+    /// The Stripe link for payout setup. Nil, with the "didn't open" alert up, if it didn't come.
+    func payoutLink() async -> URL? {
+        do {
+            return try await payments.payoutOnboardingURL(proID: proSelf?.id ?? client?.id ?? "new")
+        } catch {
+            payoutNotice = .didntOpen
+            return nil
+        }
+    }
+
+    /// Back from Stripe's payout setup: `finished` for `hairdone://payouts/done`, false for `/refresh`
+    /// (the link ran out). The server asks Stripe directly; when she's finished, Stripe can take a
+    /// moment to switch payouts on, so it looks a few times.
+    func payoutsReturned(finished: Bool) async {
+        var answer: Bool? = nil
+        for attempt in 0..<(finished ? 3 : 1) {
+            let reply = try? await data.payoutStatus()
+            if let reply { answer = reply }
+            if answer == true { break }
+            if attempt < 2 && finished { try? await Task.sleep(for: .seconds(3)) }
+        }
+        if let answer, var pro = proSelf, pro.payoutsConnected != answer {
+            pro.payoutsConnected = answer
+            proSelf = pro
+        }
+        if answer == true {
+            show("Payouts on. Daily, to your bank.")
+        } else {
+            payoutNotice = finished ? .stillChecking : .linkExpired
         }
     }
 
@@ -385,17 +487,29 @@ final class AppState {
     }
 
     /// Leaves the review. On a done booking that isn't paid yet, this is also "Pay": the charge and any tip go through first.
-    @discardableResult
-    func review(_ booking: Booking, rating: Int, text: String, tipCents: Int) async -> Bool {
+    /// If the payment goes through and the review doesn't, the booking still shows as paid.
+    func review(_ booking: Booking, rating: Int, text: String, tipCents: Int) async -> ReviewOutcome {
         do {
             replace(try await data.submitReview(bookingID: booking.id, rating: rating, text: text, tipCents: tipCents))
             Haptics.success()
             await loadPros()
             if isLive { await loadProDetail(booking.proID) }
-            return true
+            return .saved
+        } catch DataError.paidReviewNotSaved {
+            let fresh = try? await data.booking(id: booking.id)
+            if let fresh {
+                replace(fresh)
+            } else {
+                var paid = booking
+                paid.status = .paid
+                replace(paid)
+            }
+            Haptics.success()
+            show(DataError.paidReviewNotSaved.errorDescription ?? "")
+            return .paidOnly
         } catch {
-            fail(error)
-            return false
+            lastError = error.localizedDescription
+            return .failed(error.localizedDescription)
         }
     }
 
@@ -418,13 +532,19 @@ final class AppState {
 
     // MARK: Messaging
 
-    func send(_ text: String, in thread: MessageThread) async {
+    /// False if it didn't send, so the composer can put the words back.
+    @discardableResult
+    func send(_ text: String, in thread: MessageThread) async -> Bool {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
+        guard !trimmed.isEmpty else { return false }
         do {
             let updated = try await data.send(text: trimmed, threadID: thread.id, senderID: userID)
             if let i = threads.firstIndex(where: { $0.id == thread.id }) { threads[i] = updated }
-        } catch { fail(error) }
+            return true
+        } catch {
+            fail(error)
+            return false
+        }
     }
 
     /// Picks up new messages in an open thread.
@@ -481,9 +601,188 @@ final class AppState {
 
     // MARK: Pro side
 
-    func saveProSelf(_ pro: Pro) async {
+    /// Shows the change straight away. False (with `lastError` set, and the old profile back) if it didn't save.
+    @discardableResult
+    func saveProSelf(_ pro: Pro) async -> Bool {
+        let before = proSelf
         proSelf = pro
-        do { proSelf = try await data.updatePro(pro) } catch { fail(error) }
+        do {
+            proSelf = try await data.updatePro(pro)
+            return true
+        } catch {
+            proSelf = before
+            fail(error)
+            return false
+        }
+    }
+
+    // MARK: Push notifications
+
+    /// After sign-in and whenever the app comes forward: if she's allowed notifications, get the
+    /// token (again). It lands in `deviceTokenArrived`.
+    func registerForPush() {
+        guard client != nil else { return }
+        PushCenter.shared.registerIfAllowed()
+    }
+
+    /// Back in the foreground: register for pushes, and catch up on bookings, messages and (for a
+    /// pro) requests, so nothing's missed even without a push.
+    func becameActive() {
+        guard stage != .welcome, !isRestoring else { return }
+        registerForPush()
+        guard stage == .ready else { return }
+        Task {
+            await self.loadBookings(people: false)
+            await self.loadThreads(people: false)
+            if self.proSelf != nil { await self.loadProSide(people: false) }
+            await self.loadPeople()
+        }
+    }
+
+    /// One of the `busySurfaces` closed. If that was the last and a tap is waiting, open it now.
+    func surfaceClosed() {
+        busySurfaces = max(0, busySurfaces - 1)
+        guard busySurfaces == 0, stage == .ready, let waiting = pendingPush else { return }
+        pendingPush = nil
+        Task { @MainActor in
+            // Let the sheet finish going before the tabs move.
+            try? await Task.sleep(for: .milliseconds(450))
+            self.open(waiting)
+        }
+    }
+
+    func deviceTokenArrived(_ token: String) {
+        guard client != nil else { return }
+        let data = self.data
+        Task { try? await data.registerDevice(token: token, environment: PushCenter.environment) }
+    }
+
+    /// Our pre-prompt for this side, if it's never been shown and iOS hasn't asked yet.
+    func shouldAskForPush(_ side: PushAskSide) async -> Bool {
+        guard client != nil else { return false }
+        return await PushCenter.shared.shouldAsk(side)
+    }
+
+    /// A notification came in while the app's open: refresh whatever it's about.
+    func pushArrived(_ target: PushTarget) {
+        guard stage == .ready else { return }
+        Task {
+            switch target.kind {
+            case .booking:
+                await self.loadBookings(people: false)
+                await self.loadProSide(people: false)
+            case .message:
+                await self.loadThreads(people: false)
+            }
+            await self.loadPeople()
+        }
+    }
+
+    /// A notification was tapped: switch to the side it's for and open the booking or the thread.
+    func open(_ target: PushTarget) {
+        guard stage == .ready, !isRestoring, client != nil else {
+            pendingPush = target
+            return
+        }
+        // Never switch sides or move things under her while she's in the middle of something.
+        if busySurfaces > 0 {
+            pendingPush = target
+            Task { await self.sayWaiting(target) }
+            return
+        }
+        Task { await self.route(to: target) }
+    }
+
+    /// "New request from Ruby. We'll open it when you're done here." Shown on the sheet she's in.
+    private func sayWaiting(_ target: PushTarget) async {
+        let side = target.side ?? mode
+        var name: String? = nil
+        var isRequest = false
+        var found: Booking? = nil
+        if let id = target.bookingID { found = try? await data.booking(id: id) }
+        if let b = found {
+            isRequest = b.status == .requested
+            if side == .pro {
+                if isLive && clientNames[b.clientID] == nil {
+                    let names = (try? await data.clientNames(ids: [b.clientID])) ?? [:]
+                    clientNames.merge(names) { _, new in new }
+                }
+                let n = clientName(b.clientID)
+                name = n == "Client" ? nil : n
+            } else {
+                name = pro(b.proID)?.firstName
+            }
+        }
+        let lead: String
+        switch target.kind {
+        case .message:
+            lead = name.map { "New message from \($0)." } ?? "New message."
+        case .booking:
+            if side == .pro {
+                lead = isRequest ? (name.map { "New request from \($0)." } ?? "New request.")
+                                 : (name.map { "Update on \($0)'s booking." } ?? "Update on a booking.")
+            } else {
+                lead = name.map { "\($0) has an update on your booking." } ?? "An update on your booking."
+            }
+        }
+        show("\(lead) We'll open it when you're done here.")
+    }
+
+    @MainActor
+    private func route(to target: PushTarget) async {
+        switch target.kind {
+        case .message:
+            if let threadID = target.threadID {
+                let which: AppMode
+                if let given = target.side { which = given } else { which = await side(forThread: threadID) }
+                enter(which)
+                await loadThreads()
+                if mode == .pro { selectedProTab = .inbox } else { selectedTab = .inbox }
+                pendingRoute = .thread(threadID)
+            } else if let bookingID = target.bookingID {
+                await route(toBooking: bookingID, side: target.side)
+            }
+        case .booking:
+            if let bookingID = target.bookingID { await route(toBooking: bookingID, side: target.side) }
+        }
+    }
+
+    /// A pro's own job opens on her side (Today, then the job); anything else on the client side.
+    /// `side` comes from the push; without it, the booking says whose it is.
+    @MainActor
+    private func route(toBooking id: String, side: AppMode?) async {
+        if let side {
+            enter(side)
+        } else {
+            let found = try? await data.booking(id: id)
+            let isHers = found != nil && proSelf != nil && found?.proID == proSelf?.id
+            enter(isHers ? .pro : .client)
+        }
+        if mode == .pro {
+            await loadProSide()
+            selectedProTab = .today
+            pendingRoute = .proBooking(id)
+        } else {
+            await loadBookings()
+            selectedTab = .bookings
+            pendingRoute = .booking(id)
+        }
+    }
+
+    private func side(forThread id: String) async -> AppMode {
+        guard let me = proSelf?.id else { return .client }
+        if let known = threads.first(where: { $0.id == id }) { return known.proID == me ? .pro : .client }
+        let fetched = try? await data.thread(id: id)
+        if let fetched { return fetched.proID == me ? .pro : .client }
+        return mode
+    }
+
+    /// Switches sides for a notification, without the haptic and refresh a tap on the switch gets.
+    @MainActor
+    private func enter(_ side: AppMode) {
+        guard side != mode else { return }
+        if side == .pro && proSelf == nil { return }
+        withAnimation(Motion.spring) { mode = side }
     }
 
     func show(_ message: String) {

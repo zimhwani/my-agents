@@ -310,6 +310,18 @@ actor SupabaseAPI {
         return try adopt(data)
     }
 
+    /// Emails a six-digit code, making the account if it's new.
+    func sendEmailCode(email: String) async throws {
+        let body = try SupabaseJSON.body(["email": email, "create_user": true])
+        _ = try await call("POST", "auth/v1/otp", body: body, signedIn: false)
+    }
+
+    func verifyEmailCode(email: String, code: String) async throws -> SupabaseSession {
+        let body = try SupabaseJSON.body(["email": email, "token": code, "type": "email"])
+        let data = try await call("POST", "auth/v1/verify", body: body, signedIn: false)
+        return try adopt(data)
+    }
+
     /// Sign in with Apple: the identity token and the raw nonce whose hash went into the request.
     func signIn(provider: String, idToken: String, nonce: String) async throws -> SupabaseSession {
         let body = try SupabaseJSON.body(["provider": provider, "id_token": idToken, "nonce": nonce])
