@@ -83,6 +83,12 @@ jobs:
             -destination 'generic/platform=iOS Simulator' \
             -derivedDataPath build CODE_SIGNING_ALLOWED=NO > build.log 2>&1 || status=$?
           grep -E ':[0-9]+:[0-9]+: (error|warning)|BUILD (SUCCEEDED|FAILED)' build.log | sort -u | head -300 || true
+          if [ $status -ne 0 ]; then
+            echo "---- other errors ----"
+            grep -E '(^|[^a-z])error:|fatal|failed with a nonzero exit code|\*\* BUILD' build.log | grep -v -E ':[0-9]+:[0-9]+: ' | sort -u | head -80 || true
+            echo "---- last lines ----"
+            tail -60 build.log
+          fi
           exit $status
 
       - name: API key
