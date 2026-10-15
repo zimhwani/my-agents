@@ -268,7 +268,7 @@ private struct OnboardingWelcome: View {
 
                     proLink
 
-                    Text("By continuing you agree to the [terms](https://hairdone.app/terms) and [privacy policy](https://hairdone.app/privacy).")
+                    Text("By continuing you agree to the [terms](https://hairdonenailsdone.app/terms) and [privacy policy](https://hairdonenailsdone.app/privacy).")
                         .font(HDFont.caption)
                         .foregroundStyle(onVideoSoft)
                         .tint(onVideo)

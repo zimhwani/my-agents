@@ -4,18 +4,16 @@ import SwiftUI
 /// The first booking to come is the same ink Next up block Home shows.
 struct BookingsView: View {
     @Environment(AppState.self) private var app
-    @State private var path = NavigationPath()
+    /// Kept on AppState so switching sides and back lands her where she was.
+    private var path: Binding<NavigationPath> { app.path(for: ClientTab.bookings) }
     @State private var segment: Segment = .upcoming
     @State private var reviewing: Booking? = nil
     @State private var paying: Booking? = nil
-    /// False until the first load here has come back, so the live backend shows rows loading
-    /// instead of flashing "Nothing on".
-    @State private var loaded = false
 
     enum Segment: String, CaseIterable { case upcoming = "Upcoming", past = "Past" }
 
     var body: some View {
-        NavigationStack(path: $path) {
+        NavigationStack(path: path) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     header
@@ -35,8 +33,7 @@ struct BookingsView: View {
             .paperBackground()
             .refreshable { await app.loadBookings() }
             .task {
-                if app.isLive && !loaded { await app.loadBookings() }
-                loaded = true
+                if !app.hasLoadedBookings && !app.isLoadingBookings { await app.loadBookings() }
             }
             .toolbar(.hidden, for: .navigationBar)
             .hdDestinations()
@@ -48,7 +45,7 @@ struct BookingsView: View {
             }
             .animation(Motion.gentle, value: app.isOffline)
         }
-        .receivesPendingRoutes($path) { $0.isBooking }
+        .receivesPendingRoutes(path) { $0.isBooking }
     }
 
     // MARK: Header
@@ -90,7 +87,8 @@ struct BookingsView: View {
         }
     }
 
-    private var isLoading: Bool { app.isLive && !loaded && app.bookings.isEmpty }
+    /// Rows loading until the first load comes back, instead of flashing "Nothing on".
+    private var isLoading: Bool { app.showsBookingsSkeleton }
 
     // MARK: Upcoming
 
@@ -114,7 +112,7 @@ struct BookingsView: View {
             VStack(alignment: .leading, spacing: 0) {
                 if let first = list.first {
                     HomeNextUpCard(booking: first, pro: app.pro(first.proID)) {
-                        path.append(Route.booking(first.id))
+                        path.wrappedValue.append(Route.booking(first.id))
                     }
                     .padding(.bottom, Space.m)
                 }
@@ -146,7 +144,7 @@ struct BookingsView: View {
                 if let first = app.awaitingReview.first { nudge(first).padding(.bottom, Space.s) }
                 ForEach(list) { booking in
                     let pro = app.pro(booking.proID)
-                    BookingRow(booking: booking, pro: pro, isPast: true, onBookAgain: pro == nil ? nil : { if let p = pro { path.append(Route.pro(p)) } })
+                    BookingRow(booking: booking, pro: pro, isPast: true, onBookAgain: pro == nil ? nil : { if let p = pro { path.wrappedValue.append(Route.pro(p)) } })
                 }
             }
             .screenGutter()
@@ -233,7 +231,7 @@ struct BookingsView: View {
                                              width: 150,
                                              title: pro.firstName,
                                              line: freeLine(pro)) {
-                                path.append(Route.pro(pro))
+                                path.wrappedValue.append(Route.pro(pro))
                             }
                         }
                     }

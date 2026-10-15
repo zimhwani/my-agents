@@ -49,7 +49,10 @@ struct BookingDetailView: View {
         return ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 if app.isOffline { OfflineBar() }
+                // The back glyph sits bare on the photo and scrolls away with it, so it never floats
+                // over the paper below.
                 cover(booking, pro: pro)
+                    .hdNavHeader(nil, tone: .onPhoto) { simulateMenu(booking) }
                 VStack(alignment: .leading, spacing: Space.section) {
                     header(booking, pro: pro, proName: proName)
                     actions(booking, pro: pro, proName: proName)
@@ -67,7 +70,7 @@ struct BookingDetailView: View {
         }
         .paperBackground()
         .refreshable { await app.loadBookings() }
-        .hdNavHeader(nil) { simulateMenu(booking) }
+        .toolbar(.hidden, for: .navigationBar)
         .animation(Motion.gentle, value: app.isOffline)
         // On the day, between confirmed and done, look for her moves every 30 seconds.
         .task(id: booking.status) {

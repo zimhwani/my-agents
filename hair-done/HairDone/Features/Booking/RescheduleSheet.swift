@@ -13,14 +13,19 @@ struct RescheduleSheet: View {
     @State private var problem: String? = nil
     @State private var reload = 0
 
-    /// A placed card hold can't stretch past six days from now (`reschedule_booking` says
-    /// `too_far_to_move`). The app doesn't know the hold state, so every booking gets the limit:
-    /// seven columns (today plus six), and the last day's times stop at exactly now + 6 days.
-    private static let daysAhead = 7
+    /// A placed card hold (`hold_state` 'held') can't stretch past six days from now
+    /// (`reschedule_booking` says `too_far_to_move`). Then the strip is seven columns (today plus
+    /// six) and the last day's times stop at exactly now + 6 days. Otherwise the normal two weeks.
+    private static let heldDays = 7
+    private static let normalDays = 14
     private static let holdLimit: TimeInterval = 6 * 24 * 60 * 60
 
-    /// The latest start the server will take. Computed on each render so it never goes stale.
-    private var latestStart: Date { Date().addingTimeInterval(RescheduleSheet.holdLimit) }
+    private var isHeld: Bool { booking.holdState == "held" }
+    private var daysAhead: Int { isHeld ? RescheduleSheet.heldDays : RescheduleSheet.normalDays }
+
+    /// The latest start the server will take while the hold is placed; nil when there's no limit.
+    /// Computed on each render so it never goes stale.
+    private var latestStart: Date? { isHeld ? Date().addingTimeInterval(RescheduleSheet.holdLimit) : nil }
 
     private var tooLate: Bool { booking.hoursUntil < Double(Fees.freeCancellationHours) }
 
@@ -105,7 +110,7 @@ struct RescheduleSheet: View {
                     }
                     .screenGutter()
 
-                    SlotPicker(pro: pro, minutes: booking.minutes, selected: $newStart, days: RescheduleSheet.daysAhead, reload: reload, latestStart: latestStart)
+                    SlotPicker(pro: pro, minutes: booking.minutes, selected: $newStart, days: daysAhead, reload: reload, latestStart: latestStart)
 
                     if let problem {
                         FieldMessage(text: problem)
@@ -133,7 +138,8 @@ struct RescheduleSheet: View {
 
     private var canMove: Bool {
         guard let newStart, !app.isOffline else { return false }
-        return newStart != booking.start && newStart <= latestStart
+        if let latestStart, newStart > latestStart { return false }
+        return newStart != booking.start
     }
 
     private func move(_ pro: Pro) {

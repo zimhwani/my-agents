@@ -4,7 +4,8 @@ import SwiftUI
 /// how you pay, who you'd book again, and the quiet bits at the bottom.
 struct AccountView: View {
     @Environment(AppState.self) private var app
-    @State private var path = NavigationPath()
+    /// Kept on AppState so switching sides and back lands her where she was.
+    private var path: Binding<NavigationPath> { app.path(for: ClientTab.you) }
 
     @State private var showDetails = false
     @State private var showAddresses = false
@@ -33,7 +34,7 @@ struct AccountView: View {
     }
 
     var body: some View {
-        NavigationStack(path: $path) {
+        NavigationStack(path: path) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     if let client = app.client {
@@ -259,7 +260,7 @@ struct AccountView: View {
                         ForEach(app.favouritePros) { pro in
                             HomePortraitTile(item: pro.homeCover,
                                              width: 120, title: pro.firstName, line: pro.specialtyLine) {
-                                path.append(Route.pro(pro))
+                                path.wrappedValue.append(Route.pro(pro))
                             }
                         }
                     }
@@ -317,10 +318,10 @@ struct AccountView: View {
     /// one: the soonest unfinished, on either side. Any other failure shows that error as it is.
     private func whyNot() -> DeleteRefusal {
         let fallback = "That didn't go through. Nothing's been deleted. Try again."
-        // AppState keeps the error as text, so match the liveBooking wording.
-        guard let error = app.lastError, error == DataError.liveBooking.errorDescription else {
+        guard case .liveBooking? = app.lastDataError else {
             return DeleteRefusal(title: "Didn't go through.", line: app.lastError ?? fallback, booking: nil, isProSide: false)
         }
+        let error = app.lastError ?? DataError.liveBooking.localizedDescription
         let mine = app.bookings.filter(\.isUnfinished).map { ($0, false) }
         let hers = app.proBookings.filter(\.isUnfinished).map { ($0, true) }
         guard let pick = (mine + hers).min(by: { $0.0.start < $1.0.start }) else {

@@ -41,24 +41,18 @@ struct NoPhotoTile: View {
 }
 
 /// Bundled art for moments that aren't anyone's work: the category tiles, the welcome screen and
-/// the location ask. Never captioned with a name. Drawn straight from the bundle, so it doesn't
-/// depend on how `WorkTile` treats items with no URL on the live backend.
+/// the location ask. Never captioned with a name. A `WorkTile` marked `isIllustration`, so it keeps
+/// the stock photo on the live backend too.
 struct MarketingPhoto: View {
     var category: Category
     var seed: Int
 
     var body: some View {
-        GeometryReader { geo in
-            Group {
-                if let image = BundledWork.image(for: category, seed: seed) {
-                    Image(uiImage: image).resizable().scaledToFill()
-                } else {
-                    Rectangle().fill(Placeholder.gradient(seed: seed))
-                }
-            }
-            .frame(width: geo.size.width, height: geo.size.height)
-            .clipped()
-        }
+        WorkTile(
+            item: WorkItem(id: "art_\(category.rawValue)_\(seed)", category: category, caption: category.label, seed: seed),
+            cornerRadius: 0,
+            isIllustration: true
+        )
         .accessibilityHidden(true)
     }
 }

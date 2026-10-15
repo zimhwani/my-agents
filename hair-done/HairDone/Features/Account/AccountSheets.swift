@@ -430,7 +430,7 @@ struct AccountAddressesSheet: View {
             .background(Palette.inkGround, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: Radius.card, style: .continuous)
-                    .strokeBorder(Palette.onInk.opacity(0.10), lineWidth: 0.5)
+                    .strokeBorder(Palette.inkEdge, lineWidth: 0.5)
             )
             .padding(.horizontal, Space.gutter)
             .padding(.bottom, Space.l)
@@ -745,7 +745,7 @@ struct AccountHelpSheet: View {
     @Environment(\.openURL) private var openURL
     @State private var open: Set<String> = []
 
-    static let supportEmail = "hello@hairdone.app"
+    static let supportEmail = "hello@hairdonenailsdone.app"
 
     private let faqs: [(String, String)] = [
         ("How holds and charges work", "When you book, we hold the total on your card. Nothing's taken until she's done. Then you pay in the app, with a tip if you like, or we charge the card 12 hours later. The receipt lands in your inbox. If the booking doesn't happen, the hold drops off in a few days."),
@@ -856,11 +856,11 @@ struct AccountLegalSheet: View {
                     Text("We keep your name, mobile, email, addresses and bookings so the app works. Your address goes to a pro only once she's confirmed. Your card details go to Stripe, not to us. Location is used only while you're in the app, to show who's near.")
                         .font(HDFont.body).foregroundStyle(Palette.ink).fixedSize(horizontal: false, vertical: true)
                     Hairline(strong: true)
-                    Text("The full terms and privacy policy are on hairdone.app. Questions go to Help.")
+                    Text("The full terms and privacy policy are on hairdonenailsdone.app. Questions go to Help.")
                         .font(HDFont.sub).foregroundStyle(Palette.inkSoft).fixedSize(horizontal: false, vertical: true)
                     HStack(spacing: Space.l) {
-                        Link("Terms", destination: URL(string: "https://hairdone.app/terms")!)
-                        Link("Privacy policy", destination: URL(string: "https://hairdone.app/privacy")!)
+                        Link("Terms", destination: URL(string: "https://hairdonenailsdone.app/terms")!)
+                        Link("Privacy policy", destination: URL(string: "https://hairdonenailsdone.app/privacy")!)
                     }
                     .font(HDFont.subMedium)
                     .tint(Palette.ink)

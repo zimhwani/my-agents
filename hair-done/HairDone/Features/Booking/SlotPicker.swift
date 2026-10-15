@@ -183,6 +183,11 @@ struct DayCell: View {
             .padding(.vertical, Space.s)
             .frame(minWidth: 48, minHeight: 44)
             .background(isSelected ? Palette.inkGround : Color.clear, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+            // inkGround sits darker than dark paper, so the pick gets an ink edge to read in both modes.
+            .overlay(
+                RoundedRectangle(cornerRadius: Radius.card, style: .continuous)
+                    .strokeBorder(isSelected ? Palette.ink : Color.clear, lineWidth: 1)
+            )
             .opacity(isOff ? 0.35 : 1)
             .contentShape(Rectangle())
         }
@@ -256,7 +261,7 @@ struct SlotChip: View {
                 .padding(.vertical, 10)
                 .frame(maxWidth: .infinity, minHeight: 44)
                 .background(isSelected ? Palette.inkGround : Color.clear, in: shape)
-                .overlay(shape.strokeBorder(isSelected || !slot.isAvailable ? Color.clear : Palette.line, lineWidth: 1))
+                .overlay(shape.strokeBorder(isSelected ? Palette.ink : (slot.isAvailable ? Palette.line : Color.clear), lineWidth: 1))
                 .opacity(slot.isAvailable ? 1 : 0.35)
                 .contentShape(shape)
         }

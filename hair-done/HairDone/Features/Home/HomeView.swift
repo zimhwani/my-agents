@@ -9,7 +9,8 @@ struct HomeView: View {
     @Environment(AppState.self) private var app
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    @State private var path = NavigationPath()
+    /// Kept on AppState so switching sides and back lands her where she was.
+    private var path: Binding<NavigationPath> { app.path(for: ClientTab.home) }
     @State private var query = ""
     /// The query the current results are for, so a half-typed word doesn't flash "Nothing for…".
     @State private var searchedQuery = ""
@@ -20,7 +21,7 @@ struct HomeView: View {
     @FocusState private var searchFocused: Bool
 
     var body: some View {
-        NavigationStack(path: $path) {
+        NavigationStack(path: path) {
             ScrollView {
                 VStack(alignment: .leading, spacing: Space.section) {
                     VStack(alignment: .leading, spacing: Space.m) {
@@ -73,7 +74,7 @@ struct HomeView: View {
                 Task { await app.loadWhosFree(category: new) }
             }
             .task(id: query) { await runSearch() }
-            .receivesPendingRoutes($path) { $0.isPro }
+            .receivesPendingRoutes(path) { $0.isPro }
             .hdDestinations()
         }
     }
@@ -211,7 +212,7 @@ struct HomeView: View {
 
     private func open(_ pro: Pro) {
         searchFocused = false
-        path.append(Route.pro(pro))
+        path.wrappedValue.append(Route.pro(pro))
     }
 
     // MARK: Search: on the server, across every bookable pro
