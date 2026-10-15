@@ -12,7 +12,7 @@ struct HairDoneApp: App {
         WindowGroup {
             RootView()
                 .environment(app)
-                .tint(Palette.lacquer)
+                .tint(Palette.ink)
                 .task {
                     PushCenter.shared.attach(app)
                     await app.restoreSession()

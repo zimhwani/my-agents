@@ -143,7 +143,7 @@ enum BookingStatus: String, Codable, CaseIterable, Hashable {
         switch self {
         case .requested: return Palette.warn
         case .confirmed: return Palette.success
-        case .onHerWay, .arrived, .inProgress: return Palette.lacquer
+        case .onHerWay, .arrived, .inProgress: return Palette.ink
         case .done, .paid: return Palette.success
         case .cancelledByClient, .cancelledByPro, .declined, .noShow: return Palette.inkSoft
         }
