@@ -712,7 +712,7 @@ final class SupabaseDataService: DataService {
         if saved == nil || saved != address || !Self.isUUID(address.id) {
             let newID = UUID().uuidString.lowercased()
             let row: [String: Any] = [
-                "id": newID, "profile_id": id, "label": address.label.isEmpty ? "Here" : address.label,
+                "id": newID, "profile_id": id, "label": address.label,
                 "line1": address.line1, "suburb": address.suburb, "state": address.state, "postcode": address.postcode,
                 "location": Self.point(address.latitude, address.longitude), "instructions": address.instructions
             ]

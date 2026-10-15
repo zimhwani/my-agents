@@ -173,7 +173,7 @@ struct BookingDetailView: View {
         let label = booking.address.label.trimmingCharacters(in: .whitespaces)
         let place: String
         switch label.lowercased() {
-        case "", "home": place = "at yours"
+        case "", "home", "here": place = "at yours"
         case "work": place = "at work"
         default: place = "at \(label)"
         }
@@ -297,22 +297,44 @@ struct BookingDetailView: View {
             Text("The details").labelStyle().padding(.bottom, Space.s)
             row("When", value: booking.start.friendlyDayTime,
                 note: "Till about \(booking.end.clock) · \(booking.minutes.minutesLabel)")
-            ForEach(booking.services) { s in
-                row(s.name, value: Money.format(s.priceCents), note: s.durationLabel, money: true)
+            if booking.status.isCancelled {
+                ForEach(booking.services) { s in
+                    row(s.name, value: "", note: s.durationLabel)
+                }
+            } else {
+                ForEach(booking.services) { s in
+                    row(s.name, value: Money.format(s.priceCents), note: s.durationLabel, money: true)
+                }
+                row("Travel fee", value: Money.format(booking.price.travelFeeCents), money: true)
+                row("Booking fee", value: Money.format(booking.price.bookingFeeCents), money: true)
             }
-            row("Travel fee", value: Money.format(booking.price.travelFeeCents), money: true)
-            row("Booking fee", value: Money.format(booking.price.bookingFeeCents), money: true)
             if booking.price.tipCents > 0 {
                 row("Tip", value: Money.format(booking.price.tipCents), note: "All of it went to her", money: true)
             }
             HStack(alignment: .firstTextBaseline) {
-                Text(booking.status == .paid ? "Paid" : "Total").font(HDFont.body).foregroundStyle(Palette.ink)
+                Text(totalLabel(booking)).font(HDFont.body).foregroundStyle(Palette.ink)
                 Spacer(minLength: Space.m)
-                Text(Money.format(booking.price.clientTotalCents)).font(HDFont.priceTotal).foregroundStyle(Palette.ink)
+                Text(Money.format(chargedCents(booking))).font(HDFont.priceTotal).foregroundStyle(Palette.ink)
             }
             .padding(.top, Space.m)
             .accessibilityElement(children: .combine)
         }
+    }
+
+    /// What she pays, or paid. A cancelled booking only costs what the cancellation charged:
+    /// for her own late cancel the price is already just that charge; a no-show is the full
+    /// price; anything she didn't cancel costs nothing.
+    private func chargedCents(_ booking: Booking) -> Int {
+        switch booking.status {
+        case .cancelledByClient, .noShow: return booking.price.clientTotalCents
+        case .cancelledByPro, .declined: return 0
+        default: return booking.price.clientTotalCents
+        }
+    }
+
+    private func totalLabel(_ booking: Booking) -> String {
+        if booking.status.isCancelled { return chargedCents(booking) > 0 ? "Charged" : "Nothing charged" }
+        return booking.status == .paid ? "Paid" : "Total"
     }
 
     private func row(_ label: String, value: String, note: String? = nil, money: Bool = false) -> some View {

@@ -152,7 +152,7 @@ struct ReviewStep: View {
 
                 VStack(spacing: 0) {
                     if let start = draft.start {
-                        detailRow("\(start.friendlyDayTime) · \(ShortDuration.label(draft.minutes))", changeLabel: "Change time") {
+                        detailRow("\(start.friendlyDayTime) · \(draft.minutes.minutesLabel)", changeLabel: "Change time") {
                             onEdit(.time)
                         }
                     }

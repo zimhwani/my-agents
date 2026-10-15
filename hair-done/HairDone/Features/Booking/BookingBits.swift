@@ -268,7 +268,12 @@ extension Pro {
 
 extension Address {
     /// "Home · 14 Rae St, Fitzroy North"
-    var labelled: String { label.isEmpty ? short : "\(label) · \(short)" }
+    /// "Home · 12 Smith St", or just the street when there's no label. Older addresses found
+    /// with "Use my location" were saved as "Here", which reads oddly, so that counts as none.
+    var labelled: String {
+        let l = label.trimmingCharacters(in: .whitespaces)
+        return l.isEmpty || l.lowercased() == "here" ? short : "\(l) · \(short)"
+    }
 }
 
 extension String {
@@ -303,11 +308,6 @@ extension Date {
 
 /// "1 h 15", "1 h", "45 min": the short duration on the price list and the ticket.
 enum ShortDuration {
-    static func label(_ minutes: Int) -> String {
-        let h = minutes / 60
-        let m = minutes % 60
-        if h == 0 { return "\(m) min" }
-        if m == 0 { return "\(h) h" }
-        return "\(h) h " + String(format: "%02d", m)
-    }
+    /// The same words as everywhere else ("1 hr 30 min"), so a duration never reads two ways.
+    static func label(_ minutes: Int) -> String { minutes.minutesLabel }
 }

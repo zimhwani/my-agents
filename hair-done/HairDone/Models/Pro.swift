@@ -45,7 +45,11 @@ struct Pro: Identifiable, Hashable, Codable {
     var idSubmitted: Bool = false
     var avatarURL: URL? = nil
 
-    var displayName: String { "\(firstName) \(lastInitial)." }
+    /// "Kiara M.", or just "Kiara" when there's no last initial.
+    var displayName: String {
+        let initial = lastInitial.trimmingCharacters(in: .whitespaces)
+        return initial.isEmpty ? firstName : "\(firstName) \(initial)."
+    }
     var primaryCategory: Category { specialties.first ?? .hair }
     var coordinate: CLLocationCoordinate2D { CLLocationCoordinate2D(latitude: latitude, longitude: longitude) }
 

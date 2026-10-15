@@ -630,7 +630,7 @@ struct WhereStep: View {
             let line1 = [mark.subThoroughfare, street].compactMap { $0 }.joined(separator: " ")
             let found = Address(
                 id: WhereStep.hereID,
-                label: "Here",
+                label: "",
                 line1: line1,
                 suburb: mark.locality ?? mark.subLocality ?? app.location.suburbGuess,
                 state: "VIC",
