@@ -59,18 +59,19 @@ struct RootView: View {
 
     /// The side being switched to while the ink frame is up. Derived, so the frame is already there
     /// in the same update that swaps the shells; the new side never flashes before it.
+    /// Under Reduce Motion the frame still comes up with its words: it only ever fades.
     private var curtainMode: AppMode? {
-        guard inShells, !reduceMotion, let settled = settledMode, settled != app.mode else { return nil }
+        guard inShells, let settled = settledMode, settled != app.mode else { return nil }
         return app.mode
     }
 
-    /// Under the frame the new shell fades in late; under Reduce Motion it's a plain cross-fade.
-    /// Arriving from onboarding it rises from the bottom, as before.
+    /// Under the frame the new shell fades in late (a cross-fade, so the same under Reduce Motion).
+    /// Arriving from onboarding it rises from the bottom, or fades under Reduce Motion.
     private var shellTransition: AnyTransition {
-        if reduceMotion { return .opacity }
         if curtainMode != nil {
             return .asymmetric(insertion: .opacity.animation(.easeOut(duration: 0.2).delay(0.2)), removal: .opacity)
         }
+        if reduceMotion { return .opacity }
         return .asymmetric(insertion: .move(edge: .bottom).combined(with: .opacity), removal: .opacity)
     }
 
@@ -81,22 +82,21 @@ struct RootView: View {
             return
         }
         UIAccessibility.post(notification: .screenChanged, argument: new == .pro ? "Pro mode" : "Booking mode")
-        if reduceMotion {
-            settledMode = new
-            return
-        }
         switchToken += 1
         let token = switchToken
+        // Reduce Motion holds the words a little longer: with nothing moving, the fade is the cue.
+        let hold: UInt64 = reduceMotion ? 550_000_000 : 350_000_000
         Task { @MainActor in
             // About 600ms in all: 200 in, a 150 hold on "Pro mode.", then 300 out.
-            try? await Task.sleep(nanoseconds: 350_000_000)
+            try? await Task.sleep(nanoseconds: hold)
             guard token == switchToken else { return }
             withAnimation(.easeOut(duration: 0.3)) { settledMode = app.mode }
         }
     }
 }
 
-/// The ink frame shown for a moment when she changes sides.
+/// The ink frame shown for a moment when she changes sides. It only fades in and out, so it's the
+/// same under Reduce Motion.
 private struct ModeCurtain: View {
     var mode: AppMode
 
@@ -122,7 +122,7 @@ struct ClientShell: View {
         TabView(selection: $app.selectedTab) {
             HomeView().hdTab(showsBar).tag(ClientTab.home)
             BookingsView().hdTab(showsBar).tag(ClientTab.bookings)
-            InboxView().hdTab(showsBar).tag(ClientTab.inbox)
+            InboxView(side: .client).hdTab(showsBar).tag(ClientTab.inbox)
             AccountView().hdTab(showsBar).tag(ClientTab.you)
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
@@ -131,7 +131,8 @@ struct ClientShell: View {
                     .init(id: ClientTab.home.rawValue, title: "Home", symbol: "house"),
                     .init(id: ClientTab.bookings.rawValue, title: "Bookings", symbol: "calendar"),
                     .init(id: ClientTab.inbox.rawValue, title: "Inbox", symbol: "bubble.left", unread: app.unreadCount > 0),
-                    .init(id: ClientTab.you.rawValue, title: "You", symbol: "person", unread: app.clientYouBadge)
+                    .init(id: ClientTab.you.rawValue, title: "You", symbol: "person", unread: app.clientYouBadge,
+                          dotLabel: "something waiting in Pro mode")
                 ], selected: app.selectedTab.rawValue) { id in
                     if let tab = ClientTab(rawValue: id) { app.selectedTab = tab }
                 }
@@ -140,7 +141,8 @@ struct ClientShell: View {
         }
         .animation(Motion.spring, value: showsBar)
         .trackKeyboard($keyboardUp)
-        .task { if app.pros.isEmpty { await app.refreshAll() } }
+        // Normally already loading (launch, sign-in, a switch); this joins that rather than repeating it.
+        .task { if !app.hasLoadedOnce { await app.refreshAll() } }
     }
 
     @State private var keyboardUp = false
@@ -168,6 +170,8 @@ struct ProShell: View {
         }
         .animation(Motion.spring, value: showsBar)
         .trackKeyboard($keyboardUp)
+        // Opening straight into Pro mode (remembered from last time) loads here too.
+        .task { if !app.hasLoadedOnce { await app.refreshAll() } }
     }
 
     /// The screen for each pro tab. Exhaustive on purpose: a new `ProTab` case won't build until
@@ -177,7 +181,7 @@ struct ProShell: View {
         switch tab {
         case .today: ProTodayView()
         case .calendar: ProCalendarView()
-        case .inbox: InboxView()
+        case .inbox: InboxView(side: .pro)
         case .earnings: ProEarningsView()
         // PROFILE TAB
         case .profile: ProProfileTab()
@@ -187,12 +191,14 @@ struct ProShell: View {
     /// Title and outline glyph for each pro tab.
     private func item(for tab: ProTab) -> HDTabBar.Item {
         switch tab {
-        case .today: return .init(id: tab.rawValue, title: "Today", symbol: "sun.horizon", unread: !app.openRequests.isEmpty)
+        case .today: return .init(id: tab.rawValue, title: "Today", symbol: "sun.horizon", unread: !app.openRequests.isEmpty,
+                                  dotLabel: "requests waiting")
         case .calendar: return .init(id: tab.rawValue, title: "Calendar", symbol: "calendar")
         case .inbox: return .init(id: tab.rawValue, title: "Inbox", symbol: "bubble.left", unread: app.unreadCount > 0)
         case .earnings: return .init(id: tab.rawValue, title: "Earnings", symbol: "chart.bar")
         // PROFILE TAB: the dot is something waiting on her booking side (item 7).
-        case .profile: return .init(id: tab.rawValue, title: "Profile", symbol: "person.crop.circle", unread: app.otherSideUnreadCount > 0)
+        case .profile: return .init(id: tab.rawValue, title: "Profile", symbol: "person.crop.circle", unread: app.otherSideUnreadCount > 0,
+                                    dotLabel: "messages waiting in booking mode")
         }
     }
 
@@ -256,6 +262,8 @@ struct HDTabBar: View {
         let title: String
         let symbol: String
         var unread: Bool = false
+        /// What VoiceOver says the dot means: "unread messages" on Inbox, "requests waiting" on Today.
+        var dotLabel: String = "unread messages"
     }
 
     /// The bar's height above the home indicator at the default text size: 6 top padding plus 49.
@@ -309,7 +317,7 @@ struct HDTabBar: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel(item.unread ? "\(item.title), unread messages" : item.title)
+                .accessibilityLabel(item.unread ? "\(item.title), \(item.dotLabel)" : item.title)
                 .accessibilityAddTraits(isOn ? [.isSelected, .isButton] : .isButton)
                 .accessibilityShowsLargeContentViewer {
                     Label(item.title, systemImage: item.symbol)
@@ -395,8 +403,9 @@ struct HDTabBar: View {
     }
 }
 
-/// Bottom toast for short confirmations, driven by `AppState.show(_:)`. A squared 6pt ink bar
-/// inset 20 from the edges, SF 15 paper text, left-aligned.
+/// Bottom toast for short confirmations, driven by `AppState.show(_:)`. A squared 6pt bar on the
+/// ink ground (never `Palette.ink`, which is cream in dark), inset 20 from the edges, SF 15 `onInk`
+/// text, left-aligned, with the `inkEdge` hairline so it keeps an edge on dark paper.
 struct ToastView: View {
     @Environment(AppState.self) private var app
 
@@ -404,12 +413,13 @@ struct ToastView: View {
         if let toast = app.toast {
             Text(toast)
                 .font(HDFont.sub)
-                .foregroundStyle(Palette.paper)
+                .foregroundStyle(Palette.onInk)
                 .multilineTextAlignment(.leading)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, Space.l)
                 .padding(.vertical, 14)
-                .background(Palette.ink, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+                .background(Palette.inkGround, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: Radius.card, style: .continuous).strokeBorder(Palette.inkEdge, lineWidth: 0.5))
                 .padding(.horizontal, Space.gutter)
                 .padding(.bottom, 70)
                 .transition(.move(edge: .bottom).combined(with: .opacity))

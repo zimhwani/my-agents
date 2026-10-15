@@ -1,12 +1,12 @@
 import SwiftUI
 import UserNotifications
+import MessageUI
 
 /// The last pro tab: her, as clients see her; the switch back to booking; everything about how
 /// she works; and the account things (notifications, help, log out). At the very bottom, quietly,
 /// closing her pro profile.
 struct ProProfileTab: View {
     @Environment(AppState.self) private var app
-    @State private var path = NavigationPath()
     @State private var showPayouts = false
     @State private var showNotifications = false
     @State private var showHelp = false
@@ -24,6 +24,8 @@ struct ProProfileTab: View {
     }
 
     private var pro: Pro? { app.proSelf }
+    /// Kept in `AppState`, so switching to booking and back lands on the same screen.
+    private var path: Binding<NavigationPath> { app.path(for: ProTab.profile) }
 
     /// Jobs that stop her closing: anything not finished and paid, or cancelled.
     private var liveJobs: [Booking] {
@@ -31,7 +33,7 @@ struct ProProfileTab: View {
     }
 
     var body: some View {
-        NavigationStack(path: $path) {
+        NavigationStack(path: path) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     if app.isOffline { OfflineBar().padding(.horizontal, -Space.gutter) }
@@ -40,12 +42,12 @@ struct ProProfileTab: View {
                         headerCard(pro).padding(.top, Space.xl)
                         switchRow.padding(.top, Space.xl)
                         group("How clients see you") {
-                            HairlineRow(title: "Work", value: ProFlow.count(pro.work.count, "photo", "photos")) { path.append(Route.proWork) }
-                            HairlineRow(title: "Services and prices", value: "\(pro.services.count)") { path.append(Destination.edit(.services)) }
-                            HairlineRow(title: "Travel area and fee", value: "\(Int(pro.travelRadiusKm)) km · \(Money.format(pro.travelFeeCents))") { path.append(Destination.edit(.travel)) }
+                            HairlineRow(title: "Work", value: ProFlow.count(pro.work.count, "photo", "photos")) { path.wrappedValue.append(Route.proWork) }
+                            HairlineRow(title: "Services and prices", value: "\(pro.services.count)") { path.wrappedValue.append(Destination.edit(.services)) }
+                            HairlineRow(title: "Travel area and fee", value: "\(Int(pro.travelRadiusKm)) km · \(Money.format(pro.travelFeeCents))") { path.wrappedValue.append(Destination.edit(.travel)) }
                         }
                         group("How you work") {
-                            HairlineRow(title: "Hours", value: hoursValue(pro)) { path.append(Destination.hours) }
+                            HairlineRow(title: "Hours", value: hoursValue(pro)) { path.wrappedValue.append(Destination.hours) }
                             HairlineRow(title: "Notice you need", value: ProFlow.noticeLabel(pro.noticeMinutes)) { showNotice = true }
                             HairlineRow(title: "Payouts", value: pro.payoutsConnected ? "On" : "Not set up") { showPayouts = true }
                             takingBookings(pro)
@@ -78,7 +80,7 @@ struct ProProfileTab: View {
             .proSideBanner()
         }
         // "Edit" on her own profile, opened in booking mode, lands here.
-        .receivesPendingRoutes($path) { route in
+        .receivesPendingRoutes(path) { route in
             if case .proProfileEdit = route { return true }
             return false
         }
@@ -106,7 +108,7 @@ struct ProProfileTab: View {
         VStack(alignment: .leading, spacing: Space.xs) {
             Button {
                 Haptics.light()
-                path.append(Destination.edit(nil))
+                path.wrappedValue.append(Destination.edit(nil))
             } label: {
                 HStack(alignment: .top, spacing: Space.l) {
                     ProFacePhoto(pro: pro).frame(width: 72, height: 90)
@@ -236,7 +238,9 @@ struct ProProfileTab: View {
     private var refusal: String? {
         switch liveJobs.count {
         case 0: return nil
-        case 1: return "Finish or cancel your job with \(app.clientName(liveJobs[0].clientID)) first."
+        case 1:
+            let name = app.clientName(liveJobs[0].clientID)
+            return name.isEmpty ? "Finish or cancel your job first." : "Finish or cancel your job with \(name) first."
         default: return "Finish or cancel your \(liveJobs.count) jobs first."
         }
     }
@@ -378,7 +382,7 @@ struct ProHelpSheet: View {
         ("What Hair Done takes", "12% of your services and travel fee. Tips are all yours. Clients pay a $3 booking fee on top, which doesn't come out of yours."),
         ("Requests and the two hours", "A request waits two hours for you. After that it lapses, the client's told, and it counts against your reliability. Keep notifications on so you see them in time."),
         ("Cancelling on a client", "She's refunded in full and your reliability drops. Under 70% turns instant book off. If something's come up, message her first."),
-        ("A client didn't show", "Tap I'm here when you arrive and message her. After 15 minutes, No show charges her in full and pays you. She can question it for 12 hours."),
+        ("A client didn't show", "Tap I'm here when you arrive and message her. No show opens 15 minutes after the start time, or after you arrived if you were late. It charges her in full and pays you. She can question it for 12 hours."),
         ("Pausing or closing", "Taking bookings, in Profile, pauses you straight away. Close my pro profile, at the bottom of Profile, takes you off for good. Your work and reviews are kept if you come back.")
     ]
 
@@ -403,14 +407,25 @@ struct ProHelpSheet: View {
         .presentationBackground(Palette.paper)
     }
 
-    /// Mail if there's somewhere to send from; otherwise the address, copied.
+    private static let supportEmail = "hello@hairdone.app"
+
+    /// Mail if there's an account set up (as on the client side's Help); otherwise the address
+    /// goes on the clipboard and says so.
     private func messageUs() {
-        if let url = URL(string: "mailto:hello@hairdone.app?subject=Help%20(pro)"), UIApplication.shared.canOpenURL(url) {
-            openURL(url)
+        let url = URL(string: "mailto:\(Self.supportEmail)?subject=Help%20(pro)")
+        if MFMailComposeViewController.canSendMail(), let url {
+            openURL(url) { accepted in
+                if !accepted { Task { @MainActor in copyAddress() } }
+            }
         } else {
-            UIPasteboard.general.string = "hello@hairdone.app"
-            app.show("Copied hello@hairdone.app.")
+            copyAddress()
         }
+    }
+
+    private func copyAddress() {
+        UIPasteboard.general.string = Self.supportEmail
+        Haptics.success()
+        app.show("Copied \(Self.supportEmail).")
     }
 
     private func faqRow(_ title: String, answer: String) -> some View {

@@ -1,17 +1,18 @@
 import SwiftUI
 
 /// Procedural placeholder art: warm gradients with soft blurred shapes and a light grain.
-/// Stands in for work photos until real ones are uploaded. Never a grey box.
+/// Stands in for work photos on the sample data, and for marketing art. Never a grey box.
+/// Each swatch has a dark twin (the same hues, deep and muted) so the art doesn't glow on dark paper.
 enum Placeholder {
     static let swatches: [[Color]] = [
-        [Color(hex: 0xF3D0CB), Color(hex: 0xE8A9A0), Color(hex: 0xC8323A)],
-        [Color(hex: 0xEAD9CB), Color(hex: 0xC9A27E), Color(hex: 0x6B4A33)],
-        [Color(hex: 0xE8D2DF), Color(hex: 0xC99DB7), Color(hex: 0x6E3E5C)],
-        [Color(hex: 0xD8D4E5), Color(hex: 0xA79FC6), Color(hex: 0x46406B)],
-        [Color(hex: 0xD9DED0), Color(hex: 0xA9B7A2), Color(hex: 0x48583A)],
-        [Color(hex: 0xEFE3C8), Color(hex: 0xE9B96A), Color(hex: 0x7A5F1F)],
-        [Color(hex: 0xF6DEDC), Color(hex: 0xD98E8A), Color(hex: 0x8C3A34)],
-        [Color(hex: 0xF8F3EC), Color(hex: 0xE4CFC0), Color(hex: 0x9C7B66)]
+        [Palette.dyn(light: 0xF3D0CB, dark: 0x38221E), Palette.dyn(light: 0xE8A9A0, dark: 0x58322D), Palette.dyn(light: 0xC8323A, dark: 0x81373B)],
+        [Palette.dyn(light: 0xEAD9CB, dark: 0x382A1E), Palette.dyn(light: 0xC9A27E, dark: 0x58412D), Palette.dyn(light: 0x6B4A33, dark: 0x7C563B)],
+        [Palette.dyn(light: 0xE8D2DF, dark: 0x381E2E), Palette.dyn(light: 0xC99DB7, dark: 0x552F46), Palette.dyn(light: 0x6E3E5C, dark: 0x754262)],
+        [Palette.dyn(light: 0xD8D4E5, dark: 0x262136), Palette.dyn(light: 0xA79FC6, dark: 0x383153), Palette.dyn(light: 0x46406B, dark: 0x4B4573)],
+        [Palette.dyn(light: 0xD9DED0, dark: 0x2E3324), Palette.dyn(light: 0xA9B7A2, dark: 0x3F4B3A), Palette.dyn(light: 0x48583A, dark: 0x5B6F49)],
+        [Palette.dyn(light: 0xEFE3C8, dark: 0x38301E), Palette.dyn(light: 0xE9B96A, dark: 0x58472D), Palette.dyn(light: 0x7A5F1F, dark: 0x816B37)],
+        [Palette.dyn(light: 0xF6DEDC, dark: 0x38201E), Palette.dyn(light: 0xD98E8A, dark: 0x582F2D), Palette.dyn(light: 0x8C3A34, dark: 0x813C37)],
+        [Palette.dyn(light: 0xF8F3EC, dark: 0x382E1E), Palette.dyn(light: 0xE4CFC0, dark: 0x583F2D), Palette.dyn(light: 0x9C7B66, dark: 0x6F5748)]
     ]
 
     static func gradient(seed: Int) -> LinearGradient {
@@ -35,11 +36,21 @@ enum Placeholder {
     }
 }
 
-/// A work tile: gradient, two soft blobs positioned by seed, a grain overlay, optional caption.
+/// A work tile: her photo when it has one. Otherwise, on the sample data, a bundled stock photo or
+/// procedural art (gradient, two soft blobs positioned by seed, grain). On the live backend a real
+/// pro's work or a real client's inspo never borrows a stock photo: it's the neutral photo ground
+/// with a small outline glyph. `isIllustration: true` is for art that isn't anyone's work (a
+/// category picture in onboarding), which keeps the stock photos on both backends.
 struct WorkTile: View {
     var item: WorkItem
     var cornerRadius: CGFloat = Radius.tile
     var showCaption = false
+    /// Marketing or onboarding art, not presented as a pro's work or a client's photo.
+    var isIllustration = false
+
+    @Environment(\.colorScheme) private var scheme
+
+    private var usesStandIns: Bool { isIllustration || BundledWork.standsInForWork }
 
     var body: some View {
         GeometryReader { geo in
@@ -50,7 +61,11 @@ struct WorkTile: View {
                 if let url = item.imageURL {
                     AsyncImage(url: url) { image in
                         image.resizable().scaledToFill()
-                    } placeholder: { art(colors: colors, r: r, w: w, h: h) }
+                    } placeholder: {
+                        if usesStandIns { art(colors: colors, r: r, w: w, h: h) } else { Palette.photoGround }
+                    }
+                } else if !usesStandIns {
+                    noPhoto(w: w, h: h)
                 } else if let photo = BundledWork.image(for: item.category, seed: item.seed) {
                     Image(uiImage: photo).resizable().scaledToFill()
                 } else {
@@ -76,6 +91,17 @@ struct WorkTile: View {
         .accessibilityLabel(item.caption)
     }
 
+    /// No photo on the live backend: the warm ground and a small outline glyph, nothing borrowed.
+    private func noPhoto(w: CGFloat, h: CGFloat) -> some View {
+        ZStack {
+            Palette.photoGround
+            Image(systemName: "photo")
+                .font(.system(size: min(max(min(w, h) * 0.16, 13), 22), weight: .light))
+                .foregroundStyle(Palette.inkSoft.opacity(0.7))
+                .accessibilityHidden(true)
+        }
+    }
+
     private static func numbers(from r: Rng) -> (CGFloat, CGFloat, CGFloat, CGFloat, CGFloat) {
         var rng = r
         return (rng.next(), rng.next(), rng.next(), rng.next(), rng.next())
@@ -96,7 +122,7 @@ struct WorkTile: View {
                 .blur(radius: w * 0.12)
                 .offset(x: (e - 0.5) * w * 0.8, y: (a - 0.5) * h * 0.8)
             Ellipse()
-                .fill(Color.white.opacity(0.35))
+                .fill(Color.white.opacity(scheme == .dark ? 0.08 : 0.35))
                 .frame(width: w * 0.35, height: h * 0.18)
                 .rotationEffect(.degrees(Double(-30 + d * 40)))
                 .blur(radius: 6)
@@ -133,11 +159,16 @@ struct Grain: View {
 }
 
 
-/// Photos dropped into `Resources/Work/` as `work-<category>-<n>.jpg` stand in for real work
-/// until pros upload their own. Picked by seed so a pro's grid shows a stable mix.
+/// Photos dropped into `Resources/Work/` as `work-<category>-<n>.jpg` stand in for work on the
+/// sample data, and serve as marketing art (Home's categories, onboarding). Picked by seed so a
+/// pro's grid shows a stable mix. `WorkTile` only uses them for a pro's work or inspo while
+/// `standsInForWork` is true (the sample data); `image(for:seed:)` itself is always available.
 /// Loaded by file URL: `UIImage(named:)` only finds loose JPGs if you spell the extension,
 /// and the asset catalog isn't involved at all.
 enum BundledWork {
+    /// True on the sample data, false on the live backend. Set once at launch by `AppState`.
+    static var standsInForWork = true
+
     private static var urls: [Category: [URL]] = [:]
     private static var cache: [URL: UIImage] = [:]
     private static let lock = NSLock()

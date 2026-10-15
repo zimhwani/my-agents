@@ -44,6 +44,8 @@ struct ProOnboardingFlow: View {
     /// A save that didn't go through. Shown above the button; a toast would sit under this cover.
     @State private var problem: String? = nil
     @State private var confirmLeave = false
+    /// Draft saves, one at a time, so two can't race and duplicate her service rows.
+    @State private var drafts = DraftSaves()
 
     private var userID: String { app.client?.id ?? "" }
     private var abnDigits: String { abn.filter(\.isNumber) }
@@ -282,22 +284,21 @@ struct ProOnboardingFlow: View {
                                work: work, abn: abnDigits).save(userID: userID)
         }
         guard enoughForRow, !app.isOffline else { return }
-        let pro = draftPro(onboarded: wasOnboarded)
-        Task { await quietSave(pro) }
-    }
-
-    private func quietSave(_ pro: Pro) async {
-        do {
-            let saved = try await app.data.updatePro(pro)
-            app.proSelf = saved
-        } catch {
-            // Kept on the phone; nothing to tell her yet.
+        // One save at a time: while one's going, only the newest waits behind it.
+        drafts.save(draftPro(onboarded: wasOnboarded)) { pro in
+            do {
+                app.proSelf = try await app.data.updatePro(pro)
+            } catch {
+                // Kept on the phone; nothing to tell her yet.
+            }
         }
     }
 
     /// The draft pro, saved and waited for (payouts and the ID check need a row to hang off).
+    /// Waits for any quiet save first, so the two never overlap.
     private func saveDraftNow() async -> Bool {
         guard enoughForRow else { return false }
+        await drafts.settle()
         return await app.saveProSelf(draftPro(onboarded: wasOnboarded))
     }
 
@@ -354,7 +355,9 @@ struct ProOnboardingFlow: View {
             }
         } label: {
             VStack(alignment: .leading, spacing: Space.s) {
-                WorkTile(item: WorkItem(id: "specialty_\(c.rawValue)", category: c, caption: c.label, seed: 11), cornerRadius: Radius.photo)
+                // A picture of the category, not anyone's work: stock is fine on the live backend too.
+                WorkTile(item: WorkItem(id: "specialty_\(c.rawValue)", category: c, caption: c.label, seed: 11),
+                         cornerRadius: Radius.photo, isIllustration: true)
                     .aspectRatio(4 / 5, contentMode: .fit)
                     .opacity(on ? 1 : 0.45)
                 HStack(spacing: 4) {
@@ -465,8 +468,9 @@ struct ProOnboardingFlow: View {
                 row("Hair Done takes", "12% of what you charge")
                 row("Clients pay", "a $3 booking fee on top")
                 row("Tips", "all yours")
-                Text("A $150 set with a $15 travel fee pays you $145.20.")
-                    .font(HDFont.quote).foregroundStyle(Palette.ink)
+                // Money in SF monospaced, never serif.
+                (Text("A $150 set with a $15 travel fee pays you ") + Text("$145.20").font(HDFont.priceStrong) + Text("."))
+                    .font(HDFont.body).monospacedDigit().foregroundStyle(Palette.ink)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.top, Space.l)
             }
@@ -589,7 +593,7 @@ struct ProOnboardingFlow: View {
         // A failure here puts up "Stripe didn't open" (PayoutNoticeAlert).
         guard let url = await app.payoutLink() else { return }
         openURL(url) { accepted in
-            if !accepted { app.payoutNotice = .didntOpen }
+            if !accepted { Task { @MainActor in app.payoutNotice = .didntOpen } }
         }
         // The sample data says yes straight away; the real answer comes back from Stripe.
         if !app.isLive { withAnimation(Motion.spring) { payoutsOn = true } }
@@ -601,6 +605,8 @@ struct ProOnboardingFlow: View {
         saving = true
         defer { saving = false }
         problem = nil
+        // A draft save landing after this one would put her back to a draft.
+        await drafts.settle()
         if app.proSelf?.isClosed == true {
             guard await app.reopenProProfile() else {
                 withAnimation(Motion.gentle) { problem = "Didn't send. Everything's saved. Try again." }
@@ -661,6 +667,32 @@ struct ProOnboardingFlow: View {
         pro.idSubmitted = existing?.idSubmitted ?? false
         pro.avatarURL = existing?.avatarURL
         return pro
+    }
+}
+
+/// Pro setup's draft saves, one at a time. A save asked for while one's going waits; a newer one
+/// replaces it, so at most one waits and it's always the latest. `settle()` drops the waiting one
+/// and waits out the one going, before a save that must land last (Finish, payouts, ID).
+@MainActor
+private final class DraftSaves {
+    private var running: Task<Void, Never>? = nil
+    private var waiting: Pro? = nil
+
+    func save(_ pro: Pro, with write: @escaping @MainActor (Pro) async -> Void) {
+        waiting = pro
+        guard running == nil else { return }
+        running = Task { @MainActor in
+            while let next = self.waiting {
+                self.waiting = nil
+                await write(next)
+            }
+            self.running = nil
+        }
+    }
+
+    func settle() async {
+        waiting = nil
+        if let running { await running.value }
     }
 }
 

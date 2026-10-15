@@ -7,7 +7,6 @@ struct ProTodayView: View {
     @Environment(AppState.self) private var app
     @State private var declining: Booking? = nil
     @State private var accepting: String? = nil
-    @State private var path = NavigationPath()
     @State private var askForPush = false
     @State private var showPayouts = false
     @State private var showIDCheck = false
@@ -17,6 +16,8 @@ struct ProTodayView: View {
 
     private var today: Date { Date() }
     private var pro: Pro? { app.proSelf }
+    /// Kept in `AppState`, so switching to booking and back lands on the same screen.
+    private var path: Binding<NavigationPath> { app.path(for: ProTab.today) }
 
     private var requests: [Booking] { app.openRequests }
     private var todays: [Booking] {
@@ -60,8 +61,8 @@ struct ProTodayView: View {
             Check(title: "Payouts", subtitle: "So your money has somewhere to land.", isDone: pro.payoutsConnected) { showPayouts = true },
             Check(title: "ID check (we do this)", subtitle: pro.idSubmitted || pro.isVerified ? "Sent. A person checks it, usually within a day." : "Photo ID and a selfie.",
                   isDone: pro.idSubmitted || pro.isVerified) { showIDCheck = true },
-            Check(title: "Three photos", subtitle: "Of your own work. It's what gets you booked.", isDone: pro.work.count >= 3) { path.append(Route.proWork) },
-            Check(title: "Your hours", subtitle: "When clients can book you.", isDone: pro.availability.hours.values.contains { !$0.isEmpty }) { path.append(Destination.hours) }
+            Check(title: "Three photos", subtitle: "Of your own work. It's what gets you booked.", isDone: pro.work.count >= 3) { path.wrappedValue.append(Route.proWork) },
+            Check(title: "Your hours", subtitle: "When clients can book you.", isDone: pro.availability.hours.values.contains { !$0.isEmpty }) { path.wrappedValue.append(Destination.hours) }
         ]
     }
 
@@ -73,7 +74,7 @@ struct ProTodayView: View {
     private var isPaused: Bool { pro.map { !$0.isActive && !$0.isClosed } ?? false }
 
     var body: some View {
-        NavigationStack(path: $path) {
+        NavigationStack(path: path) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     if app.isOffline { OfflineBar().padding(.horizontal, -Space.gutter) }
@@ -81,6 +82,9 @@ struct ProTodayView: View {
                     if app.proSideLoadFailed && app.proBookings.isEmpty {
                         ErrorState { Task { await app.loadProSide() } }
                             .padding(.horizontal, -Space.gutter)
+                    } else if app.showsProSideSkeleton {
+                        // Before the first load: not "Nothing on today" or the not-live list yet.
+                        loadingBlock.padding(.top, Space.xl)
                     } else {
                         VStack(alignment: .leading, spacing: Space.section) {
                             if isPaused { pausedBlock }
@@ -115,7 +119,7 @@ struct ProTodayView: View {
             .sheet(isPresented: $showIDCheck) { ProIDCheckSheet() }
             .proSideBanner()
         }
-        .receivesPendingRoutes($path) { $0.isProBooking }
+        .receivesPendingRoutes(path) { $0.isProBooking }
         // Her first time on Today (straight after pro setup, usually): ask about notifications,
         // because requests lapse if she doesn't see them.
         .task {
@@ -168,9 +172,32 @@ struct ProTodayView: View {
 
     private var dayLine: String {
         let jobs = todays.filter { !$0.status.isCancelled }
+        if app.showsProSideSkeleton { return ProFlow.longDay(today) }
         guard !jobs.isEmpty else { return "\(ProFlow.longDay(today)) · Nothing on today." }
         let booked = jobs.reduce(0) { $0 + $1.price.proPayoutCents }
         return "\(ProFlow.longDay(today)) · \(ProFlow.count(jobs.count, "job", "jobs")) · \(Money.format(booked)) booked"
+    }
+
+    // MARK: Loading
+
+    /// The shape of Next up and a couple of rows, while her day loads for the first time.
+    private var loadingBlock: some View {
+        VStack(alignment: .leading, spacing: Space.section) {
+            VStack(alignment: .leading, spacing: Space.m) {
+                SkeletonBlock(width: 120, height: 12, color: Palette.inkLine)
+                SkeletonBlock(width: 140, height: 40, color: Palette.inkLine)
+                SkeletonBlock(width: 200, height: 20, color: Palette.inkLine)
+                SkeletonBlock(height: 52, radius: Radius.button, color: Palette.inkLine)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .inkBlock(padding: Space.xl)
+            VStack(spacing: 0) {
+                RowSkeleton()
+                RowSkeleton()
+            }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Loading")
     }
 
     // MARK: Paused, not live
@@ -234,6 +261,7 @@ struct ProTodayView: View {
     /// The ink block: the time big, who and what, where, then the one action.
     private func nextHero(_ b: Booking) -> some View {
         let client = app.clientName(b.clientID)
+        let known = app.isClientNameKnown(b.clientID)
         return VStack(alignment: .leading, spacing: Space.l) {
             NavigationLink(value: Route.proBooking(b.id)) {
                 VStack(alignment: .leading, spacing: Space.xs) {
@@ -250,10 +278,19 @@ struct ProTodayView: View {
                         .font(HDFont.timeDisplay)
                         .foregroundStyle(Palette.onInk)
                         .padding(.top, Space.xs)
-                    Text("\(client) · \(b.servicesLine)")
-                        .font(HDFont.serif(24, relativeTo: .title2))
-                        .foregroundStyle(Palette.onInk)
-                        .fixedSize(horizontal: false, vertical: true)
+                    if known {
+                        Text("\(client) · \(b.servicesLine)")
+                            .font(HDFont.serif(24, relativeTo: .title2))
+                            .foregroundStyle(Palette.onInk)
+                            .fixedSize(horizontal: false, vertical: true)
+                    } else {
+                        // Her name is on its way: a shimmer where it goes, then what she's booked.
+                        SkeletonBlock(width: 110, height: 22, color: Palette.inkLine)
+                        Text(b.servicesLine)
+                            .font(HDFont.serif(24, relativeTo: .title2))
+                            .foregroundStyle(Palette.onInk)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                     Text(b.address.full)
                         .font(HDFont.sub).foregroundStyle(Palette.onInkSoft)
                         .fixedSize(horizontal: false, vertical: true)
@@ -364,12 +401,15 @@ struct ProTodayView: View {
 
     private func requestRow(_ b: Booking) -> some View {
         let client = app.clientName(b.clientID)
+        let known = app.isClientNameKnown(b.clientID)
         return VStack(alignment: .leading, spacing: Space.m) {
             NavigationLink(value: Route.proBooking(b.id)) {
                 VStack(alignment: .leading, spacing: Space.xs) {
                     Text(ProFlow.replyBy(b)).labelStyle()
+                    if !known { SkeletonBlock(width: 96, height: 18) }
                     HStack(alignment: .firstTextBaseline) {
-                        Text("\(client) wants \(b.servicesLine)").font(HDFont.name).foregroundStyle(Palette.ink)
+                        Text(known ? "\(client) wants \(b.servicesLine)" : "Wants \(b.servicesLine)")
+                            .font(HDFont.name).foregroundStyle(Palette.ink)
                             .fixedSize(horizontal: false, vertical: true)
                         Spacer(minLength: Space.s)
                         Image(systemName: "chevron.right").font(.system(size: 13, weight: .regular)).foregroundStyle(Palette.inkFaint)
@@ -407,7 +447,7 @@ struct ProTodayView: View {
         defer { accepting = nil }
         if await app.update(b, to: .confirmed) != nil {
             Haptics.success()
-            app.show("Booked. \(app.clientName(b.clientID))'s \(b.start.friendlyDay) at \(b.start.clock).")
+            app.show("Booked. \(ProFlow.whoLead(app.clientName(b.clientID)))'s \(b.start.friendlyDay) at \(b.start.clock).")
         }
     }
 
@@ -418,7 +458,7 @@ struct ProTodayView: View {
             SectionHeader(title: title)
             ForEach(items) { b in
                 NavigationLink(value: Route.proBooking(b.id)) {
-                    ProBookingRow(booking: b, clientName: app.clientName(b.clientID))
+                    ProBookingRow(booking: b, clientName: app.clientName(b.clientID), nameKnown: app.isClientNameKnown(b.clientID))
                 }
                 .buttonStyle(.plain)
             }

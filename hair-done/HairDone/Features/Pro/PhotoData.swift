@@ -115,6 +115,7 @@ struct ProIDCheckView: View {
     @State private var libraryPick: PhotosPickerItem? = nil
     @State private var sending = false
     @State private var problem: String? = nil
+    @Environment(\.dynamicTypeSize) private var typeSize
 
     private var pro: Pro? { app.proSelf }
     private var sent: Bool { pro?.idSubmitted == true || pro?.isVerified == true }
@@ -136,7 +137,11 @@ struct ProIDCheckView: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
             } else {
-                HStack(alignment: .top, spacing: Space.m) {
+                // Side by side; one under the other at the accessibility sizes.
+                let slots = typeSize.isAccessibilitySize
+                    ? AnyLayout(VStackLayout(alignment: .leading, spacing: Space.l))
+                    : AnyLayout(HStackLayout(alignment: .top, spacing: Space.m))
+                slots {
                     slot(.photoID, title: "Add photo ID", line: "Licence or passport, flat and in focus.")
                     slot(.selfie, title: "Add a selfie", line: "Your face, in good light.")
                 }
@@ -180,10 +185,14 @@ struct ProIDCheckView: View {
                         Image(systemName: kind == .selfie ? "person.crop.square" : "person.text.rectangle")
                             .font(.system(size: 21, weight: .light))
                         Text(title).font(HDFont.subMedium).multilineTextAlignment(.center)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                     .foregroundStyle(Palette.ink)
                     .padding(Space.s)
-                    .frame(width: 104, height: 130)
+                    // The photo's size at the default text size; taller (and full width when the
+                    // slots stack) as the words grow, rather than cutting them off.
+                    .frame(width: typeSize.isAccessibilitySize ? nil : 104)
+                    .frame(maxWidth: typeSize.isAccessibilitySize ? CGFloat.infinity : nil, minHeight: 130)
                     .overlay(RoundedRectangle(cornerRadius: Radius.photo, style: .continuous).strokeBorder(Palette.line, lineWidth: 1))
                     .contentShape(Rectangle())
                 }
@@ -191,7 +200,7 @@ struct ProIDCheckView: View {
                 .disabled(app.isOffline)
                 .accessibilityLabel(title)
                 Text(line).font(HDFont.caption).foregroundStyle(Palette.inkSoft)
-                    .frame(width: 104, alignment: .leading)
+                    .frame(width: typeSize.isAccessibilitySize ? nil : 104, alignment: .leading)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }

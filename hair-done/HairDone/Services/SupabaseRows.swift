@@ -436,7 +436,7 @@ enum DBMap {
             review = Review(id: first.id, clientFirstName: reviewer, rating: first.rating, text: first.text ?? "",
                             date: first.createdAt ?? Date(), serviceName: first.serviceName ?? "", proReply: first.proReply)
         }
-        return Booking(
+        var booking = Booking(
             id: r.id,
             proID: r.proId ?? "",
             clientID: r.clientId ?? "",
@@ -454,6 +454,8 @@ enum DBMap {
             paymentMethodID: r.paymentMethodId,
             reference: r.reference ?? ""
         )
+        booking.holdState = r.holdState
+        return booking
     }
 
     static func thread(_ r: DBThread) -> MessageThread {

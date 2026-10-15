@@ -6,7 +6,8 @@ import SwiftUI
 
 // MARK: - Photo
 
-/// A work photo that fills its frame, cropped, at the photo radius.
+/// A work photo that fills its frame, cropped, at the photo radius. With no photo of hers, the
+/// neutral ground and an outline glyph: never a bundled photo standing in for her work.
 struct HomePhoto: View {
     var item: WorkItem?
     var cornerRadius: CGFloat = Radius.photo
@@ -16,7 +17,7 @@ struct HomePhoto: View {
             if let item {
                 WorkTile(item: item, cornerRadius: 0)
             } else {
-                Palette.photoGround
+                NoPhotoTile()
             }
         }
         .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
@@ -24,11 +25,53 @@ struct HomePhoto: View {
     }
 }
 
+/// Where a photo would be, when there isn't one: `photoGround` with an outline glyph.
+struct NoPhotoTile: View {
+    var symbol: String = "photo"
+
+    var body: some View {
+        ZStack {
+            Palette.photoGround
+            Image(systemName: symbol)
+                .font(.system(size: 19, weight: .light))
+                .foregroundStyle(Palette.inkSoft)
+        }
+        .accessibilityHidden(true)
+    }
+}
+
+/// Bundled art for moments that aren't anyone's work: the category tiles, the welcome screen and
+/// the location ask. Never captioned with a name. Drawn straight from the bundle, so it doesn't
+/// depend on how `WorkTile` treats items with no URL on the live backend.
+struct MarketingPhoto: View {
+    var category: Category
+    var seed: Int
+
+    var body: some View {
+        GeometryReader { geo in
+            Group {
+                if let image = BundledWork.image(for: category, seed: seed) {
+                    Image(uiImage: image).resizable().scaledToFill()
+                } else {
+                    Rectangle().fill(Placeholder.gradient(seed: seed))
+                }
+            }
+            .frame(width: geo.size.width, height: geo.size.height)
+            .clipped()
+        }
+        .accessibilityHidden(true)
+    }
+}
+
 extension Pro {
-    /// Her pinned photo, else her first, else a bundled one of her kind of work.
-    var homeCover: WorkItem {
-        work.first(where: { $0.isPinned }) ?? work.first
-            ?? WorkItem(id: "cover_\(id)", category: primaryCategory, caption: displayName, seed: seed)
+    /// Her pinned photo, else her first, else her own avatar. Nil when she has none of those:
+    /// callers show `NoPhotoTile`, never a bundled photo presented as hers.
+    var homeCover: WorkItem? {
+        if let pick = work.first(where: { $0.isPinned }) ?? work.first { return pick }
+        if let avatarURL {
+            return WorkItem(id: "avatar_\(id)", category: primaryCategory, caption: displayName, seed: seed, imageURL: avatarURL)
+        }
+        return nil
     }
 }
 
@@ -76,7 +119,8 @@ struct HomePortraitTile: View {
 
 // MARK: - Category tile
 
-/// The photo each category tile uses: a bundled work photo picked by a fixed seed, and a crop.
+/// The photo each category tile uses: a bundled photo picked by a fixed seed, and a crop. Marketing
+/// art for the word under it, not anyone's work, so it's fine on the live backend.
 enum HomeCategoryPhoto {
     static func item(for category: Category) -> WorkItem {
         // Makeup borrows work-thelot-2 (a bride having her makeup done); the single makeup photo is weaker.
@@ -115,12 +159,13 @@ struct HomeCategoryTile: View {
 
     var body: some View {
         let zoom = HomeCategoryPhoto.zoom(for: category)
+        let art = HomeCategoryPhoto.item(for: category)
         return Button {
             Haptics.selection()
             action()
         } label: {
             VStack(alignment: .leading, spacing: 0) {
-                HomePhoto(item: HomeCategoryPhoto.item(for: category), cornerRadius: 0)
+                MarketingPhoto(category: art.category, seed: art.seed)
                     .scaleEffect(zoom.scale, anchor: zoom.anchor)
                     .frame(width: 104, height: 130)
                     .clipShape(RoundedRectangle(cornerRadius: Radius.photo, style: .continuous))
@@ -235,19 +280,22 @@ struct HomeProRow: View {
 
 // MARK: - Next up
 
-/// Her next booking as an ink block: the pro's photo, status, what and when. Opens the booking.
+/// Her next booking as an ink block: the pro's photo for it, a status dot and eyebrow, the serif
+/// what-and-who line and when and where. Opens the booking. The one Next up: Home and Bookings both use it.
 struct HomeNextUpCard: View {
     var booking: Booking
     var pro: Pro?
     var action: () -> Void
 
+    /// "BIAB and 1 more with Kiara"; just the services while her card hasn't loaded.
     private var title: String {
-        let first = booking.services.first?.name ?? "Booking"
+        if let pro { return booking.cardTitle(proName: pro.firstName) }
+        guard let first = booking.services.first else { return "Your booking" }
         let rest = booking.services.count - 1
-        let what = rest > 0 ? "\(first) and \(rest) more" : first
-        if let pro { return "\(what) with \(pro.firstName)" }
-        return what
+        return rest > 0 ? "\(first.name) and \(rest) more" : first.name
     }
+
+    private var isLive: Bool { booking.isToday && booking.status.isActiveDay }
 
     var body: some View {
         Button {
@@ -255,40 +303,42 @@ struct HomeNextUpCard: View {
             action()
         } label: {
             HStack(spacing: 0) {
-                HomePhoto(item: pro?.homeCover, cornerRadius: 0)
-                    .frame(width: 76)
+                HomePhoto(item: booking.coverItem(pro: pro), cornerRadius: 0)
+                    .frame(width: 84)
                     .frame(maxHeight: .infinity)
                     .clipped()
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(spacing: 7) {
-                        Circle()
-                            .fill(booking.status == .requested ? Palette.onInkSoft : Palette.onInk)
-                            .frame(width: 5, height: 5)
-                            .accessibilityHidden(true)
-                        Text("Next up · " + booking.status.label)
+                        if isLive {
+                            LiveDot(color: dotColor, size: 5)
+                        } else {
+                            Circle().fill(dotColor).frame(width: 5, height: 5)
+                        }
+                        Text("Next up · \(booking.status.label)")
                             .eyebrowStyle(color: Palette.onInkSoft)
                             .fixedSize(horizontal: false, vertical: true)
                     }
+                    .accessibilityHidden(true)
                     Text(title)
                         .font(HDFont.nameBar)
                         .foregroundStyle(Palette.onInk)
-                        .lineLimit(2)
+                        .lineLimit(3)
                         .fixedSize(horizontal: false, vertical: true)
-                    Text(booking.start.friendlyDayTime)
+                    Text(booking.whenWhereLine)
                         .font(HDFont.caption)
                         .foregroundStyle(Palette.onInkSoft)
                         .fixedSize(horizontal: false, vertical: true)
                 }
-                .padding(.leading, 16)
+                .padding(.leading, Space.l)
                 .padding(.vertical, 14)
                 Spacer(minLength: Space.s)
                 Image(systemName: "chevron.right")
                     .font(.system(size: 13, weight: .regular))
                     .foregroundStyle(Palette.onInkSoft)
-                    .padding(.trailing, 16)
+                    .padding(.trailing, Space.l)
                     .accessibilityHidden(true)
             }
-            .frame(minHeight: 96)
+            .frame(minHeight: 104)
             .background(Palette.inkGround)
             .clipShape(RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
             .overlay(
@@ -297,7 +347,18 @@ struct HomeNextUpCard: View {
             )
         }
         .buttonStyle(PressLift(scale: 0.985))
-        .accessibilityElement(children: .combine)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Next up. \(title), \(booking.whenWhereLine), \(booking.status.label)")
         .accessibilityHint("Opens the booking")
+        .accessibilityAddTraits(.isButton)
+    }
+
+    /// Status dot on ink: warn while it's waiting on her, success once it's on, soft for the rest.
+    private var dotColor: Color {
+        switch booking.status {
+        case .requested: return Palette.warn
+        case .confirmed, .onHerWay, .arrived, .inProgress, .done, .paid: return Palette.success
+        default: return Palette.onInkSoft
+        }
     }
 }

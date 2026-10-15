@@ -3,6 +3,8 @@ import SwiftUI
 /// Day strip + real slots for one pro. Shared by the booking flow's time step and the reschedule sheet.
 /// Owns the day, the fetch, the loading state and the "she's off Sundays" note; the caller owns the pick.
 /// Change `reload` to fetch the day again (after "someone just took that time", say).
+/// `latestStart` drops every slot after it (the reschedule sheet's card-hold limit), so nothing on
+/// offer is a time the server will refuse.
 struct SlotPicker: View {
     @Environment(AppState.self) private var app
     var pro: Pro
@@ -10,6 +12,7 @@ struct SlotPicker: View {
     @Binding var selected: Date?
     var days: Int = 14
     var reload: Int = 0
+    var latestStart: Date? = nil
 
     @State private var day: Date
     @State private var slots: [TimeSlot] = []
@@ -17,16 +20,26 @@ struct SlotPicker: View {
     @State private var note: String? = nil
     @State private var loadFailed = false
 
-    init(pro: Pro, minutes: Int, selected: Binding<Date?>, days: Int = 14, reload: Int = 0) {
+    init(pro: Pro, minutes: Int, selected: Binding<Date?>, days: Int = 14, reload: Int = 0, latestStart: Date? = nil) {
         self.pro = pro
         self.minutes = minutes
         self._selected = selected
         self.days = days
         self.reload = reload
+        self.latestStart = latestStart
         _day = State(initialValue: (selected.wrappedValue ?? Date()).startOfDay)
     }
 
     private struct LoadKey: Hashable { var day: Date; var reload: Int }
+
+    /// The day's slots up to `latestStart`.
+    private var offered: [TimeSlot] {
+        guard let latestStart else { return slots }
+        return slots.filter { $0.start <= latestStart }
+    }
+
+    /// True when the cut-off took some of this day's times away.
+    private var isTrimmed: Bool { offered.count < slots.count }
 
     var body: some View {
         VStack(alignment: .leading, spacing: Space.l) {
@@ -48,14 +61,22 @@ struct SlotPicker: View {
                     ErrorState(title: "Couldn't load her times.", message: nil, actionTitle: "Try again") {
                         Task { @MainActor in await load() }
                     }
-                } else if slots.isEmpty {
+                } else if offered.isEmpty && isTrimmed {
+                    EmptyState(title: "That's as far as it goes.", message: cutoffLine)
+                } else if offered.isEmpty {
                     EmptyState(title: day.nothingFreeLine, message: "Try another day. The faded ones are days she's off.")
                 } else {
                     VStack(alignment: .leading, spacing: Space.l) {
-                        if !slots.contains(where: \.isAvailable) {
+                        if !offered.contains(where: \.isAvailable) {
                             Text(day.nothingFreeLine).font(HDFont.sub).foregroundStyle(Palette.inkSoft)
                         }
-                        SlotGrid(slots: slots, selected: $selected) { reason in
+                        if isTrimmed {
+                            Text(cutoffLine)
+                                .font(HDFont.sub)
+                                .foregroundStyle(Palette.inkSoft)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        SlotGrid(slots: offered, selected: $selected) { reason in
                             show(reason)
                         }
                     }
@@ -66,6 +87,11 @@ struct SlotPicker: View {
         }
         .task(id: LoadKey(day: day, reload: reload)) { await load() }
         .onChange(of: day) { _, _ in withAnimation(Motion.gentle) { note = nil } }
+    }
+
+    private var cutoffLine: String {
+        guard let latestStart else { return "" }
+        return "Your card's on hold, so the new time has to be by \(latestStart.clock) on \(latestStart.friendlyDayInSentence)."
     }
 
     private func show(_ reason: String) {
@@ -149,14 +175,14 @@ struct DayCell: View {
             VStack(spacing: 4) {
                 Text(date.weekday.short)
                     .font(HDFont.caption)
-                    .foregroundStyle(isSelected ? Palette.paper : Palette.inkSoft)
+                    .foregroundStyle(isSelected ? Palette.onInkSoft : Palette.inkSoft)
                 Text(date.dayNumber)
                     .font(HDFont.sans(20, relativeTo: .title3).monospacedDigit())
-                    .foregroundStyle(isSelected ? Palette.paper : Palette.ink)
+                    .foregroundStyle(isSelected ? Palette.onInk : Palette.ink)
             }
             .padding(.vertical, Space.s)
             .frame(minWidth: 48, minHeight: 44)
-            .background(isSelected ? Palette.ink : Color.clear, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+            .background(isSelected ? Palette.inkGround : Color.clear, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
             .opacity(isOff ? 0.35 : 1)
             .contentShape(Rectangle())
         }
@@ -224,12 +250,12 @@ struct SlotChip: View {
         Button(action: action) {
             Text(slot.start.clock)
                 .font(HDFont.price)
-                .foregroundStyle(isSelected ? Palette.paper : Palette.ink)
+                .foregroundStyle(isSelected ? Palette.onInk : Palette.ink)
                 .lineLimit(1)
                 .minimumScaleFactor(0.9)
                 .padding(.vertical, 10)
                 .frame(maxWidth: .infinity, minHeight: 44)
-                .background(isSelected ? Palette.ink : Color.clear, in: shape)
+                .background(isSelected ? Palette.inkGround : Color.clear, in: shape)
                 .overlay(shape.strokeBorder(isSelected || !slot.isAvailable ? Color.clear : Palette.line, lineWidth: 1))
                 .opacity(slot.isAvailable ? 1 : 0.35)
                 .contentShape(shape)

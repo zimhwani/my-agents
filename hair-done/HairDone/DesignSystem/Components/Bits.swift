@@ -48,35 +48,6 @@ struct PriceRow: View {
     }
 }
 
-/// Deprecated: use `HairlineRow`, which brings its own hairline. A settings row with an outline
-/// glyph (light, inkSoft), a title, an optional value and a bare chevron, with no hairline of its own.
-/// `tint` colours the title only; never pass lacquer.
-struct NavRow: View {
-    var symbol: String
-    var title: String
-    var value: String? = nil
-    var tint: Color = Palette.ink
-    var action: () -> Void
-
-    var body: some View {
-        Button(action: { Haptics.light(); action() }) {
-            HStack(spacing: 14) {
-                Image(systemName: symbol)
-                    .font(.system(size: 17, weight: .light))
-                    .foregroundStyle(Palette.inkSoft)
-                    .frame(width: 28)
-                Text(title).font(HDFont.body).foregroundStyle(tint)
-                Spacer()
-                if let value { Text(value).font(HDFont.sub).foregroundStyle(Palette.inkSoft) }
-                Image(systemName: "chevron.right").font(.system(size: 13, weight: .regular)).foregroundStyle(Palette.inkFaint)
-            }
-            .frame(minHeight: 48)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-    }
-}
-
 /// A hairline divider. Default is the quiet 1pt `line` (inside old blocks); `strong: true` is the
 /// 0.5pt `lineStrong` rule between data rows on paper, as on the profile's price list.
 struct Hairline: View {
@@ -160,44 +131,6 @@ struct CheckShape: Shape {
         p.addLine(to: CGPoint(x: rect.minX + rect.width * 0.38, y: rect.maxY - rect.height * 0.05))
         p.addLine(to: CGPoint(x: rect.maxX, y: rect.minY + rect.height * 0.1))
         return p
-    }
-}
-
-/// The brand mark: the full stop. A lacquer dot with a soft highlight, like polish seen from above.
-/// It's the "." in "done." — the one thing in the brand that says done without a word.
-struct DropMark: View {
-    var size: CGFloat = 28
-    var color: Color = Palette.lacquer
-    var body: some View {
-        Circle()
-            .fill(color)
-            .overlay(
-                Ellipse().fill(Color.white.opacity(0.85))
-                    .frame(width: size * 0.2, height: size * 0.3)
-                    .rotationEffect(.degrees(22))
-                    .offset(x: -size * 0.17, y: -size * 0.2)
-            )
-            .frame(width: size, height: size)
-            .accessibilityHidden(true)
-    }
-}
-
-/// Kept for callers that used the old name.
-typealias DotMark = DropMark
-
-/// The wordmark, three lines, lowercase serif.
-struct Wordmark: View {
-    var size: CGFloat = 34
-    var body: some View {
-        VStack(alignment: .leading, spacing: -2) {
-            Text("hair done.")
-            Text("nails done.")
-            Text("everything ") + Text("done").italic() + Text(".").foregroundStyle(Palette.lacquer)
-        }
-        .font(.system(size: size, weight: .medium, design: .serif))
-        .foregroundStyle(Palette.ink)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Hair done, nails done, everything done")
     }
 }
 

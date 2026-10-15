@@ -101,12 +101,16 @@ struct IntroVideoView: UIViewRepresentable {
 struct IntroPlaceholderView: View {
     @State private var index = 0
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    private let items: [WorkItem] = Array(MockData.pros.prefix(6).compactMap { $0.work.first })
+    /// Marketing art, not anyone's work: only the category and seed of the demo pros' first photos
+    /// (no names), drawn straight from the bundle.
+    private let items: [(category: Category, seed: Int)] = MockData.pros.prefix(6).compactMap { pro in
+        pro.work.first.map { (category: $0.category, seed: $0.seed) }
+    }
 
     var body: some View {
         ZStack {
-            ForEach(Array(items.enumerated()), id: \.element.id) { i, item in
-                WorkTile(item: item, cornerRadius: 0)
+            ForEach(0..<items.count, id: \.self) { i in
+                MarketingPhoto(category: items[i].category, seed: items[i].seed)
                     .opacity(i == index ? 1 : 0)
             }
         }

@@ -42,8 +42,10 @@ enum PushAskSide: String { case client, pro }
 
 /// The app's end of push notifications: permission, the device token, and what happens when one
 /// arrives or is tapped. iOS calls in through `AppDelegate` (the token) and as the notification
-/// centre's delegate (banners and taps); everything that touches the app happens on the main queue.
-final class PushCenter: NSObject, UNUserNotificationCenterDelegate {
+/// centre's delegate (banners and taps). It isn't main-actor isolated itself (the delegate protocol
+/// isn't), so everything that touches the app (`AppState`, main actor) hops there with
+/// `Task { @MainActor in ... }`.
+final class PushCenter: NSObject, UNUserNotificationCenterDelegate, @unchecked Sendable {
     static let shared = PushCenter()
 
     private weak var app: AppState?
@@ -75,6 +77,7 @@ final class PushCenter: NSObject, UNUserNotificationCenterDelegate {
     /// Her You → Notifications → Messages toggle (`AccountNotificationsSheet`).
     static var wantsMessages: Bool { UserDefaults.standard.object(forKey: "notify.messages") as? Bool ?? true }
 
+    @MainActor
     func attach(_ app: AppState) {
         self.app = app
         if let target = waiting {
@@ -123,7 +126,7 @@ final class PushCenter: NSObject, UNUserNotificationCenterDelegate {
         UNUserNotificationCenter.current().getNotificationSettings { settings in
             switch settings.authorizationStatus {
             case .authorized, .provisional, .ephemeral:
-                DispatchQueue.main.async { UIApplication.shared.registerForRemoteNotifications() }
+                Task { @MainActor in UIApplication.shared.registerForRemoteNotifications() }
             default:
                 break
             }
@@ -134,7 +137,7 @@ final class PushCenter: NSObject, UNUserNotificationCenterDelegate {
 
     func tokenArrived(_ deviceToken: Data) {
         let hex = deviceToken.map { String(format: "%02x", $0) }.joined()
-        DispatchQueue.main.async {
+        Task { @MainActor in
             PushCenter.savedToken = hex
             self.app?.deviceTokenArrived(hex)
         }
@@ -147,7 +150,7 @@ final class PushCenter: NSObject, UNUserNotificationCenterDelegate {
     func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification,
                                 withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
         let target = PushTarget(userInfo: notification.request.content.userInfo)
-        DispatchQueue.main.async {
+        Task { @MainActor in
             guard let target else {
                 completionHandler([.banner, .list, .sound])
                 return
@@ -170,7 +173,7 @@ final class PushCenter: NSObject, UNUserNotificationCenterDelegate {
         let target = response.actionIdentifier == UNNotificationDefaultActionIdentifier
             ? PushTarget(userInfo: response.notification.request.content.userInfo)
             : nil
-        DispatchQueue.main.async {
+        Task { @MainActor in
             if let target {
                 if let app = self.app { app.open(target) } else { self.waiting = target }
             }

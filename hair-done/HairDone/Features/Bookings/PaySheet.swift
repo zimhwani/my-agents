@@ -218,7 +218,10 @@ struct PaySheet: View {
                 VStack(alignment: .leading, spacing: Space.l) {
                     LacquerCheck(size: 56)
                         .padding(.top, Space.l)
-                    Text("Paid. \(Money.format(cents)) to \(proName), receipt in your inbox.")
+                    // The sentence is serif; the amount is SF (money is never serif).
+                    (Text("Paid. ")
+                        + Text(verbatim: Money.format(cents)).font(HDFont.priceTotal)
+                        + Text(" to \(proName), receipt in your inbox."))
                         .font(HDFont.titleSmall)
                         .foregroundStyle(Palette.ink)
                         .fixedSize(horizontal: false, vertical: true)

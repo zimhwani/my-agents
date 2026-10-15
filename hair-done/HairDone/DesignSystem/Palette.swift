@@ -8,7 +8,10 @@ import SwiftUI
 /// - paper #FBF7F2 on lacquerFill #C8323A 4.96:1, light and dark (AA for body text)
 /// - white on the old dark lacquer #E2504F was 3.8:1, which failed AA (audit M23). Filled
 ///   lacquer now stays #C8323A in dark; #E2504F is kept for dots and strokes only (4.9:1 on dark paper).
-/// - onInk on inkGround 14.6:1 light, 13.1:1 dark · onInk at 55% on #241A16 5.3:1
+/// - onInk on inkGround 14.6:1 light, 16.9:1 dark (#0E0A09) · onInk at 55% on #241A16 5.3:1 ·
+///   onInkSoft (62%) on dark inkGround 6.8:1
+/// - Dark inkGround #0E0A09 sits *below* dark paper #171210 (1.06:1), so an ink block reads as a
+///   deeper well, not a lit card; `inkEdge` (#3A302B, 1.5:1 on dark paper) gives it its edge.
 /// - inkFaint on paper 3.1:1 light, 4.0:1 dark: enough for a glyph or hairline (3:1), not for text.
 enum Palette {
     // MARK: Ground and type
@@ -42,17 +45,22 @@ enum Palette {
 
     // MARK: Ink moments: the booking ticket, Next up, the Book bar, the pro tab bar
 
-    /// The ink ground. Fixed #241A16 in light. In dark it is a raised ink, a step lighter than
-    /// dark paper, so an ink block still has an edge; pair it with `inkBlock()` for the hairline.
-    static let inkGround   = dyn(light: 0x241A16, dark: 0x2E231E)
-    /// A surface on the ink ground (a card on the ticket, a selected row).
-    static let inkRaised   = dyn(light: 0x2E2521, dark: 0x3A2E28)
+    /// The ink ground. #241A16 in light. In dark it's darker than dark paper (#0E0A09 on #171210),
+    /// so an ink block is a deeper well rather than a lit card. Its edge in dark comes from
+    /// `inkEdge`; `inkBlock()` adds it. Also the fill for selections, my bubble, toasts and undo bars,
+    /// with `onInk` type (never `Palette.ink` as a fill: that's cream in dark).
+    static let inkGround   = dyn(light: 0x241A16, dark: 0x0E0A09)
+    /// A surface on the ink ground (a card on the ticket, a selected row). A step up from it.
+    static let inkRaised   = dyn(light: 0x2E2521, dark: 0x241C18)
+    /// The edge round an ink block or ink bar: the ink itself in light (no visible line), a
+    /// lineStrong-weight hairline in dark, where the block is darker than the paper.
+    static let inkEdge     = dyn(light: 0x241A16, dark: 0x3A302B)
     /// Paper type and glyphs on `inkGround`. Fixed: the ground is dark in both modes.
     static let onInk       = Color(hex: 0xF4ECE4)
     /// Secondary type on ink. 6.3:1 on #241A16.
     static let onInkSoft   = Color(hex: 0xF4ECE4).opacity(0.62)
-    /// Hairlines on ink.
-    static let inkLine     = Color(hex: 0xF4ECE4).opacity(0.14)
+    /// Hairlines on ink, and the shimmer on an ink block. A touch stronger on the darker dark ground.
+    static let inkLine     = dyn(light: 0xF4ECE4, lightAlpha: 0.14, dark: 0xF4ECE4, darkAlpha: 0.16)
     /// Type set on a photo (the hero name). Fixed.
     static let onPhoto     = Color(hex: 0xFBF7F2)
     /// Behind a photo that hasn't loaded.
@@ -97,6 +105,12 @@ enum Palette {
     static func dyn(light: UInt32, dark: UInt32) -> Color {
         Color(UIColor { traits in
             traits.userInterfaceStyle == .dark ? UIColor(hex: dark) : UIColor(hex: light)
+        })
+    }
+
+    static func dyn(light: UInt32, lightAlpha: CGFloat, dark: UInt32, darkAlpha: CGFloat) -> Color {
+        Color(UIColor { traits in
+            traits.userInterfaceStyle == .dark ? UIColor(hex: dark, alpha: darkAlpha) : UIColor(hex: light, alpha: lightAlpha)
         })
     }
 }

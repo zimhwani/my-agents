@@ -5,7 +5,8 @@ import SwiftUI
 struct ProEarningsView: View {
     @Environment(AppState.self) private var app
     @State private var showPayoutDetails = false
-    @State private var path = NavigationPath()
+    /// Kept in `AppState`, so switching to booking and back lands on the same screen.
+    private var path: Binding<NavigationPath> { app.path(for: ProTab.earnings) }
 
     private var monday: Date { ProWeek.monday(of: Date()) }
     private var thisWeek: Int { ProMoney.payout(app.proBookings, weekOf: monday) }
@@ -20,7 +21,7 @@ struct ProEarningsView: View {
     private var nothingYet: Bool { ProMoney.earning(app.proBookings).isEmpty && app.payouts.isEmpty }
 
     var body: some View {
-        NavigationStack(path: $path) {
+        NavigationStack(path: path) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     if app.isOffline { OfflineBar().padding(.horizontal, -Space.gutter) }
@@ -28,6 +29,16 @@ struct ProEarningsView: View {
                     if app.proSideLoadFailed && app.proBookings.isEmpty {
                         ErrorState { Task { await app.loadProSide() } }
                             .padding(.horizontal, -Space.gutter)
+                    } else if app.showsProSideSkeleton {
+                        // Before the first load: not "Nothing yet." yet.
+                        VStack(alignment: .leading, spacing: Space.l) {
+                            SkeletonBlock(width: 80, height: 12)
+                            SkeletonBlock(width: 180, height: 56)
+                            SkeletonBlock(height: 88)
+                        }
+                        .padding(.top, Space.xl)
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityLabel("Loading")
                     } else if nothingYet {
                         EmptyState(title: "Nothing yet.", message: "It'll be here the day after your first booking.")
                             .padding(.horizontal, -Space.gutter)
@@ -63,8 +74,9 @@ struct ProEarningsView: View {
         VStack(alignment: .leading, spacing: Space.l) {
             VStack(alignment: .leading, spacing: Space.xs) {
                 Text("This week").labelStyle()
+                // Wraps rather than shrinks at large text sizes.
                 Text(Money.format(thisWeek)).font(HDFont.priceHero).foregroundStyle(Palette.ink)
-                    .lineLimit(1).minimumScaleFactor(0.6)
+                    .fixedSize(horizontal: false, vertical: true)
                 Text(weekLine).font(HDFont.sub).foregroundStyle(Palette.inkSoft)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -206,7 +218,14 @@ struct ProEarningsView: View {
                         NavigationLink(value: Route.proBooking(b.id)) {
                             HStack(alignment: .firstTextBaseline) {
                                 VStack(alignment: .leading, spacing: 2) {
-                                    Text("\(app.clientName(b.clientID)) · \(b.servicesLine)").font(HDFont.sub).foregroundStyle(Palette.ink).lineLimit(1)
+                                    if app.isClientNameKnown(b.clientID) {
+                                        Text("\(app.clientName(b.clientID)) · \(b.servicesLine)").font(HDFont.sub).foregroundStyle(Palette.ink).lineLimit(1)
+                                    } else {
+                                        HStack(spacing: Space.s) {
+                                            SkeletonBlock(width: 64, height: 14)
+                                            Text(b.servicesLine).font(HDFont.sub).foregroundStyle(Palette.ink).lineLimit(1)
+                                        }
+                                    }
                                     Text(b.price.tipCents > 0 ? "\(b.start.friendlyDay) · tip \(Money.format(b.price.tipCents))" : b.start.friendlyDay)
                                         .font(HDFont.caption).foregroundStyle(Palette.inkSoft)
                                 }
@@ -282,7 +301,7 @@ struct PayoutDetailsSheet: View {
         defer { fetching = false }
         guard let url = await app.payoutLink() else { return }
         openURL(url) { accepted in
-            if !accepted { app.payoutNotice = .didntOpen }
+            if !accepted { Task { @MainActor in app.payoutNotice = .didntOpen } }
         }
         // The real answer comes back from Stripe (AppState.payoutsReturned); the sample data says yes now.
         if !connected && !app.isLive {
@@ -374,7 +393,7 @@ private struct PayoutNoticeSheet: View {
     private func reopen() async {
         guard let url = await app.payoutLink() else { return }
         openURL(url) { accepted in
-            if !accepted { app.payoutNotice = .didntOpen }
+            if !accepted { Task { @MainActor in app.payoutNotice = .didntOpen } }
         }
     }
 }

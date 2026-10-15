@@ -19,18 +19,27 @@ struct ProBookingDetailView: View {
                 content(b)
             } else if app.proSideLoadFailed {
                 ScrollView { ErrorState { Task { await app.loadProSide() } } }
+            } else if app.isLoadingProSide {
+                ListSkeleton(rows: 2).padding(.top, Space.l)
+                    .frame(maxHeight: .infinity, alignment: .top)
             } else {
                 ScrollView {
-                    EmptyState(title: "We couldn't find that one.", message: "It may have been cancelled. Pull down on Today to refresh.")
+                    EmptyState(title: "We couldn't find that one.", message: "It may have been cancelled.")
                 }
             }
         }
         .paperBackground()
         .hdNavHeader()
+        // Opened from a notification or a link before her jobs were in: look for it once.
+        .task(id: bookingID) {
+            if booking == nil && !app.isLoadingProSide { await app.loadProSide() }
+        }
     }
 
     private func content(_ b: Booking) -> some View {
+        // Empty while her name's on its way; the header shows a shimmer and sentences say "your client".
         let client = app.clientName(b.clientID)
+        let known = app.isClientNameKnown(b.clientID)
         let addressShown = b.status != .requested
         return ScrollView {
             VStack(alignment: .leading, spacing: 0) {
@@ -39,14 +48,23 @@ struct ProBookingDetailView: View {
                 // Who, when, what state
                 VStack(alignment: .leading, spacing: Space.s) {
                     StatusBadge(status: b.status, forPro: true)
-                    Text("\(client), \(b.start.clock).")
-                        .font(HDFont.title).foregroundStyle(Palette.ink)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .accessibilityAddTraits(.isHeader)
+                    if known {
+                        Text("\(client), \(b.start.clock).")
+                            .font(HDFont.title).foregroundStyle(Palette.ink)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .accessibilityAddTraits(.isHeader)
+                    } else {
+                        HStack(alignment: .center, spacing: Space.s) {
+                            SkeletonBlock(width: 120, height: 30)
+                            Text("\(b.start.clock).")
+                                .font(HDFont.title).foregroundStyle(Palette.ink)
+                                .accessibilityAddTraits(.isHeader)
+                        }
+                    }
                     Text("\(ProFlow.longDay(b.start)) · \(b.minutes.minutesLabel), till \(b.end.clock)")
                         .font(HDFont.quote).foregroundStyle(Palette.ink)
                         .fixedSize(horizontal: false, vertical: true)
-                    Text(b.status.proLine(client: client)).font(HDFont.sub).foregroundStyle(Palette.inkSoft)
+                    Text(b.status.proLine(client: ProFlow.whoLead(client))).font(HDFont.sub).foregroundStyle(Palette.inkSoft)
                     if let reason = b.declineReason, b.status == .declined {
                         Text("You said: \(reason)").font(HDFont.sub).foregroundStyle(Palette.inkSoft)
                     }
@@ -76,7 +94,7 @@ struct ProBookingDetailView: View {
                         if !b.address.instructions.isEmpty {
                             Text(b.address.instructions).font(HDFont.sub).foregroundStyle(Palette.inkSoft)
                         }
-                        map(b, client: client).padding(.top, Space.xs)
+                        map(b).padding(.top, Space.xs)
                         Button {
                             Haptics.light()
                             openDirections(to: b.address)
@@ -137,7 +155,7 @@ struct ProBookingDetailView: View {
                 VStack(alignment: .leading, spacing: Space.s) {
                     if let thread = app.thread(for: b) {
                         NavigationLink(value: Route.thread(thread.id)) {
-                            Text("Message \(client)")
+                            Text("Message \(ProFlow.who(client))")
                                 .font(HDFont.bodyStrong).foregroundStyle(Palette.ink)
                                 .frame(maxWidth: .infinity, minHeight: 52)
                                 .overlay(RoundedRectangle(cornerRadius: Radius.button, style: .continuous).strokeBorder(Palette.ink, lineWidth: 1))
@@ -149,7 +167,7 @@ struct ProBookingDetailView: View {
                         TertiaryButton(title: cancelling ? "Cancelling" : "Cancel this booking") { confirmCancel = true }
                             .padding(.leading, -8)
                             .disabled(app.isOffline || cancelling)
-                        Text("\(client) gets a full refund and your reliability drops.")
+                        Text("\(ProFlow.whoLead(client)) gets a full refund and your reliability drops.")
                             .font(HDFont.caption).foregroundStyle(Palette.inkSoft)
                     }
                 }
@@ -161,8 +179,8 @@ struct ProBookingDetailView: View {
         .refreshable { await app.loadProSide() }
         .sheet(item: $declining) { b in DeclineSheet(booking: b, clientName: client) }
         .confirmSheet(isPresented: $confirmCancel,
-                      title: "Cancel on \(client)?",
-                      message: "\(client) is refunded in full and told straight away. Your reliability drops. We see it, clients don't.",
+                      title: "Cancel on \(ProFlow.who(client))?",
+                      message: "\(ProFlow.whoLead(client)) is refunded in full and told straight away. Your reliability drops. We see it, clients don't.",
                       confirmTitle: "Cancel the booking",
                       cancelTitle: "Keep it") {
             Task { await cancel(b) }
@@ -212,7 +230,8 @@ struct ProBookingDetailView: View {
                     }
                 }
             }
-        } else if !b.inspoSeeds.isEmpty {
+        } else if !b.inspoSeeds.isEmpty && !app.isLive {
+            // Sample data only: seeded stand-ins. A real booking's inspo is always her own photos.
             HStack(spacing: Space.s) {
                 ForEach(Array(b.inspoSeeds.prefix(3).enumerated()), id: \.offset) { i, seed in
                     WorkTile(item: WorkItem(id: "inspo_\(b.id)_\(i)", category: b.primaryCategory, caption: "Inspo photo \(i + 1)", seed: seed), cornerRadius: Radius.photo)
@@ -222,7 +241,7 @@ struct ProBookingDetailView: View {
         }
     }
 
-    private func map(_ b: Booking, client: String) -> some View {
+    private func map(_ b: Booking) -> some View {
         let coordinate = CLLocationCoordinate2D(latitude: b.address.latitude, longitude: b.address.longitude)
         let region = MKCoordinateRegion(center: coordinate, span: MKCoordinateSpan(latitudeDelta: 0.012, longitudeDelta: 0.012))
         return Map(initialPosition: .region(region), interactionModes: []) {
@@ -249,7 +268,7 @@ struct ProBookingDetailView: View {
         defer { accepting = false }
         if await app.update(b, to: .confirmed) != nil {
             Haptics.success()
-            app.show("Booked. \(app.clientName(b.clientID))'s \(b.start.friendlyDay) at \(b.start.clock).")
+            app.show("Booked. \(ProFlow.whoLead(app.clientName(b.clientID)))'s \(b.start.friendlyDay) at \(b.start.clock).")
         }
     }
 
@@ -257,7 +276,7 @@ struct ProBookingDetailView: View {
         cancelling = true
         defer { cancelling = false }
         if await app.update(b, to: .cancelledByPro) != nil {
-            app.show("Cancelled. \(app.clientName(b.clientID))'s been refunded in full.")
+            app.show("Cancelled. \(ProFlow.whoLead(app.clientName(b.clientID)))'s been refunded in full.")
         }
     }
 }

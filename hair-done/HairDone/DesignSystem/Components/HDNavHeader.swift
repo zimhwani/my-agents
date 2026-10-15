@@ -11,7 +11,11 @@ import UIKit
 ///         .hdNavHeader("Kiara M.")
 ///         .hdNavHeader(trailing: { IconButton(symbol: "square.and.arrow.up", label: "Share") { share() } })
 ///
-/// On an ink ground (the booking flow, a full-screen viewer) pass `tone: .ink`.
+/// On an ink ground (the booking flow, a full-screen viewer) pass `tone: .ink`. Over a full-bleed
+/// photo pass `tone: .onPhoto`: no ground, `onPhoto` glyphs with a soft shadow, and the header is
+/// laid over the content instead of inset above it.
+///
+/// `titleMark` sits just before the title, centred with it (the thread header's avatar).
 struct HDNavHeader<Trailing: View>: View {
     typealias Tone = HDNavTone
 
@@ -22,6 +26,8 @@ struct HDNavHeader<Trailing: View>: View {
     var onBack: (() -> Void)?
     /// False hides the back glyph (a root screen with a header).
     var showsBack: Bool
+    /// Shown just before the title and centred with it, e.g. an avatar.
+    var titleMark: AnyView?
     private let trailing: Trailing
 
     @Environment(\.dismiss) private var dismiss
@@ -32,6 +38,7 @@ struct HDNavHeader<Trailing: View>: View {
         showsHairline: Bool = false,
         showsBack: Bool = true,
         onBack: (() -> Void)? = nil,
+        titleMark: AnyView? = nil,
         @ViewBuilder trailing: () -> Trailing
     ) {
         self.title = title
@@ -39,19 +46,25 @@ struct HDNavHeader<Trailing: View>: View {
         self.showsHairline = showsHairline
         self.showsBack = showsBack
         self.onBack = onBack
+        self.titleMark = titleMark
         self.trailing = trailing()
     }
 
     var body: some View {
         ZStack {
-            if let title {
-                Text(title)
-                    .font(HDFont.navTitle)
-                    .foregroundStyle(ink)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                    .padding(.horizontal, 56)
-                    .accessibilityAddTraits(.isHeader)
+            if title != nil || titleMark != nil {
+                HStack(spacing: Space.s) {
+                    if let titleMark { titleMark }
+                    if let title {
+                        Text(title)
+                            .font(HDFont.navTitle)
+                            .foregroundStyle(ink)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                            .accessibilityAddTraits(.isHeader)
+                    }
+                }
+                .padding(.horizontal, 56)
             }
             HStack(spacing: 0) {
                 if showsBack {
@@ -66,20 +79,44 @@ struct HDNavHeader<Trailing: View>: View {
         }
         .frame(minHeight: 44)
         .frame(maxWidth: .infinity)
+        .modifier(PhotoGlyphShadow(isOn: tone == .onPhoto))
         .background(ground)
         .overlay(alignment: .bottom) {
             Rectangle().fill(tone == .paper ? Palette.lineStrong : Palette.inkLine)
                 .frame(height: 0.5)
-                .opacity(showsHairline ? 1 : 0)
+                .opacity(showsHairline && tone != .onPhoto ? 1 : 0)
         }
     }
 
-    private var ink: Color { tone == .paper ? Palette.ink : Palette.onInk }
-    private var ground: Color { tone == .paper ? Palette.paper : Palette.inkGround }
+    private var ink: Color {
+        switch tone {
+        case .paper: return Palette.ink
+        case .ink: return Palette.onInk
+        case .onPhoto: return Palette.onPhoto
+        }
+    }
+
+    private var ground: Color {
+        switch tone {
+        case .paper: return Palette.paper
+        case .ink: return Palette.inkGround
+        case .onPhoto: return Color.clear
+        }
+    }
 }
 
-/// `.paper` on paper screens, `.ink` on ink grounds.
-enum HDNavTone { case paper, ink }
+/// Keeps paper glyphs legible on any photo: a soft shadow, only for `.onPhoto`.
+private struct PhotoGlyphShadow: ViewModifier {
+    var isOn: Bool
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if isOn { content.shadow(color: Color.black.opacity(0.35), radius: 6) } else { content }
+    }
+}
+
+/// `.paper` on paper screens, `.ink` on ink grounds, `.onPhoto` laid over a full-bleed photo.
+enum HDNavTone { case paper, ink, onPhoto }
 
 extension HDNavHeader where Trailing == EmptyView {
     /// No trailing action. For a custom back action, use the main init with `{ EmptyView() }`
@@ -100,16 +137,39 @@ extension View {
         @ViewBuilder trailing: () -> Trailing
     ) -> some View {
         let header = HDNavHeader(title, tone: tone, showsHairline: showsHairline, onBack: onBack, trailing: trailing)
-        return self
-            .toolbar(.hidden, for: .navigationBar)
-            .safeAreaInset(edge: .top, spacing: 0) { header }
-            .background(SwipeBackEnabler().frame(width: 0, height: 0).accessibilityHidden(true))
+        return modifier(HDNavHeaderPlacement(header: header, overContent: tone == .onPhoto))
+    }
+
+    /// `hdNavHeader` with a mark centred beside the title (the thread header's avatar) and the
+    /// standard back.
+    func hdNavHeader(_ title: String?, tone: HDNavTone = .paper, showsHairline: Bool = false, titleMark: AnyView) -> some View {
+        let header = HDNavHeader(title, tone: tone, showsHairline: showsHairline, onBack: nil, titleMark: titleMark) { EmptyView() }
+        return modifier(HDNavHeaderPlacement(header: header, overContent: tone == .onPhoto))
     }
 
     /// `hdNavHeader` with no trailing action and the standard back (dismiss). For a custom back,
     /// use the main form: `.hdNavHeader("Title", onBack: { ... }) { EmptyView() }`.
     func hdNavHeader(_ title: String? = nil, tone: HDNavTone = .paper, showsHairline: Bool = false) -> some View {
         hdNavHeader(title, tone: tone, showsHairline: showsHairline, onBack: nil) { EmptyView() }
+    }
+}
+
+/// Inset above the content, or laid over it (`.onPhoto`), with the system bar hidden and the
+/// edge swipe kept.
+private struct HDNavHeaderPlacement<Header: View>: ViewModifier {
+    var header: Header
+    var overContent: Bool
+
+    func body(content: Content) -> some View {
+        Group {
+            if overContent {
+                content.overlay(alignment: .top) { header }
+            } else {
+                content.safeAreaInset(edge: .top, spacing: 0) { header }
+            }
+        }
+        .toolbar(.hidden, for: .navigationBar)
+        .background(SwipeBackEnabler().frame(width: 0, height: 0).accessibilityHidden(true))
     }
 }
 

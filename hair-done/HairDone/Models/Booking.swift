@@ -125,7 +125,7 @@ enum BookingStatus: String, Codable, CaseIterable, Hashable {
         case .cancelledByClient: return "\(client) cancelled."
         case .cancelledByPro: return "You cancelled."
         case .declined: return "You declined."
-        case .noShow: return "Client didn't show."
+        case .noShow: return "\(client) didn't show."
         }
     }
 
@@ -213,6 +213,9 @@ struct Booking: Identifiable, Hashable, Codable {
     var reference: String
     /// Her inspo photos, signed to load for an hour. Empty means the tiles use `inspoSeeds` as before.
     var inspoURLs: [URL] = []
+    /// Her card hold, as the server has it (`bookings.hold_state`, e.g. "none", "placed").
+    /// Nil on the sample data and from an older server.
+    var holdState: String? = nil
 
     var minutes: Int { services.reduce(0) { $0 + $1.minutes } }
     var end: Date { start.adding(minutes: minutes) }

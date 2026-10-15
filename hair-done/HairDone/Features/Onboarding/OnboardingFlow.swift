@@ -855,10 +855,12 @@ private struct OnboardingLocation: View {
         }
     }
 
-    /// Concentric hairlines, the mark in the middle, three bits of real work on the rings.
+    /// Concentric hairlines, the mark in the middle, three bundled photos on the rings. Marketing art,
+    /// not any pro's work, so nothing is named and it's drawn straight from the bundle.
+    private static let ringArt: [(category: Category, seed: Int)] = [(.nails, 3), (.hair, 1), (.lashes, 2)]
+
     private var rings: some View {
-        let work: [WorkItem] = Array(MockData.pros.prefix(3)).compactMap { p in p.work.first(where: { $0.isPinned }) ?? p.work.first }
-        return ZStack {
+        ZStack {
             ForEach([1.0, 0.68, 0.36], id: \.self) { scale in
                 Circle()
                     .strokeBorder(Palette.lineStrong, lineWidth: 0.5)
@@ -868,11 +870,13 @@ private struct OnboardingLocation: View {
             }
             MonogramMark(size: 20)
 
-            ForEach(Array(work.enumerated()), id: \.element.id) { i, item in
+            ForEach(0..<Self.ringArt.count, id: \.self) { i in
+                let art = Self.ringArt[i]
                 let angle = Double(i) * 120 - 30
                 let radius: CGFloat = i == 1 ? 115 : 78
-                WorkTile(item: item, cornerRadius: Radius.photo)
+                MarketingPhoto(category: art.category, seed: art.seed)
                     .frame(width: 36, height: 45)
+                    .clipShape(RoundedRectangle(cornerRadius: Radius.photo, style: .continuous))
                     .overlay(RoundedRectangle(cornerRadius: Radius.photo, style: .continuous).strokeBorder(Palette.paper, lineWidth: 1.5))
                     .offset(x: cos(angle * .pi / 180) * radius, y: sin(angle * .pi / 180) * radius)
                     .scaleEffect(appeared ? 1 : 0.6)

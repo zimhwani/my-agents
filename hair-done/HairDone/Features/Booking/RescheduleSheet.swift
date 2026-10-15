@@ -13,8 +13,14 @@ struct RescheduleSheet: View {
     @State private var problem: String? = nil
     @State private var reload = 0
 
-    /// A placed hold can't stretch past six days from now, so the strip stops there.
+    /// A placed card hold can't stretch past six days from now (`reschedule_booking` says
+    /// `too_far_to_move`). The app doesn't know the hold state, so every booking gets the limit:
+    /// seven columns (today plus six), and the last day's times stop at exactly now + 6 days.
     private static let daysAhead = 7
+    private static let holdLimit: TimeInterval = 6 * 24 * 60 * 60
+
+    /// The latest start the server will take. Computed on each render so it never goes stale.
+    private var latestStart: Date { Date().addingTimeInterval(RescheduleSheet.holdLimit) }
 
     private var tooLate: Bool { booking.hoursUntil < Double(Fees.freeCancellationHours) }
 
@@ -92,16 +98,14 @@ struct RescheduleSheet: View {
                             .font(HDFont.sub)
                             .foregroundStyle(Palette.inkSoft)
                             .fixedSize(horizontal: false, vertical: true)
-                        if !pro.instantBook {
-                            Text("\(pro.firstName) confirms each booking herself, so a new time goes back to her to say yes.")
-                                .font(HDFont.caption)
-                                .foregroundStyle(Palette.inkSoft)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
+                        Text("\(pro.firstName)'s told straight away. Nothing changes on your card.")
+                            .font(HDFont.caption)
+                            .foregroundStyle(Palette.inkSoft)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                     .screenGutter()
 
-                    SlotPicker(pro: pro, minutes: booking.minutes, selected: $newStart, days: RescheduleSheet.daysAhead, reload: reload)
+                    SlotPicker(pro: pro, minutes: booking.minutes, selected: $newStart, days: RescheduleSheet.daysAhead, reload: reload, latestStart: latestStart)
 
                     if let problem {
                         FieldMessage(text: problem)
@@ -118,7 +122,7 @@ struct RescheduleSheet: View {
                 name: pro.firstName,
                 summary: nil,
                 detail: newStart.map { "\($0.friendlyDay), \($0.clock)" } ?? "Pick a time",
-                actionTitle: ctaTitle(pro),
+                actionTitle: "Move it",
                 isEnabled: canMove,
                 isLoading: isMoving
             ) { move(pro) }
@@ -129,12 +133,7 @@ struct RescheduleSheet: View {
 
     private var canMove: Bool {
         guard let newStart, !app.isOffline else { return false }
-        return newStart != booking.start
-    }
-
-    private func ctaTitle(_ pro: Pro) -> String {
-        guard newStart != nil else { return "Move it" }
-        return pro.instantBook ? "Move it" : "Ask \(pro.firstName)"
+        return newStart != booking.start && newStart <= latestStart
     }
 
     private func move(_ pro: Pro) {
@@ -153,11 +152,7 @@ struct RescheduleSheet: View {
                 return
             }
             dismiss()
-            if pro.instantBook {
-                app.show("Moved to \(start.friendlyDayInSentence) at \(start.clock).")
-            } else {
-                app.show("Asked. \(pro.firstName) usually replies within \(pro.replyWindow).")
-            }
+            app.show("Moved to \(start.friendlyDayInSentence) at \(start.clock). \(pro.firstName)'s been told.")
         }
     }
 

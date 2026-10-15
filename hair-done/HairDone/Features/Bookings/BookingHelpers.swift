@@ -109,15 +109,13 @@ extension Booking {
     var isUnfinished: Bool { status.isUpcoming || status == .done }
 
     /// Her pro's photo for this booking: one in the booked category, else her pinned or first photo,
-    /// else the warm placeholder in that category. Never another pro's photo.
-    func coverItem(pro: Pro?) -> WorkItem {
-        if let pro {
-            let matching = pro.work.filter { $0.category == primaryCategory }
-            if let pick = matching.first(where: { $0.isPinned }) ?? matching.first { return pick }
-            if let pick = pro.work.first(where: { $0.isPinned }) ?? pro.work.first { return pick }
-            return WorkItem(id: "cover_\(pro.id)", category: primaryCategory, caption: pro.displayName, seed: pro.seed)
-        }
-        return WorkItem(id: "cover_\(id)", category: primaryCategory, caption: servicesLine, seed: reference.hdSeed)
+    /// else her avatar. Nil when there's none of hers (or her card hasn't loaded): callers show the
+    /// neutral `NoPhotoTile`. Never a bundled stock photo presented as hers.
+    func coverItem(pro: Pro?) -> WorkItem? {
+        guard let pro else { return nil }
+        let matching = pro.work.filter { $0.category == primaryCategory }
+        if let pick = matching.first(where: { $0.isPinned }) ?? matching.first { return pick }
+        return pro.homeCover
     }
 }
 
@@ -221,89 +219,14 @@ struct LiveDot: View {
     }
 }
 
-/// A photo that fills its frame, cropped, at the photo radius. Nil shows the warm photo ground.
+/// A photo that fills its frame, cropped, at the photo radius. Nil shows the neutral `NoPhotoTile`.
+/// The same object as Home's `HomePhoto` (kept by name for the thread header).
 struct BookingPhoto: View {
     var item: WorkItem?
     var cornerRadius: CGFloat = Radius.photo
 
     var body: some View {
-        Group {
-            if let item { WorkTile(item: item, cornerRadius: 0) } else { Palette.photoGround }
-        }
-        .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
-        .accessibilityHidden(true)
-    }
-}
-
-/// The ink "Next up" block, the same object as Home's: her photo at the left, status eyebrow,
-/// serif name line and the time, on `inkGround`. Opens the booking.
-struct NextUpBlock: View {
-    var booking: Booking
-    var pro: Pro?
-    var action: () -> Void
-
-    private var proName: String { pro?.firstName ?? "her" }
-
-    var body: some View {
-        Button {
-            Haptics.light()
-            action()
-        } label: {
-            HStack(spacing: 0) {
-                BookingPhoto(item: booking.coverItem(pro: pro), cornerRadius: 0)
-                    .frame(width: 84)
-                    .frame(maxHeight: .infinity)
-                    .clipped()
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack(spacing: 7) {
-                        if booking.isToday && booking.status.isActiveDay {
-                            LiveDot(color: dotColor, size: 5)
-                        } else {
-                            Circle().fill(dotColor).frame(width: 5, height: 5)
-                        }
-                        Text("Next up · \(booking.status.label)")
-                            .eyebrowStyle(color: Palette.onInkSoft)
-                            .lineLimit(1)
-                    }
-                    Text(booking.cardTitle(proName: proName))
-                        .font(HDFont.nameBar)
-                        .foregroundStyle(Palette.onInk)
-                        .fixedSize(horizontal: false, vertical: true)
-                    Text(booking.whenWhereLine)
-                        .font(HDFont.caption)
-                        .foregroundStyle(Palette.onInkSoft)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                .padding(.leading, Space.l)
-                .padding(.vertical, 14)
-                Spacer(minLength: Space.s)
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 13, weight: .regular))
-                    .foregroundStyle(Palette.onInkSoft)
-                    .padding(.trailing, Space.l)
-                    .accessibilityHidden(true)
-            }
-            .frame(minHeight: 104)
-            .background(Palette.inkGround)
-            .clipShape(RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: Radius.card, style: .continuous)
-                    .strokeBorder(Palette.onInk.opacity(0.10), lineWidth: 0.5)
-            )
-        }
-        .buttonStyle(PressLift(scale: 0.985))
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("Next up. \(booking.cardTitle(proName: proName)), \(booking.whenWhereLine), \(booking.status.label)")
-        .accessibilityHint("Opens the booking")
-    }
-
-    /// Status dot on ink: warn for waiting, success for on, paper for the rest.
-    private var dotColor: Color {
-        switch booking.status {
-        case .requested: return Palette.warn
-        case .confirmed, .onHerWay, .arrived, .inProgress, .done, .paid: return Palette.success
-        default: return Palette.onInkSoft
-        }
+        HomePhoto(item: item, cornerRadius: cornerRadius)
     }
 }
 

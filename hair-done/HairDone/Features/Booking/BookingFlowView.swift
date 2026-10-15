@@ -689,7 +689,7 @@ struct NotesStep: View {
                         Text("\(photos.count) of \(limit)").font(HDFont.caption.monospacedDigit()).foregroundStyle(Palette.inkSoft)
                     }
                     ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: Space.s) {
+                        HStack(alignment: .top, spacing: Space.s) {
                             ForEach(Array(photos.indices), id: \.self) { index in
                                 UploadTile(image: thumb(at: index), state: .done, onRemove: { remove(at: index) })
                             }
@@ -768,18 +768,33 @@ struct NotesStep: View {
 }
 
 /// The "Add photos" tile: same size as a photo, a 1pt line border and an outline plus. No dashes, no fill.
+/// At accessibility text sizes the words move under the tile (which stays photo-sized) so they never clip.
 struct AddPhotoTile: View {
+    @Environment(\.dynamicTypeSize) private var typeSize
+
+    private var label: some View {
+        Text("Add photos")
+            .font(HDFont.caption.weight(.medium))
+            .multilineTextAlignment(.center)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
     var body: some View {
         VStack(spacing: Space.s) {
-            Image(systemName: "plus").font(.system(size: 19, weight: .light))
-            Text("Add photos").font(HDFont.caption.weight(.medium))
+            VStack(spacing: Space.s) {
+                Image(systemName: "plus").font(.system(size: 19, weight: .light))
+                if !typeSize.isAccessibilitySize { label }
+            }
+            .frame(width: 104, height: 130)
+            .overlay(
+                RoundedRectangle(cornerRadius: Radius.photo, style: .continuous)
+                    .strokeBorder(Palette.line, lineWidth: 1)
+            )
+            if typeSize.isAccessibilitySize {
+                label.frame(width: 104)
+            }
         }
         .foregroundStyle(Palette.ink)
-        .frame(width: 104, height: 130)
-        .overlay(
-            RoundedRectangle(cornerRadius: Radius.photo, style: .continuous)
-                .strokeBorder(Palette.line, lineWidth: 1)
-        )
         .contentShape(Rectangle())
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Add photos")

@@ -26,7 +26,6 @@ struct ProCalendarView: View {
     @State private var segment: Segment = .week
     @State private var weekStart: Date = ProWeek.monday(of: Date())
     @State private var selectedDay: Date = Date().startOfDay
-    @State private var path = NavigationPath()
     @State private var blocking = false
     @State private var hoursDraft = HoursDraft()
     @State private var hoursLoaded = false
@@ -45,10 +44,12 @@ struct ProCalendarView: View {
     }
 
     private var availability: WeeklyAvailability { app.proSelf?.availability ?? .standard }
+    /// Kept in `AppState`, so switching to booking and back lands on the same screen.
+    private var path: Binding<NavigationPath> { app.path(for: ProTab.calendar) }
     private var isCurrentWeek: Bool { weekStart == ProWeek.monday(of: Date()) }
 
     var body: some View {
-        NavigationStack(path: $path) {
+        NavigationStack(path: path) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     if app.isOffline { OfflineBar().padding(.horizontal, -Space.gutter) }
@@ -59,6 +60,16 @@ struct ProCalendarView: View {
                     if app.proSideLoadFailed && app.proBookings.isEmpty && segment == .week {
                         ErrorState { Task { await app.loadProSide() } }
                             .padding(.horizontal, -Space.gutter)
+                    } else if app.showsProSideSkeleton && segment == .week {
+                        // Before the first load: not "Free all day." yet.
+                        VStack(alignment: .leading, spacing: Space.l) {
+                            SkeletonBlock(height: 72, radius: Radius.card)
+                            SkeletonBlock(width: 160, height: 26)
+                            VStack(spacing: 0) { RowSkeleton(); RowSkeleton() }
+                        }
+                        .padding(.top, Space.xl)
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityLabel("Loading")
                     } else {
                         switch segment {
                         case .week: weekView.padding(.top, Space.xl)
@@ -92,22 +103,24 @@ struct ProCalendarView: View {
 
     // MARK: Hours save
 
-    /// Slides up only once her hours have changed, on either segment, so it can't be missed.
+    /// The ink bar: slides up only once her hours have changed, on either segment, so it can't be missed.
     @ViewBuilder
     private var hoursSaveBar: some View {
         if hoursDirty {
             VStack(alignment: .leading, spacing: Space.s) {
-                if hoursFailed { FieldMessage(text: "Didn't save. Your changes are still here. Try again.") }
+                if hoursFailed {
+                    WarnDotLine(text: "Didn't save. Your changes are still here. Try again.", color: Palette.onInk, font: HDFont.caption)
+                }
                 HStack(spacing: Space.s) {
-                    InkButton(title: "Save hours", isLoading: savingHours, isEnabled: !app.isOffline) { Task { _ = await saveHours() } }
-                    OutlineButton(title: "Discard") { discardHours() }
+                    InkButton(title: "Save hours", isLoading: savingHours, isEnabled: !app.isOffline, tone: .onInk) { Task { _ = await saveHours() } }
+                    OutlineButton(title: "Discard", tone: .onInk) { discardHours() }
                         .frame(maxWidth: 140)
                 }
             }
             .padding(.horizontal, Space.gutter)
             .padding(.vertical, Space.m)
-            .background(Palette.paper)
-            .overlay(alignment: .top) { Rectangle().fill(Palette.lineStrong).frame(height: 0.5) }
+            .background(Palette.inkGround.ignoresSafeArea(edges: .bottom))
+            .overlay(alignment: .top) { Rectangle().fill(Palette.inkEdge).frame(height: 0.5) }
             .transition(.move(edge: .bottom).combined(with: .opacity))
         }
     }
@@ -172,10 +185,10 @@ struct ProCalendarView: View {
                 } label: {
                     VStack(spacing: 4) {
                         Text(day.weekday.short).font(HDFont.caption)
-                            .foregroundStyle(isSelected ? Palette.paper : Palette.inkSoft)
+                            .foregroundStyle(isSelected ? Palette.onInkSoft : Palette.inkSoft)
                         Text(day.dayNumber)
                             .font(HDFont.sans(20, relativeTo: .title3).monospacedDigit())
-                            .foregroundStyle(isSelected ? Palette.paper : Palette.ink)
+                            .foregroundStyle(isSelected ? Palette.onInk : Palette.ink)
                             .opacity(off && !isSelected ? 0.45 : 1)
                             .padding(.bottom, 2)
                             .overlay(alignment: .bottom) {
@@ -183,14 +196,18 @@ struct ProCalendarView: View {
                             }
                         HStack(spacing: 2) {
                             ForEach(0..<min(count, 3), id: \.self) { _ in
-                                Circle().fill(isSelected ? Palette.paper : Palette.inkSoft).frame(width: 4, height: 4)
+                                Circle().fill(isSelected ? Palette.onInk : Palette.inkSoft).frame(width: 4, height: 4)
                             }
                         }
                         .frame(height: 4)
                     }
                     .frame(maxWidth: .infinity, minHeight: 44)
                     .padding(.vertical, Space.s)
-                    .background(isSelected ? Palette.ink : Color.clear, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+                    // The ink ground (not `Palette.ink`, cream in dark) with an ink edge: invisible in
+                    // light, a cream line in dark, where the ground is darker than the paper.
+                    .background(isSelected ? Palette.inkGround : Color.clear, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: Radius.card, style: .continuous)
+                        .strokeBorder(isSelected ? Palette.ink : Color.clear, lineWidth: 1))
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
@@ -222,7 +239,7 @@ struct ProCalendarView: View {
                     switch item {
                     case .booking(let b):
                         NavigationLink(value: Route.proBooking(b.id)) {
-                            ProBookingRow(booking: b, clientName: app.clientName(b.clientID))
+                            ProBookingRow(booking: b, clientName: app.clientName(b.clientID), nameKnown: app.isClientNameKnown(b.clientID))
                         }
                         .buttonStyle(.plain)
                     case .free(let a, let z):
@@ -255,7 +272,10 @@ struct ProCalendarView: View {
                         Task { await setBlocked(day, true) }
                     }
                     if let clash {
-                        WarnDotLine(text: "You've got \(app.clientName(clash.clientID)) at \(clash.start.clock). Blocking won't cancel her.", font: HDFont.caption)
+                        let name = app.clientName(clash.clientID)
+                        WarnDotLine(text: name.isEmpty
+                                    ? "You've got a booking at \(clash.start.clock). Blocking won't cancel it."
+                                    : "You've got \(name) at \(clash.start.clock). Blocking won't cancel her.", font: HDFont.caption)
                     } else {
                         Text("Nobody can book you that day. Bookings you've got still stand.")
                             .font(HDFont.caption).foregroundStyle(Palette.inkSoft)
@@ -330,12 +350,12 @@ struct ProCalendarView: View {
     private var undoBar: some View {
         if let u = undo {
             HStack(spacing: Space.m) {
-                Text(u.line).font(HDFont.sub).foregroundStyle(Palette.paper)
+                Text(u.line).font(HDFont.sub).foregroundStyle(Palette.onInk)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 Button {
                     Task { await setBlocked(u.day, !u.wasBlocked, isUndo: true) }
                 } label: {
-                    Text("Undo").font(HDFont.subMedium).foregroundStyle(Palette.paper).underline()
+                    Text("Undo").font(HDFont.subMedium).foregroundStyle(Palette.onInk).underline()
                         .frame(minWidth: 44, minHeight: 44)
                         .contentShape(Rectangle())
                 }
@@ -343,7 +363,8 @@ struct ProCalendarView: View {
             }
             .padding(.leading, Space.l)
             .padding(.trailing, Space.s)
-            .background(Palette.ink, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+            .background(Palette.inkGround, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: Radius.card, style: .continuous).strokeBorder(Palette.inkEdge, lineWidth: 0.5))
             .padding(.horizontal, Space.gutter)
             .padding(.bottom, Space.l)
             .transition(.move(edge: .bottom).combined(with: .opacity))

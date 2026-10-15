@@ -1,6 +1,7 @@
 import SwiftUI
 
 @main
+@MainActor
 struct HairDoneApp: App {
     /// The push token and notification taps come in through here.
     @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
@@ -13,10 +14,8 @@ struct HairDoneApp: App {
             RootView()
                 .environment(app)
                 .tint(Palette.ink)
-                .task {
-                    PushCenter.shared.attach(app)
-                    await app.restoreSession()
-                }
+                // Hooks up notification taps, then picks up a saved session (and loads it).
+                .task { await app.restoreSession() }
                 .onOpenURL { url in open(url) }
                 .onChange(of: scenePhase) { _, phase in
                     if phase == .active { app.becameActive() }

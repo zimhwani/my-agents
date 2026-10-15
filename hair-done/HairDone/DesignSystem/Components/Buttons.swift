@@ -103,17 +103,6 @@ struct OutlineButton: View {
     private var color: Color { tone == .paper ? Palette.ink : Palette.onInk }
 }
 
-/// Deprecated name. Now draws an `OutlineButton` (no white card fill).
-struct SecondaryButton: View {
-    var title: String
-    var symbol: String? = nil
-    var action: () -> Void
-
-    var body: some View {
-        OutlineButton(title: title, symbol: symbol, action: action)
-    }
-}
-
 /// Text only, 44pt tall: "Not now", "Skip for now", "Cancel booking", "Book again".
 /// inkSoft by default; pass `tint: Palette.ink` for a text link that is the action. Never lacquer.
 struct TertiaryButton: View {

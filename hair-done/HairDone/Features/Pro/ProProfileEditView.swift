@@ -7,7 +7,7 @@ enum ProEditSection: String, Hashable {
 }
 
 /// Everything a client sees about her, editable, led by what they see first: her cover with her
-/// name on it. Save sits in the header and lights up once something's changed; Back asks first.
+/// name on it. Save is the ink bar that slides up once something's changed; Back asks first.
 struct ProProfileEditView: View {
     @Environment(AppState.self) private var app
     @Environment(\.dismiss) private var dismiss
@@ -29,6 +29,7 @@ struct ProProfileEditView: View {
     @State private var faceUpload: UploadState? = nil
     @State private var faceImage: UIImage? = nil
     @State private var faceJPEG: Data? = nil
+    @Environment(\.dynamicTypeSize) private var typeSize
 
     private let unsavedID = "profile.edit"
 
@@ -46,21 +47,9 @@ struct ProProfileEditView: View {
             }
         }
         .paperBackground()
-        .hdNavHeader("Your profile", onBack: back) {
-            Button {
-                Task { if let d = draft, await save(d) { dismiss() } }
-            } label: {
-                Group {
-                    if saving { ProgressView().tint(Palette.ink) } else { Text("Save").font(HDFont.subMedium) }
-                }
-                .foregroundStyle(canTapSave ? Palette.ink : Palette.inkSoft)
-                .frame(minWidth: 44, minHeight: 44)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .disabled(!canTapSave || saving)
-            .accessibilityLabel("Save")
-        }
+        .safeAreaInset(edge: .bottom, spacing: 0) { saveBar }
+        .animation(Motion.spring, value: isDirty)
+        .hdNavHeader("Your profile", onBack: back) { EmptyView() }
         .onAppear {
             if draft == nil, let p = app.proSelf {
                 draft = p
@@ -115,6 +104,30 @@ struct ProProfileEditView: View {
     }
 
     private var canTapSave: Bool { isDirty && !app.isOffline && (draft.map(canSave) ?? false) }
+
+    /// The ink bar, once something's changed.
+    @ViewBuilder
+    private var saveBar: some View {
+        if isDirty {
+            VStack(alignment: .leading, spacing: Space.s) {
+                if app.isOffline {
+                    Text("You're offline. Save when you're back.").font(HDFont.caption).foregroundStyle(Palette.onInkSoft)
+                }
+                HStack(spacing: Space.s) {
+                    InkButton(title: "Save", isLoading: saving, isEnabled: canTapSave, tone: .onInk) {
+                        Task { if let d = draft, await save(d) { dismiss() } }
+                    }
+                    OutlineButton(title: "Discard", tone: .onInk) { discard() }
+                        .frame(maxWidth: 140)
+                }
+            }
+            .padding(.horizontal, Space.gutter)
+            .padding(.vertical, Space.m)
+            .background(Palette.inkGround.ignoresSafeArea(edges: .bottom))
+            .overlay(alignment: .top) { Rectangle().fill(Palette.inkEdge).frame(height: 0.5) }
+            .transition(.move(edge: .bottom).combined(with: .opacity))
+        }
+    }
 
     private func back() {
         if isDirty { confirmLeave = true } else { dismiss() }
@@ -235,15 +248,19 @@ struct ProProfileEditView: View {
     // MARK: Sections
 
     private func nameSection(_ pro: Binding<Pro>) -> some View {
-        section("Name") {
-            HStack(alignment: .top, spacing: Space.l) {
+        // Side by side; one under the other at the accessibility sizes, where "Last initial" won't fit.
+        let fields = typeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: Space.l))
+            : AnyLayout(HStackLayout(alignment: .top, spacing: Space.l))
+        return section("Name") {
+            fields {
                 HDTextField(label: "First name", placeholder: "Kiara", text: pro.firstName, contentType: .givenName,
                             caption: "This is your name on both sides.")
                 HDTextField(label: "Last initial", placeholder: "M", text: Binding(
                     get: { pro.wrappedValue.lastInitial },
                     set: { pro.wrappedValue.lastInitial = String($0.prefix(1)).uppercased() }
                 ))
-                .frame(minWidth: 80, maxWidth: 110)
+                .frame(minWidth: 80, maxWidth: typeSize.isAccessibilitySize ? CGFloat.infinity : 110)
             }
             NavigationLink(value: Route.pro(pro.wrappedValue)) {
                 HStack(spacing: 6) {

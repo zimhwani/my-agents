@@ -134,6 +134,13 @@ enum ProFlow {
     /// "1 job", "3 jobs"
     static func count(_ n: Int, _ one: String, _ many: String) -> String { n == 1 ? "1 \(one)" : "\(n) \(many)" }
 
+    /// A client's name in a sentence, or "your client" while it's still on its way
+    /// (`AppState.clientName` is empty until then).
+    static func who(_ name: String) -> String { name.isEmpty ? "your client" : name }
+
+    /// The same at the start of a sentence: "Ruby's been told", "Your client's been told".
+    static func whoLead(_ name: String) -> String { name.isEmpty ? "Your client" : name }
+
     // MARK: Notice
 
     /// The "Notice you need" choices, in minutes.
@@ -309,7 +316,9 @@ struct ProFlowLayout: Layout {
 // MARK: - Unsaved edits
 
 /// Screens with edits she hasn't saved (Calendar's hours, Profile edit) register here, so a switch
-/// to booking can ask "Save your changes first?" instead of throwing them away.
+/// to booking (the Profile row, Inbox's Switch, a notification) asks "Save your changes first?"
+/// or waits, instead of throwing them away.
+@MainActor
 @Observable
 final class ProUnsavedWork {
     static let shared = ProUnsavedWork()
@@ -321,33 +330,39 @@ final class ProUnsavedWork {
 
     private(set) var entries: [String: Entry] = [:]
     var hasAny: Bool { !entries.isEmpty }
+    /// Called when the last entry goes (saved, discarded or cleared). `AppState` opens a
+    /// notification tap that was waiting on it.
+    @ObservationIgnored var onCleared: (@MainActor () -> Void)? = nil
 
     func update(_ id: String, dirty: Bool, save: @escaping () async -> Bool, discard: @escaping () -> Void) {
         if dirty {
             entries[id] = Entry(save: save, discard: discard)
-        } else if entries[id] != nil {
-            entries[id] = nil
+        } else {
+            clear(id)
         }
     }
 
     func clear(_ id: String) {
-        if entries[id] != nil { entries[id] = nil }
+        guard entries[id] != nil else { return }
+        entries[id] = nil
+        if entries.isEmpty { onCleared?() }
     }
 
     /// Saves each in turn. False at the first that doesn't save; the rest stay registered.
-    @MainActor
     func saveAll() async -> Bool {
         for (id, entry) in entries {
             guard await entry.save() else { return false }
-            entries[id] = nil
+            clear(id)
         }
         return true
     }
 
     func discardAll() {
         let all = entries
+        guard !all.isEmpty else { return }
         entries = [:]
         for entry in all.values { entry.discard() }
+        onCleared?()
     }
 }
 
@@ -406,6 +421,7 @@ extension View {
 /// Watches her booking-side threads while she's in Pro mode and puts up one line when a pro
 /// messages her there: "Kiara: ‘French tip or plain?’" with `Open`. Shared, so every pro tab
 /// shows the same banner and a message is only announced once.
+@MainActor
 @Observable
 final class ProSideBanner {
     static let shared = ProSideBanner()
@@ -532,13 +548,20 @@ private struct ProSideBannerModifier: ViewModifier {
 extension View {
     /// Put on each pro tab root. See `ProSideBanner`.
     func proSideBanner() -> some View { modifier(ProSideBannerModifier()) }
+
+    /// The same, only when `isOn` (Inbox is shared by both sides; the banner is for Pro mode).
+    @ViewBuilder
+    func proSideBanner(isOn: Bool) -> some View {
+        if isOn { proSideBanner() } else { self }
+    }
 }
 
 // MARK: - Status action button
 
-/// "On my way" → "I'm here" → "Start" → "Mark done". Marking done asks first. From 15 minutes
-/// after "I'm here", once she's messaged, `No show` sits under it. After done, a static warn dot:
-/// "Waiting for Ruby to pay."
+/// "On my way" → "I'm here" → "Start" → "Mark done". Marking done asks first. `No show` sits under
+/// it once she's messaged and it's 15 minutes past the later of the start time and her "I'm here"
+/// (as the server checks it, migration 0012). After done, a static warn dot: "Waiting for Ruby to pay."
+/// `clientName` may be empty while it loads; the sentences then say "your client".
 struct StatusActionButton: View {
     @Environment(AppState.self) private var app
     var booking: Booking
@@ -568,25 +591,28 @@ struct StatusActionButton: View {
                 }
                 if booking.status == .arrived { noShow }
             } else if booking.status == .done {
-                WarnDotLine(text: "Waiting for \(clientName) to pay.", color: strong)
+                WarnDotLine(text: "Waiting for \(who) to pay.", color: strong)
                     .frame(minHeight: 44, alignment: .leading)
             }
         }
         .confirmSheet(isPresented: $confirmDone,
                       title: "Mark it done?",
-                      message: "\(clientName)'s asked to pay \(Money.format(booking.price.clientTotalCents)) now. If she doesn't, we charge her card in 12 hours. \(Money.format(booking.price.proPayoutCents)) comes to you.",
+                      message: "\(whoLead)'s asked to pay \(Money.format(booking.price.clientTotalCents)) now. If she doesn't, we charge her card in 12 hours. \(Money.format(booking.price.proPayoutCents)) comes to you.",
                       confirmTitle: "Yes, done",
                       cancelTitle: "Not yet") {
             Task { await move(to: .done) }
         }
         .confirmSheet(isPresented: $confirmNoShow,
-                      title: "Mark \(clientName) as a no-show?",
+                      title: "Mark \(who) as a no-show?",
                       message: noShowMessage,
                       confirmTitle: "Mark no-show",
                       cancelTitle: "Wait a bit longer") {
             Task { await move(to: .noShow) }
         }
     }
+
+    private var who: String { ProFlow.who(clientName) }
+    private var whoLead: String { ProFlow.whoLead(clientName) }
 
     private func tap(_ step: (title: String, next: BookingStatus)) {
         if step.next == .done { confirmDone = true } else { Task { await move(to: step.next) } }
@@ -595,6 +621,11 @@ struct StatusActionButton: View {
     // MARK: No show
 
     private var arrivedAt: Date? { booking.events.last(where: { $0.status == .arrived })?.at }
+
+    /// No show opens 15 minutes after the later of the start time and her "I'm here".
+    private var noShowOpens: Date {
+        max(booking.start, arrivedAt ?? booking.start).addingTimeInterval(15 * 60)
+    }
 
     private var messagesSent: Int {
         guard let me = app.proSelf?.id, let thread = app.thread(for: booking) else { return 0 }
@@ -610,12 +641,12 @@ struct StatusActionButton: View {
         case 2: times = " and messaged twice"
         default: times = " and messaged \(messagesSent) times"
         }
-        return "You've been here \(since)\(times). \(clientName)'s charged the full \(Money.format(ProMoney.noShowCharge(booking))) and you're paid \(Money.format(ProMoney.noShowPayout(booking))). She can question it for 12 hours."
+        return "You've been here \(since)\(times). \(whoLead)'s charged the full \(Money.format(ProMoney.noShowCharge(booking))) and you're paid \(Money.format(ProMoney.noShowPayout(booking))). She can question it for 12 hours."
     }
 
     private var noShow: some View {
         TimelineView(.periodic(from: .now, by: 30)) { context in
-            let waited = arrivedAt.map { context.date.timeIntervalSince($0) >= 15 * 60 } ?? false
+            let waited = context.date >= noShowOpens
             if waited && messagesSent > 0 {
                 Button {
                     Haptics.light()
@@ -627,7 +658,7 @@ struct StatusActionButton: View {
                 .buttonStyle(.plain)
                 .disabled(app.isOffline)
             } else {
-                Text("No show? Message \(clientName) first, then wait 15 minutes.")
+                Text("No show? Message \(who) first. It opens 15 minutes after the start time, or after you arrived if you were late.")
                     .font(HDFont.caption).foregroundStyle(soft)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -639,12 +670,12 @@ struct StatusActionButton: View {
         defer { busy = false }
         guard let updated = await app.update(booking, to: status) else { return }
         switch status {
-        case .onHerWay: app.show("\(clientName)'s been told you're on your way.")
-        case .arrived: app.show("\(clientName)'s been told you're here.")
+        case .onHerWay: app.show("\(whoLead)'s been told you're on your way.")
+        case .arrived: app.show("\(whoLead)'s been told you're here.")
         case .inProgress: app.show("Started. Tap Mark done when you're finished.")
         case .done:
             Haptics.success()
-            app.show("Done. \(clientName)'s been asked to pay.")
+            app.show("Done. \(whoLead)'s been asked to pay.")
         case .noShow:
             app.show("Marked as a no-show. \(Money.format(ProMoney.noShowPayout(updated))) comes to you.")
         default: break
@@ -672,7 +703,7 @@ struct DeclineSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            SheetHeader(title: "Reason", subtitle: "\(clientName) sees this. Keep it kind.", onClose: { dismiss() })
+            SheetHeader(title: "Reason", subtitle: "\(ProFlow.whoLead(clientName)) sees this. Keep it kind.", onClose: { dismiss() })
             ScrollView {
                 VStack(spacing: 0) {
                     ForEach(Array(ProFlow.declineReasons.enumerated()), id: \.offset) { i, reason in
@@ -694,7 +725,7 @@ struct DeclineSheet: View {
             }
             VStack(alignment: .leading, spacing: Space.s) {
                 InkButton(title: "Decline", isLoading: busy, isEnabled: canSend && !app.isOffline) { Task { await decline() } }
-                Text(app.isOffline ? "You're offline. Try again when you're back." : "\(clientName)'s hold is released the moment you tap.")
+                Text(app.isOffline ? "You're offline. Try again when you're back." : "\(ProFlow.whoLead(clientName))'s hold is released the moment you tap.")
                     .font(HDFont.caption).foregroundStyle(Palette.inkSoft)
             }
             .screenGutter()
@@ -714,7 +745,7 @@ struct DeclineSheet: View {
         let reason = isOther ? other.trimmingCharacters(in: .whitespacesAndNewlines) : ProFlow.declineReasons[picked]
         // A failure shows as a toast on this sheet (holdsPushRoutes carries it) and the sheet stays.
         if await app.update(booking, to: .declined, reason: reason) != nil {
-            app.show("Declined. \(clientName)'s been told and her hold's released.")
+            app.show("Declined. \(ProFlow.whoLead(clientName))'s been told and her hold's released.")
             dismiss()
         }
     }
@@ -722,10 +753,12 @@ struct DeclineSheet: View {
 
 // MARK: - A booking as a row
 
-/// One line of a day: time, client, what, status. Used on Today and in Calendar.
+/// One line of a day: time, client, what, status. Used on Today and in Calendar. While the client's
+/// name is still loading (`nameKnown` false) a shimmer stands where it goes.
 struct ProBookingRow: View {
     var booking: Booking
     var clientName: String
+    var nameKnown = true
     var showDay = false
     var showsHairline = true
     @Environment(\.dynamicTypeSize) private var typeSize
@@ -741,7 +774,11 @@ struct ProBookingRow: View {
                     .foregroundStyle(Palette.ink)
                     .frame(minWidth: showDay ? 0 : 68, alignment: .leading)
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(clientName).font(HDFont.nameSmall).foregroundStyle(Palette.ink)
+                    if nameKnown {
+                        Text(clientName).font(HDFont.nameSmall).foregroundStyle(Palette.ink)
+                    } else {
+                        SkeletonBlock(width: 96, height: 18).padding(.vertical, 2)
+                    }
                     Text("\(booking.servicesLine) · \(booking.minutes.minutesLabel)")
                         .font(HDFont.caption).foregroundStyle(Palette.inkSoft)
                         .fixedSize(horizontal: false, vertical: true)
@@ -813,6 +850,7 @@ struct ServiceEditorSheet: View {
     @State private var minutes: Int
     @State private var detail: String
     @State private var isPopular: Bool
+    @State private var confirmRemove = false
 
     init(existing: Service? = nil, categories: [Category], onRemove: (() -> Void)? = nil, onSave: @escaping (Service) -> Void) {
         self.categories = categories.isEmpty ? [.hair] : categories
@@ -851,8 +889,8 @@ struct ServiceEditorSheet: View {
                     HDStepper(title: "How long", value: $minutes, in: 15...300, step: 15) { $0.minutesLabel }
                     HDTextField(label: "What's included", placeholder: "Optional", text: $detail, axis: .vertical)
                     HDSwitch(title: "Mark as popular", subtitle: "Shows POPULAR beside it on your profile.", isOn: $isPopular)
-                    if let onRemove {
-                        TertiaryButton(title: "Remove this service") { onRemove(); dismiss() }
+                    if onRemove != nil {
+                        TertiaryButton(title: "Remove this service") { confirmRemove = true }
                             .padding(.leading, -8)
                     }
                 }
@@ -872,6 +910,19 @@ struct ServiceEditorSheet: View {
         .holdsPushRoutes()
         .presentationDragIndicator(.visible)
         .presentationBackground(Palette.paper)
+        .confirmSheet(isPresented: $confirmRemove,
+                      title: "Remove \(removeName)?",
+                      message: "It comes off your price list. Bookings you've got for it still stand.",
+                      confirmTitle: "Remove it",
+                      cancelTitle: "Keep it") {
+            onRemove?()
+            dismiss()
+        }
+    }
+
+    private var removeName: String {
+        let trimmed = name.trimmingCharacters(in: .whitespaces)
+        return trimmed.isEmpty ? "this service" : trimmed
     }
 }
 
@@ -992,6 +1043,9 @@ struct DayHoursSheet: View {
     var day: Weekday
     var onDone: ([TimeRange]) -> Void
     @State private var windows: [TimeRange]
+    /// The wheels' height grows with the text in them.
+    @ScaledMetric(relativeTo: .body) private var wheelHeight: CGFloat = 140
+    @Environment(\.dynamicTypeSize) private var typeSize
 
     private let steps = Array(stride(from: 0, through: 24 * 60, by: 15))
 
@@ -1028,7 +1082,11 @@ struct DayHoursSheet: View {
                                     TertiaryButton(title: "Remove") { if i < windows.count { _ = withAnimation(Motion.spring) { windows.remove(at: i) } } }
                                 }
                             }
-                            HStack(spacing: Space.s) {
+                            // Side by side; one over the other at the accessibility sizes, where two won't fit.
+                            let wheels = typeSize.isAccessibilitySize
+                                ? AnyLayout(VStackLayout(alignment: .leading, spacing: Space.s))
+                                : AnyLayout(HStackLayout(spacing: Space.s))
+                            wheels {
                                 wheel("Start", binding: Binding(get: { i < windows.count ? windows[i].startMinutes : 0 },
                                                                  set: { if i < windows.count { windows[i].startMinutes = $0 } }))
                                 Text("to").font(HDFont.sub).foregroundStyle(Palette.inkSoft)
@@ -1070,7 +1128,7 @@ struct DayHoursSheet: View {
         }
         .pickerStyle(.wheel)
         .frame(maxWidth: .infinity)
-        .frame(height: 140)
+        .frame(height: wheelHeight)
         .clipped()
         .accessibilityLabel("\(label) on \(day.long)")
     }

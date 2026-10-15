@@ -54,7 +54,7 @@ struct CardBackground: ViewModifier {
 }
 
 /// An ink block on paper (Next up, the job hero, the Pro mode row): `inkGround` with a 0.5pt
-/// paper hairline so it keeps an edge on dark paper.
+/// `inkEdge` hairline so it keeps an edge on dark paper (where the ink is the darker of the two).
 struct InkBlock: ViewModifier {
     var padding: CGFloat = Space.cardPadding
     var radius: CGFloat = Radius.card
@@ -65,7 +65,7 @@ struct InkBlock: ViewModifier {
             .background(Palette.inkGround, in: RoundedRectangle(cornerRadius: radius, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: radius, style: .continuous)
-                    .strokeBorder(Palette.onInk.opacity(0.10), lineWidth: 0.5)
+                    .strokeBorder(Palette.inkEdge, lineWidth: 0.5)
             )
     }
 }

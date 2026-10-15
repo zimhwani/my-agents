@@ -113,7 +113,7 @@ struct BookingsView: View {
             if app.bookingsLoadFailed { refreshFailed }
             VStack(alignment: .leading, spacing: 0) {
                 if let first = list.first {
-                    NextUpBlock(booking: first, pro: app.pro(first.proID)) {
+                    HomeNextUpCard(booking: first, pro: app.pro(first.proID)) {
                         path.append(Route.booking(first.id))
                     }
                     .padding(.bottom, Space.m)
@@ -229,10 +229,10 @@ struct BookingsView: View {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(alignment: .top, spacing: Space.m) {
                         ForEach(shown) { pro in
-                            PortraitTile(item: pro.work.first(where: { $0.isPinned }) ?? pro.work.first,
-                                         width: 150,
-                                         title: pro.firstName,
-                                         line: freeLine(pro)) {
+                            HomePortraitTile(item: pro.homeCover,
+                                             width: 150,
+                                             title: pro.firstName,
+                                             line: freeLine(pro)) {
                                 path.append(Route.pro(pro))
                             }
                         }
@@ -327,44 +327,6 @@ struct BookingRow: View {
         case .cancelledByClient: return nil
         default: return Money.format(booking.price.clientTotalCents)
         }
-    }
-}
-
-/// A 4:5 photo with the name in serif under it and one quiet line. Nothing on the photo.
-struct PortraitTile: View {
-    var item: WorkItem?
-    var width: CGFloat
-    var title: String
-    var line: String
-    var action: () -> Void
-
-    var body: some View {
-        Button {
-            Haptics.light()
-            action()
-        } label: {
-            VStack(alignment: .leading, spacing: 0) {
-                BookingPhoto(item: item)
-                    .frame(width: width, height: (width * 1.25).rounded())
-                Text(title)
-                    .font(HDFont.nameSmall)
-                    .foregroundStyle(Palette.ink)
-                    .lineLimit(1)
-                    .padding(.top, 10)
-                Text(line)
-                    .font(HDFont.caption)
-                    .foregroundStyle(Palette.inkSoft)
-                    .lineLimit(2)
-                    .padding(.top, 2)
-            }
-            .frame(width: width, alignment: .leading)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(PressLift(scale: 0.98))
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(title), \(line)")
-        .accessibilityHint("Opens her profile")
-        .accessibilityAddTraits(.isButton)
     }
 }
 

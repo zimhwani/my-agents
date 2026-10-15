@@ -113,18 +113,28 @@ struct AccountDetailsSheet: View {
 
     private var photoRow: some View {
         HStack(spacing: Space.l) {
+            // A square photo tile at 2pt, not a circle: circles are for Inbox and the thread header.
             ZStack {
+                Palette.photoGround
                 if let picked {
                     Image(uiImage: picked).resizable().scaledToFill()
                         .frame(width: 64, height: 64)
-                        .clipShape(Circle())
                         .opacity(photoState == .failed ? 0.45 : 1)
+                } else if let url = client?.avatarURL {
+                    AsyncImage(url: url) { image in
+                        image.resizable().scaledToFill()
+                    } placeholder: {
+                        initialsTile
+                    }
+                    .frame(width: 64, height: 64)
                 } else {
-                    Avatar(name: client?.fullName ?? "", seed: client?.seed ?? 0, size: 64, url: client?.avatarURL)
+                    initialsTile
                 }
                 if isUploading { ProgressView().tint(Palette.ink) }
             }
             .frame(width: 64, height: 64)
+            .clipped()
+            .photoShape()
             .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
                 if photoState == .failed {
@@ -147,6 +157,13 @@ struct AccountDetailsSheet: View {
             }
             Spacer(minLength: 0)
         }
+    }
+
+    /// Her initials in serif on the photo ground, until there's a photo.
+    private var initialsTile: some View {
+        Text((client?.fullName ?? "").initials)
+            .font(HDFont.serif(24, relativeTo: .title2))
+            .foregroundStyle(Palette.ink)
     }
 
     private func usePhoto(_ item: PhotosPickerItem) async {
@@ -395,13 +412,13 @@ struct AccountAddressesSheet: View {
             HStack(spacing: Space.m) {
                 Text("Removed. \(undo.address.label.isEmpty ? "Address" : undo.address.label).")
                     .font(HDFont.sub)
-                    .foregroundStyle(Palette.paper)
+                    .foregroundStyle(Palette.onInk)
                 Spacer(minLength: Space.s)
                 Button {
                     Haptics.light()
                     restore()
                 } label: {
-                    Text("Undo").font(HDFont.subMedium).foregroundStyle(Palette.paper)
+                    Text("Undo").font(HDFont.subMedium).foregroundStyle(Palette.onInk)
                         .frame(minWidth: 44, minHeight: 44)
                         .contentShape(Rectangle())
                 }
@@ -409,7 +426,12 @@ struct AccountAddressesSheet: View {
             }
             .padding(.horizontal, Space.l)
             .padding(.vertical, Space.xs)
-            .background(Palette.ink, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+            // An ink moment: inkGround stays ink in dark mode (Palette.ink would turn cream), with a hairline edge.
+            .background(Palette.inkGround, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: Radius.card, style: .continuous)
+                    .strokeBorder(Palette.onInk.opacity(0.10), lineWidth: 0.5)
+            )
             .padding(.horizontal, Space.gutter)
             .padding(.bottom, Space.l)
             .transition(.move(edge: .bottom).combined(with: .opacity))

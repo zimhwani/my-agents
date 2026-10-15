@@ -137,7 +137,7 @@ struct ReviewStep: View {
 
     private var ticket: some View {
         VStack(alignment: .leading, spacing: 0) {
-            WorkTile(item: pro.homeCover, cornerRadius: 0)
+            HomePhoto(item: pro.homeCover, cornerRadius: 0)
                 .frame(maxWidth: .infinity)
                 .frame(height: 150)
                 .clipped()
@@ -145,8 +145,7 @@ struct ReviewStep: View {
 
             VStack(alignment: .leading, spacing: Space.s) {
                 Text(verbatim: "\(pro.firstName) at yours.")
-                    .font(HDFont.serif(30, relativeTo: .largeTitle))
-                    .tracking(-0.3)
+                    .font(HDFont.title)
                     .foregroundStyle(Palette.onInk)
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilityAddTraits(.isHeader)
@@ -757,11 +756,11 @@ struct BookedStep: View {
     }
 
     /// A different photo from the ticket's cover where she has one, in the booking's category.
-    private var recordPhoto: WorkItem {
+    /// Nil when she has no photos of her own: the record shows the neutral tile, never stock work.
+    private var recordPhoto: WorkItem? {
         let matching = pro.work.filter { $0.category == booking.primaryCategory }
         if matching.count > 1 { return matching[1] }
-        return matching.first ?? pro.work.first
-            ?? WorkItem(id: "record_\(booking.id)", category: booking.primaryCategory, caption: pro.displayName, seed: pro.seed)
+        return matching.first ?? pro.homeCover
     }
 
     /// "Tuesday 23 September"
@@ -779,14 +778,18 @@ struct BookedStep: View {
     private var recordLines: Text {
         let when = "\(BookedStep.longDay(booking.start)), \(booking.start.clock)"
         let whereLine = "at yours in \(booking.address.suburb)"
-        let what = "\(booking.servicesLine) · \(Money.format(booking.price.clientTotalCents)) held"
-        return Text(verbatim: "\(when)\n\(whereLine)\n\(what)").foregroundColor(recordInk)
+        // Serif words, SF money: the amount carries its own font, so the caller's serif doesn't reach it.
+        return Text(verbatim: "\(when)\n\(whereLine)\n\(booking.servicesLine) · ").foregroundColor(recordInk)
+            + Text(verbatim: Money.format(booking.price.clientTotalCents))
+                .font(HDFont.sans(19, relativeTo: .body).monospacedDigit())
+                .foregroundColor(recordInk)
+            + Text(verbatim: " held").foregroundColor(recordInk)
             + Text(verbatim: ".").fontWeight(.bold).foregroundColor(Palette.lacquerFill)
     }
 
     private var record: some View {
         VStack(alignment: .leading, spacing: 0) {
-            WorkTile(item: recordPhoto, cornerRadius: 0)
+            HomePhoto(item: recordPhoto, cornerRadius: 0)
                 .frame(maxWidth: .infinity)
                 .frame(height: 190)
                 .clipped()

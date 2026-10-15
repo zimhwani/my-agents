@@ -233,7 +233,7 @@ struct ProProfileView: View {
                 .accessibilityHint(isFavourite ? "Takes her off your saved list" : "Keeps her in your saved list")
             }
 
-            ShareLink(item: shareURL, message: Text(shareText)) {
+            ShareLink(item: shareText) {
                 ProfileRoundIcon(symbol: "square.and.arrow.up")
             }
             .buttonStyle(PressLift(scale: 0.92))
@@ -243,9 +243,16 @@ struct ProProfileView: View {
         .padding(.top, 2)
     }
 
-    private var shareURL: URL { app.shareURL(for: live) }
+    /// Plain text that works for anyone, app or not. hairdone:// only opens with the app installed, so
+    /// it rides along as a labelled last line rather than as the share item (no dead link preview).
+    /// Swap in the web link once the domain exists.
     private var shareText: String {
-        "\(live.firstName), \(live.primaryCategory.specialtyTitle.lowercased()) in \(live.suburb), on Hair Done."
+        // "does nails", "does the lot"
+        return [
+            "\(live.displayName) does \(live.primaryCategory.label.lowercased()) in \(live.suburb). Book her on Hair Done.",
+            "Get Hair Done on the App Store.",
+            "Got the app? \(app.shareURL(for: live).absoluteString)"
+        ].joined(separator: "\n")
     }
 
     // MARK: Facts

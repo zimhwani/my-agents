@@ -22,6 +22,7 @@ struct AccountView: View {
     /// Why delete didn't go through, and the booking that's in the way if we can tell which.
     struct DeleteRefusal: Identifiable {
         let id = UUID()
+        var title: String = "Not yet."
         var line: String
         var booking: Booking?
         var isProSide: Bool
@@ -256,8 +257,8 @@ struct AccountView: View {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(alignment: .top, spacing: Space.m) {
                         ForEach(app.favouritePros) { pro in
-                            PortraitTile(item: pro.work.first(where: { $0.isPinned }) ?? pro.work.first,
-                                         width: 120, title: pro.firstName, line: pro.specialtyLine) {
+                            HomePortraitTile(item: pro.homeCover,
+                                             width: 120, title: pro.firstName, line: pro.specialtyLine) {
                                 path.append(Route.pro(pro))
                             }
                         }
@@ -312,17 +313,25 @@ struct AccountView: View {
         }
     }
 
-    /// The booking that's in the way, soonest first, on either side.
+    /// Why it didn't go. Only when the server said a booking is in the way (`liveBooking`) does it name
+    /// one: the soonest unfinished, on either side. Any other failure shows that error as it is.
     private func whyNot() -> DeleteRefusal {
+        let fallback = "That didn't go through. Nothing's been deleted. Try again."
+        // AppState keeps the error as text, so match the liveBooking wording.
+        guard let error = app.lastError, error == DataError.liveBooking.errorDescription else {
+            return DeleteRefusal(title: "Didn't go through.", line: app.lastError ?? fallback, booking: nil, isProSide: false)
+        }
         let mine = app.bookings.filter(\.isUnfinished).map { ($0, false) }
         let hers = app.proBookings.filter(\.isUnfinished).map { ($0, true) }
         guard let pick = (mine + hers).min(by: { $0.0.start < $1.0.start }) else {
-            return DeleteRefusal(line: app.lastError ?? "That didn't go through. Nothing's been deleted. Try again.", booking: nil, isProSide: false)
+            return DeleteRefusal(line: error, booking: nil, isProSide: false)
         }
         let (b, proSide) = pick
         let line: String
         if proSide {
-            line = "You've got \(app.clientName(b.clientID)) \(b.start.hdSpokenDay) in Pro mode. Finish or cancel it, then try again."
+            let name = app.clientName(b.clientID)
+            let who = name.isEmpty || name == "Client" ? "a client" : name
+            line = "You've got \(who) \(b.start.hdSpokenDay) in Pro mode. Finish or cancel it, then try again."
         } else {
             let name = app.pro(b.proID)?.firstName ?? "a booking"
             line = "You've got \(name) \(b.start.hdSpokenDay). Finish or cancel it, then try again."
@@ -331,7 +340,7 @@ struct AccountView: View {
     }
 
     private func refusalSheet(_ r: DeleteRefusal) -> some View {
-        ConfirmSheet(title: "Not yet.",
+        ConfirmSheet(title: r.title,
                      message: r.line,
                      confirmTitle: r.booking == nil ? "OK" : "Open it",
                      cancelTitle: r.booking == nil ? "Close" : "Not now",

@@ -4,18 +4,20 @@ import SwiftUI
 /// Each side shows its own threads; if the other side has unread ones, a line at the top says so.
 struct InboxView: View {
     @Environment(AppState.self) private var app
-    @State private var path = NavigationPath()
-    /// False until the first load here comes back, so the live backend shows rows loading first.
-    @State private var loaded = false
+    /// The shell it's in. Its stack is kept per side in `AppState`, so a switch and back lands on
+    /// the thread she had open. Nil follows `app.mode` (previews).
+    var side: AppMode? = nil
+    @State private var askSave = false
 
-    private var isPro: Bool { app.mode == .pro }
+    private var isPro: Bool { (side ?? app.mode) == .pro }
+    private var path: Binding<NavigationPath> { isPro ? app.path(for: ProTab.inbox) : app.path(for: ClientTab.inbox) }
 
     private var sortedThreads: [MessageThread] {
         app.threads.sorted { ($0.last?.sentAt ?? .distantPast) > ($1.last?.sentAt ?? .distantPast) }
     }
 
     var body: some View {
-        NavigationStack(path: $path) {
+        NavigationStack(path: path) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     header
@@ -26,7 +28,7 @@ struct InboxView: View {
                     if app.isOffline { OfflineBar().padding(.bottom, Space.s) }
                     if app.otherSideUnreadCount > 0 { otherSideLine }
 
-                    if app.isLive && !loaded && app.threads.isEmpty {
+                    if app.showsThreadsSkeleton {
                         ListSkeleton(rows: 4)
                     } else if sortedThreads.isEmpty {
                         if app.threadsLoadFailed {
@@ -59,14 +61,18 @@ struct InboxView: View {
             .paperBackground()
             .refreshable { await app.loadThreads() }
             .task {
-                if app.isLive && !loaded { await app.loadThreads() }
-                loaded = true
+                // Normally loaded already (launch, sign-in); this covers a first look before that.
+                if !app.hasLoadedThreads && !app.isLoadingThreads { await app.loadThreads() }
             }
             .toolbar(.hidden, for: .navigationBar)
             .hdDestinations()
             .animation(Motion.gentle, value: app.isOffline)
+            // The booking-side banner, as on the other pro tab roots.
+            .proSideBanner(isOn: isPro)
         }
-        .receivesPendingRoutes($path) { $0.isThread }
+        .receivesPendingRoutes(path) { $0.isThread }
+        // Pro edits she hasn't saved: ask before Switch takes her to booking, as Profile does.
+        .saveFirstSheet(isPresented: $askSave) { switchSides() }
     }
 
     // MARK: Header
@@ -100,8 +106,7 @@ struct InboxView: View {
                 .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: Space.s)
             TertiaryButton(title: "Switch", tint: Palette.ink) {
-                app.switchMode(isPro ? .client : .pro)
-                if isPro { app.selectedTab = .inbox } else { app.selectedProTab = .inbox }
+                if isPro && ProUnsavedWork.shared.hasAny { askSave = true } else { switchSides() }
             }
             .padding(.trailing, -8)
             .accessibilityLabel("Switch to \(side)")
@@ -111,6 +116,12 @@ struct InboxView: View {
         .screenGutter()
         .padding(.bottom, Space.s)
         .accessibilityElement(children: .combine)
+    }
+
+    private func switchSides() {
+        let toPro = !isPro
+        app.switchMode(toPro ? .pro : .client)
+        if toPro { app.selectedProTab = .inbox } else { app.selectedTab = .inbox }
     }
 
     private func booking(for thread: MessageThread) -> Booking? {
@@ -128,7 +139,7 @@ struct ThreadRow: View {
     private var isPro: Bool { app.mode == .pro }
     /// On the pro side, a client's name that hasn't come back yet shows as a shimmer, not "Client".
     private var nameMissing: Bool {
-        isPro && app.isLive && (app.clientNames[thread.clientID]?.isEmpty ?? true)
+        isPro && !app.isClientNameKnown(thread.clientID)
     }
     private var name: String {
         isPro ? app.clientName(thread.clientID) : (app.pro(thread.proID)?.firstName ?? "Her")

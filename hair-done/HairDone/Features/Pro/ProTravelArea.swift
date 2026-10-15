@@ -5,6 +5,10 @@ import CoreLocation
 /// Her base suburb, found on the map, with the circle she'll travel inside. Used in pro setup and
 /// Profile edit. Typing the suburb looks it up (CLGeocoder) and moves the centre there, so the
 /// circle is around where she actually starts, not wherever she was standing.
+///
+/// It never changes the bound pro just by appearing: a saved suburb already has its pin, so it's
+/// only looked up once she edits it (or when there's no pin yet). Otherwise Profile edit would be
+/// "changed" the moment it opened.
 struct ProTravelArea: View {
     @Binding var base: String
     @Binding var latitude: Double
@@ -15,6 +19,11 @@ struct ProTravelArea: View {
     @State private var notFound = false
     @State private var looking = false
     @State private var position: MapCameraPosition = .automatic
+    /// The suburb the pin belongs to. Set on the first look; a lookup only runs once `base` differs.
+    @State private var pinnedBase: String? = nil
+
+    private var hasPin: Bool { latitude != 0 || longitude != 0 }
+    private var typed: String { base.trimmingCharacters(in: .whitespacesAndNewlines) }
 
     private var centre: CLLocationCoordinate2D { CLLocationCoordinate2D(latitude: latitude, longitude: longitude) }
 
@@ -76,9 +85,15 @@ struct ProTravelArea: View {
         }
     }
 
-    /// Waits for her to stop typing, then finds the suburb in Victoria.
+    /// Waits for her to stop typing, then finds the suburb in Victoria. Not on the first look when
+    /// the suburb already has a pin, and not when she's typed her way back to the pinned suburb.
     private func lookUp() async {
-        let words = base.trimmingCharacters(in: .whitespacesAndNewlines)
+        let words = typed
+        if pinnedBase == nil { pinnedBase = hasPin ? words : "" }
+        guard words != pinnedBase else {
+            notFound = false
+            return
+        }
         guard words.count >= 3 else {
             notFound = false
             return
@@ -91,6 +106,7 @@ struct ProTravelArea: View {
         guard !Task.isCancelled else { return }
         if let location = found?.first?.location {
             notFound = false
+            pinnedBase = words
             latitude = location.coordinate.latitude
             longitude = location.coordinate.longitude
         } else {

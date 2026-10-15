@@ -533,19 +533,29 @@ private struct HomeSearchField: View {
 
 // MARK: - Request banner
 
-/// "Ruby wants a gel set, Sat 2:00 pm. 48 min to answer." with Open. An ink row, like the Pro mode
-/// signal, and the count goes down while she looks at it.
+/// Any open request, with Open. An ink row, like the Pro mode signal. With an hour or more left it
+/// says when to answer by ("Ruby wants a gel set, Sat 2:00 pm. Answer by 4:10 pm."); under an hour it
+/// gets the warn dot and counts down ("48 min to answer.") while she looks at it.
 private struct HomeRequestBanner: View {
     var request: Booking
     var clientName: String
     var deadline: Date
     var action: () -> Void
 
+    private func isUrgent(now: Date) -> Bool { deadline.timeIntervalSince(now) < 60 * 60 }
+
     var body: some View {
         TimelineView(.periodic(from: .now, by: 30)) { context in
             HStack(alignment: .center, spacing: Space.m) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Pro mode").eyebrowStyle(color: Palette.onInkSoft)
+                    HStack(spacing: 6) {
+                        if isUrgent(now: context.date) {
+                            Circle().fill(Palette.warn).frame(width: 6, height: 6)
+                                .accessibilityHidden(true)
+                        }
+                        Text(isUrgent(now: context.date) ? "Pro mode · Answer soon" : "Pro mode")
+                            .eyebrowStyle(color: Palette.onInkSoft)
+                    }
                     Text(line(now: context.date))
                         .font(HDFont.sub)
                         .foregroundStyle(Palette.onInk)
@@ -591,11 +601,11 @@ private struct HomeRequestBanner: View {
         return "\(day) \(request.start.clock)"
     }
 
+    /// "48 min to answer" under an hour; "Answer by 4:10 pm" otherwise.
     private func left(now: Date) -> String {
+        guard isUrgent(now: now) else { return "Answer by \(deadline.clock)" }
         let minutes = max(1, Int(deadline.timeIntervalSince(now) / 60))
-        if minutes < 60 { return "\(minutes) min to answer" }
-        let h = minutes / 60, m = minutes % 60
-        return m == 0 ? "\(h) h to answer" : "\(h) h \(m) min to answer"
+        return "\(minutes) min to answer"
     }
 
     private func line(now: Date) -> String {

@@ -71,8 +71,9 @@ private struct StateBlock: View {
 
 // MARK: - OfflineBar
 
-/// A 32pt lacquerSoft bar under the header while there's no connection:
-/// "You're offline. Showing what we've got." Ink type (never inkSoft on lacquerSoft).
+/// A lacquerSoft bar under the header while there's no connection, 32pt at the default size:
+/// "You're offline. Showing what we've got." Ink type (never inkSoft on lacquerSoft). At large
+/// text sizes it wraps onto more lines rather than shrinking the words.
 ///
 ///     VStack(spacing: 0) { if !app.isOnline { OfflineBar() }; content }
 struct OfflineBar: View {
@@ -82,8 +83,8 @@ struct OfflineBar: View {
         Text(text)
             .font(HDFont.caption)
             .foregroundStyle(Palette.ink)
-            .lineLimit(1)
-            .minimumScaleFactor(0.85)
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.vertical, Space.xs)
             .frame(maxWidth: .infinity, minHeight: 32, alignment: .leading)
             .padding(.horizontal, Space.gutter)
             .background(Palette.lacquerSoft)
@@ -100,13 +101,15 @@ struct SkeletonBlock: View {
     var width: CGFloat? = nil
     var height: CGFloat
     var radius: CGFloat = Radius.photo
+    /// `line` on paper; `Palette.inkLine` on an ink ground.
+    var color: Color = Palette.line
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var dim = false
 
     var body: some View {
         RoundedRectangle(cornerRadius: radius, style: .continuous)
-            .fill(Palette.line)
+            .fill(color)
             .frame(width: width, height: height)
             .frame(maxWidth: width == nil ? .infinity : nil, alignment: .leading)
             .opacity(dim ? 0.55 : 1)

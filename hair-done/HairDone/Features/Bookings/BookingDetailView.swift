@@ -56,7 +56,7 @@ struct BookingDetailView: View {
                     timeline(booking, pro: pro)
                     receipt(booking)
                     whereSection(booking)
-                    if !booking.notes.isEmpty || !booking.inspoSeeds.isEmpty || !booking.inspoURLs.isEmpty { notesSection(booking) }
+                    if !booking.notes.isEmpty || hasPhotos(booking) { notesSection(booking) }
                     if let review = booking.review { reviewSection(review, proName: proName) }
                     after(booking, pro: pro, proName: proName)
                 }
@@ -175,15 +175,23 @@ struct BookingDetailView: View {
         default: place = "at \(label)"
         }
         let whereLine = "\(place) in \(booking.address.suburb)"
-        let total = Money.format(booking.price.clientTotalCents)
-        let money: String
+        let moneyWord: String?
         switch booking.status {
-        case .done: money = " · \(total) to pay"
-        case .paid: money = " · \(total) paid"
-        case .cancelledByClient, .cancelledByPro, .declined, .noShow: money = ""
-        default: money = " · \(total) held"
+        case .done: moneyWord = "to pay"
+        case .paid: moneyWord = "paid"
+        case .cancelledByClient, .cancelledByPro, .declined, .noShow: moneyWord = nil
+        default: moneyWord = "held"
         }
-        let lines = Text(verbatim: "\(when)\n\(whereLine)\n\(booking.servicesLine)\(money)").foregroundStyle(Palette.ink)
+        var lines = Text(verbatim: "\(when)\n\(whereLine)\n\(booking.servicesLine)").foregroundStyle(Palette.ink)
+        if let moneyWord {
+            // The words stay serif; the amount is SF at the same size (money is never serif).
+            lines = lines
+                + Text(verbatim: " · ").foregroundStyle(Palette.ink)
+                + Text(verbatim: Money.format(booking.price.clientTotalCents))
+                    .font(HDFont.sans(19, relativeTo: .body).monospacedDigit())
+                    .foregroundStyle(Palette.ink)
+                + Text(verbatim: " \(moneyWord)").foregroundStyle(Palette.ink)
+        }
         let stopColor = booking.status == .done ? Palette.ink : Palette.lacquer
         return lines + Text(verbatim: ".").foregroundStyle(stopColor)
     }
@@ -367,13 +375,19 @@ struct BookingDetailView: View {
 
     // MARK: Notes and photos
 
+    /// Her own photos (signed URLs). The seed tiles are the demo's stand-ins, so they only show on
+    /// the mock backend: on live, a bundled photo is never shown as hers.
+    private func hasPhotos(_ booking: Booking) -> Bool {
+        !booking.inspoURLs.isEmpty || (!app.isLive && !booking.inspoSeeds.isEmpty)
+    }
+
     private func notesSection(_ booking: Booking) -> some View {
         VStack(alignment: .leading, spacing: Space.m) {
             if !booking.notes.isEmpty {
                 Text("Notes").labelStyle()
                 Text(booking.notes).font(HDFont.italicSub).foregroundStyle(Palette.ink).fixedSize(horizontal: false, vertical: true)
             }
-            if !booking.inspoURLs.isEmpty || !booking.inspoSeeds.isEmpty {
+            if hasPhotos(booking) {
                 Text("Your photos").labelStyle().padding(.top, booking.notes.isEmpty ? 0 : Space.s)
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: Space.s) {

@@ -46,6 +46,9 @@ enum PayoutNotice: Identifiable {
 }
 
 /// The one shared object. Views read from it and call its methods; it talks to the services.
+/// Main actor throughout: every load and action lands its results on the main thread, so a view
+/// never sees state change underneath it from a background executor.
+@MainActor
 @Observable
 final class AppState {
     let data: DataService
@@ -81,7 +84,7 @@ final class AppState {
 
     /// No network. Screens show the offline bar and hold back anything that needs the server.
     var isOffline = false
-    @ObservationIgnored private var pathMonitor = NWPathMonitor()
+    private let pathMonitor = NWPathMonitor()
 
     /// True when the last load failed (not when it came back empty), so a screen can say so and offer Try again.
     var prosLoadFailed = false
@@ -95,10 +98,29 @@ final class AppState {
     var proDetails: [String: Pro] = [:]
     /// First names of the clients who've booked you, for the pro side.
     var clientNames: [String: String] = [:]
+    /// Client ids whose name lookup has come back, with or without a name. Until then a pro screen
+    /// shows a shimmer where the name goes, not "Client".
+    var clientNamesLookedUp: Set<String> = []
     var blockedIDs: Set<String> = []
 
     var isLoadingPros = false
+    /// True while that load is going. Screens show skeletons only while there's nothing yet
+    /// (see `showsBookingsSkeleton` and friends), never over what's already there.
+    var isLoadingBookings = false
+    var isLoadingThreads = false
+    var isLoadingProSide = false
+    /// True once that load has come back at least once (empty or not) since sign-in.
+    var hasLoadedBookings = false
+    var hasLoadedThreads = false
+    var hasLoadedProSide = false
+    /// True once the first `refreshAll` since sign-in has finished.
+    private(set) var hasLoadedOnce = false
+    /// The `refreshAll` that's going, so a second caller waits for it instead of loading everything twice.
+    @ObservationIgnored private var refreshing: Task<Void, Never>? = nil
     var lastError: String? = nil
+    /// The last error as one of ours, when it was, so a screen can match the case (`.liveBooking`)
+    /// instead of the wording. Set alongside `lastError`.
+    var lastDataError: DataError? = nil
     /// Why the last sign-in code didn't work, when it was one of ours (wrong, expired, too many tries).
     var signInFailure: DataError? = nil
     /// A short line shown in a toast at the bottom of the screen, then cleared.
@@ -137,6 +159,23 @@ final class AppState {
     func hideTabBar() { tabBarHiders += 1 }
     func showTabBar() { tabBarHiders = max(0, tabBarHiders - 1) }
 
+    /// Where each tab's stack is, kept here rather than in the tab, so switching sides and back
+    /// lands her on the screen she left (the shells are rebuilt on every switch).
+    var clientPaths: [ClientTab: NavigationPath] = [:]
+    var proPaths: [ProTab: NavigationPath] = [:]
+
+    /// The stack for a client tab: `NavigationStack(path: app.path(for: .home))`.
+    func path(for tab: ClientTab) -> Binding<NavigationPath> {
+        Binding(get: { self.clientPaths[tab] ?? NavigationPath() },
+                set: { self.clientPaths[tab] = $0 })
+    }
+
+    /// The stack for a pro tab: `NavigationStack(path: app.path(for: .today))`.
+    func path(for tab: ProTab) -> Binding<NavigationPath> {
+        Binding(get: { self.proPaths[tab] ?? NavigationPath() },
+                set: { self.proPaths[tab] = $0 })
+    }
+
     init(data: DataService = MockDataService(), payments: PaymentService = MockPaymentService(), location: LocationService = LocationService()) {
         self.data = data
         self.payments = payments
@@ -144,14 +183,19 @@ final class AppState {
         let live = !(data is MockDataService)
         self.isLive = live
         self.isRestoring = live
+        // Real pros and real inspo never show the bundled stock photos; the sample data does.
+        BundledWork.standsInForWork = !live
+        // The monitor calls back on its own queue; the answer is set on the main actor.
         pathMonitor.pathUpdateHandler = { [weak self] path in
             let offline = path.status != .satisfied
-            DispatchQueue.main.async {
+            Task { @MainActor in
                 guard let self, self.isOffline != offline else { return }
                 self.isOffline = offline
             }
         }
         pathMonitor.start(queue: DispatchQueue(label: "app.hairdone.network"))
+        // Saved or discarded the last unsaved pro edit: a notification tap that waited on it can open.
+        ProUnsavedWork.shared.onCleared = { [weak self] in self?.unsavedWorkCleared() }
     }
 
     deinit { pathMonitor.cancel() }
@@ -178,13 +222,23 @@ final class AppState {
     private func fail(_ error: Error) {
         let line = error.localizedDescription
         lastError = line
+        lastDataError = error as? DataError
         show(line)
+    }
+
+    /// Keeps the error for a screen to show inline, without a toast.
+    private func note(_ error: Error) {
+        lastError = error.localizedDescription
+        lastDataError = error as? DataError
     }
 
     // MARK: Session
 
     /// Picks up a saved session at launch. Straight to Home if she's finished onboarding before.
+    /// Called once, from the app's launch task.
     func restoreSession() async {
+        // From here, notification taps reach the app (one that launched it is opened once she's in).
+        PushCenter.shared.attach(self)
         guard let restored = await data.currentClient() else {
             isRestoring = false
             return
@@ -195,6 +249,9 @@ final class AppState {
         stage = restored.firstName.isEmpty ? .signedIn : .ready
         isRestoring = false
         registerForPush()
+        // Whichever side she lands on (Pro mode is remembered), everything loads now. This also
+        // covers the app coming forward while the session was still being picked up.
+        Task { await self.refreshAll() }
         if stage == .ready, let waiting = pendingPush {
             pendingPush = nil
             open(waiting)
@@ -259,6 +316,9 @@ final class AppState {
         signInFailure = nil
         stage = .signedIn
         registerForPush()
+        // Her bookings, threads and pro side start loading while she finishes the name and
+        // location steps; `finishOnboarding` loads again with where she is.
+        Task { await self.refreshAll() }
     }
 
     private func signInFailed(_ error: Error) {
@@ -298,19 +358,23 @@ final class AppState {
         knownPros = [:]; proDetails = [:]; clientNames = [:]; blockedIDs = []
         whosFree = [:]; searchResults = []; searchQuery = ""; isSearching = false
         prosLoadFailed = false; bookingsLoadFailed = false; threadsLoadFailed = false; proSideLoadFailed = false
+        clientNamesLookedUp = []
+        hasLoadedBookings = false; hasLoadedThreads = false; hasLoadedProSide = false; hasLoadedOnce = false
         pendingCheckout = nil
         pendingRoute = nil; pendingPush = nil; pendingProLink = nil; openThreadID = nil
         selectedTab = .home; selectedProTab = .today
+        clientPaths = [:]; proPaths = [:]
     }
 
     /// App Store rule: an account can be deleted from the app. False (with `lastError`) if it wasn't.
     func deleteAccount() async -> Bool {
+        lastDataError = nil
         do {
             try await data.deleteAccount()
             signOut()
             return true
         } catch {
-            lastError = error.localizedDescription
+            note(error)
             return false
         }
     }
@@ -344,7 +408,20 @@ final class AppState {
 
     // MARK: Loading
 
+    /// Everything, both sides. A second call while one's going waits for that one.
     func refreshAll() async {
+        if let running = refreshing {
+            await running.value
+            return
+        }
+        let task = Task { await self.loadEverything() }
+        refreshing = task
+        await task.value
+        refreshing = nil
+        hasLoadedOnce = true
+    }
+
+    private func loadEverything() async {
         await withTaskGroup(of: Void.self) { group in
             group.addTask { await self.loadPros() }
             group.addTask { await self.loadBookings(people: false) }
@@ -352,6 +429,18 @@ final class AppState {
             group.addTask { await self.loadProSide(people: false) }
         }
         await loadPeople()
+    }
+
+    /// Skeletons only before the first answer: never over what's already there, and never for a
+    /// load that failed (that screen shows `ErrorState`).
+    var showsBookingsSkeleton: Bool {
+        client != nil && bookings.isEmpty && !hasLoadedBookings && !bookingsLoadFailed
+    }
+    var showsThreadsSkeleton: Bool {
+        threads.isEmpty && !hasLoadedThreads && !threadsLoadFailed && (client != nil || proSelf != nil)
+    }
+    var showsProSideSkeleton: Bool {
+        proSelf != nil && proBookings.isEmpty && payouts.isEmpty && !hasLoadedProSide && !proSideLoadFailed
     }
 
     /// Pros near her, and who's free today, together.
@@ -406,9 +495,12 @@ final class AppState {
 
     func loadBookings(people: Bool = true) async {
         guard let client else { return }
+        isLoadingBookings = true
+        defer { isLoadingBookings = false }
         do {
             bookings = try await data.bookings(clientID: client.id)
             bookingsLoadFailed = false
+            hasLoadedBookings = true
         } catch {
             bookingsLoadFailed = true
             lastError = error.localizedDescription
@@ -421,6 +513,8 @@ final class AppState {
         let clientID = client?.id ?? ""
         let proID = proSelf?.id ?? ""
         guard !clientID.isEmpty || !proID.isEmpty else { return }
+        isLoadingThreads = true
+        defer { isLoadingThreads = false }
         do {
             var all = try await data.threads(userID: clientID.isEmpty ? proID : clientID)
             // The sample data keeps her pro self under another id; the real server sends both sides at once.
@@ -440,6 +534,7 @@ final class AppState {
                 otherSideThreads = asPro
             }
             threadsLoadFailed = false
+            hasLoadedThreads = true
         } catch {
             threadsLoadFailed = true
             lastError = error.localizedDescription
@@ -449,10 +544,13 @@ final class AppState {
 
     func loadProSide(people: Bool = true) async {
         guard let proSelf else { return }
+        isLoadingProSide = true
+        defer { isLoadingProSide = false }
         do {
             proBookings = try await data.bookings(proID: proSelf.id)
             payouts = try await data.payouts(proID: proSelf.id)
             proSideLoadFailed = false
+            hasLoadedProSide = true
         } catch {
             proSideLoadFailed = true
             lastError = error.localizedDescription
@@ -481,10 +579,19 @@ final class AppState {
         if let own = client?.id { clientIDs.remove(own) }
         clientIDs.subtract(clientNames.keys)
         clientIDs.remove("")
+        clientIDs.subtract(clientNamesLookedUp)
         if !clientIDs.isEmpty {
-            let names = (try? await data.clientNames(ids: Array(clientIDs))) ?? [:]
-            clientNames.merge(names) { _, new in new }
+            await lookUpClientNames(Array(clientIDs))
         }
+    }
+
+    /// Asks for these clients' first names. Ids it asked about count as looked up when it answers,
+    /// even with no name, so a nameless client doesn't shimmer for ever. A failed lookup tries again
+    /// next load.
+    private func lookUpClientNames(_ ids: [String]) async {
+        guard let names = try? await data.clientNames(ids: ids) else { return }
+        clientNames.merge(names) { _, new in new }
+        clientNamesLookedUp.formUnion(ids)
     }
 
     /// Her whole profile, for when it's opened from a list that only had the card.
@@ -535,10 +642,21 @@ final class AppState {
         return isLive ? nil : MockData.pros.first { $0.id == id }
     }
 
+    /// A client's first name for the pro side. Empty while it's still on its way (live backend only);
+    /// check `isClientNameKnown` and show a shimmer instead of a blank. "Client" only once the lookup
+    /// has come back with no name.
     func clientName(_ id: String) -> String {
         if id == client?.id { return client?.firstName ?? "You" }
         if let name = clientNames[id], !name.isEmpty { return name }
-        return isLive ? "Client" : (MockData.clientNames[id] ?? "Client")
+        guard isLive else { return MockData.clientNames[id] ?? "Client" }
+        return clientNamesLookedUp.contains(id) ? "Client" : ""
+    }
+
+    /// False while a client's name is still loading (live backend). Show `SkeletonBlock` in its place.
+    func isClientNameKnown(_ id: String) -> Bool {
+        if !isLive || id == client?.id { return true }
+        if let name = clientNames[id], !name.isEmpty { return true }
+        return clientNamesLookedUp.contains(id)
     }
 
     func isFavourite(_ pro: Pro) -> Bool { client?.favouriteProIDs.contains(pro.id) ?? false }
@@ -833,10 +951,11 @@ final class AppState {
                 p.isActive = false
                 proSelf = p
             }
-            if mode == .pro { await MainActor.run { self.switchMode(.client) } }
+            if mode == .pro { switchMode(.client) }
             return true
         } catch DataError.liveBooking {
             fail(CloseRefused())
+            lastDataError = .liveBooking
             return false
         } catch {
             fail(error)
@@ -975,17 +1094,23 @@ final class AppState {
             show("Finish this first, then open the link again.")
             return
         }
+        if hasUnsavedProWork {
+            show("Save or discard your changes, then open the link again.")
+            return
+        }
         Task { await self.routeToPro(id) }
     }
 
-    @MainActor
     private func routeToPro(_ id: String) async {
         await loadProDetail(id)
         guard let found = pro(id) else {
             show("We couldn't find her. The link might be old.")
             return
         }
-        enter(.client)
+        guard enter(.client) else {
+            show("Save or discard your changes, then open the link again.")
+            return
+        }
         selectedTab = .home
         pendingRoute = .pro(found)
     }
@@ -1002,9 +1127,14 @@ final class AppState {
     /// Back in the foreground: register for pushes, and catch up on bookings, messages and (for a
     /// pro) requests, so nothing's missed even without a push.
     func becameActive() {
-        guard stage != .welcome, !isRestoring else { return }
+        // On a cold start the app is active before the saved session is back; `restoreSession`
+        // runs the full load (`refreshAll`) once it is, so nothing is missed by stopping here.
+        if isRestoring { return }
+        guard stage != .welcome else { return }
         registerForPush()
         guard stage == .ready else { return }
+        // A full load is already going (launch, sign-in, a switch): that covers this.
+        if refreshing != nil { return }
         Task {
             await self.loadBookings(people: false)
             await self.loadThreads(people: false)
@@ -1016,14 +1146,27 @@ final class AppState {
     /// One of the `busySurfaces` closed. If that was the last and a tap is waiting, open it now.
     func surfaceClosed() {
         busySurfaces = max(0, busySurfaces - 1)
-        guard busySurfaces == 0, stage == .ready, let waiting = pendingPush else { return }
+        openWaitingPush()
+    }
+
+    /// Pro edits she hadn't saved were saved or discarded (`ProUnsavedWork`). A tap waiting on them can open.
+    func unsavedWorkCleared() {
+        openWaitingPush()
+    }
+
+    private func openWaitingPush() {
+        guard busySurfaces == 0, !hasUnsavedProWork, stage == .ready, let waiting = pendingPush else { return }
         pendingPush = nil
-        Task { @MainActor in
+        Task {
             // Let the sheet finish going before the tabs move.
             try? await Task.sleep(for: .milliseconds(450))
             self.open(waiting)
         }
     }
+
+    /// Hours or profile edits in Pro mode she hasn't saved. A notification never switches sides or
+    /// moves a tab underneath them; it waits, as it does for `busySurfaces`.
+    var hasUnsavedProWork: Bool { mode == .pro && ProUnsavedWork.shared.hasAny }
 
     func deviceTokenArrived(_ token: String) {
         guard client != nil else { return }
@@ -1058,17 +1201,19 @@ final class AppState {
             pendingPush = target
             return
         }
-        // Never switch sides or move things under her while she's in the middle of something.
-        if busySurfaces > 0 {
+        // Never switch sides or move things under her while she's in the middle of something,
+        // or while she has pro edits she hasn't saved (the same rule the Switch row asks about).
+        if busySurfaces > 0 || hasUnsavedProWork {
             pendingPush = target
-            Task { await self.sayWaiting(target) }
+            let unsaved = busySurfaces == 0
+            Task { await self.sayWaiting(target, unsaved: unsaved) }
             return
         }
         Task { await self.route(to: target) }
     }
 
     /// "New request from Ruby. We'll open it when you're done here." Shown on the sheet she's in.
-    private func sayWaiting(_ target: PushTarget) async {
+    private func sayWaiting(_ target: PushTarget, unsaved: Bool = false) async {
         let side = target.side ?? mode
         var name: String? = nil
         var isRequest = false
@@ -1077,12 +1222,9 @@ final class AppState {
         if let b = found {
             isRequest = b.status == .requested
             if side == .pro {
-                if isLive && clientNames[b.clientID] == nil {
-                    let names = (try? await data.clientNames(ids: [b.clientID])) ?? [:]
-                    clientNames.merge(names) { _, new in new }
-                }
+                if !isClientNameKnown(b.clientID) { await lookUpClientNames([b.clientID]) }
                 let n = clientName(b.clientID)
-                name = n == "Client" ? nil : n
+                name = n.isEmpty || n == "Client" ? nil : n
             } else {
                 name = pro(b.proID)?.firstName
             }
@@ -1099,39 +1241,46 @@ final class AppState {
                 lead = name.map { "\($0) has an update on your booking." } ?? "An update on your booking."
             }
         }
-        show("\(lead) We'll open it when you're done here.")
+        show(unsaved ? "\(lead) Save or discard your changes and we'll open it."
+                     : "\(lead) We'll open it when you're done here.")
     }
 
-    @MainActor
     private func route(to target: PushTarget) async {
         switch target.kind {
         case .message:
             if let threadID = target.threadID {
                 let which: AppMode
                 if let given = target.side { which = given } else { which = await side(forThread: threadID) }
-                enter(which)
+                guard enter(which) else { return hold(target) }
                 await loadThreads()
                 if mode == .pro { selectedProTab = .inbox } else { selectedTab = .inbox }
                 pendingRoute = .thread(threadID)
             } else if let bookingID = target.bookingID {
-                await route(toBooking: bookingID, side: target.side)
+                await route(toBooking: bookingID, side: target.side, for: target)
             }
         case .booking:
-            if let bookingID = target.bookingID { await route(toBooking: bookingID, side: target.side) }
+            if let bookingID = target.bookingID { await route(toBooking: bookingID, side: target.side, for: target) }
         }
+    }
+
+    /// Edits turned up while the tap was being worked out: it waits for them, like any other.
+    private func hold(_ target: PushTarget) {
+        pendingPush = target
+        Task { await self.sayWaiting(target, unsaved: true) }
     }
 
     /// A pro's own job opens on her side (Today, then the job); anything else on the client side.
     /// `side` comes from the push; without it, the booking says whose it is.
-    @MainActor
-    private func route(toBooking id: String, side: AppMode?) async {
+    private func route(toBooking id: String, side: AppMode?, for target: PushTarget) async {
+        let which: AppMode
         if let side {
-            enter(side)
+            which = side
         } else {
             let found = try? await data.booking(id: id)
             let isHers = found != nil && proSelf != nil && found?.proID == proSelf?.id
-            enter(isHers ? .pro : .client)
+            which = isHers ? .pro : .client
         }
+        guard enter(which) else { return hold(target) }
         if mode == .pro {
             await loadProSide()
             selectedProTab = .today
@@ -1152,11 +1301,14 @@ final class AppState {
     }
 
     /// Switches sides for a notification, without the haptic and refresh a tap on the switch gets.
-    @MainActor
-    private func enter(_ side: AppMode) {
-        guard side != mode else { return }
-        if side == .pro && proSelf == nil { return }
+    /// False, without switching, when leaving Pro mode would drop edits she hasn't saved.
+    @discardableResult
+    private func enter(_ side: AppMode) -> Bool {
+        guard side != mode else { return true }
+        if side == .pro && proSelf == nil { return true }
+        if mode == .pro && ProUnsavedWork.shared.hasAny { return false }
         setMode(side)
+        return true
     }
 
     func show(_ message: String) {

@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// One conversation. Yours on the right in ink, theirs on the left on paper with a hairline, the
+/// One conversation. Yours on the right on the ink ground, theirs on the left on paper with a hairline, the
 /// app's in the middle in small type. Squared bubbles, an underline composer, and quick replies
 /// that fill the field instead of sending. A message that doesn't go stays, at 60%, with
 /// "Didn't send. Tap to try again."
@@ -48,7 +48,7 @@ struct ThreadView: View {
 
     /// On the pro side a client's name can still be on its way; show nothing rather than "Client".
     private func knownName(_ thread: MessageThread) -> String? {
-        if isPro && app.isLive && (app.clientNames[thread.clientID]?.isEmpty ?? true) { return nil }
+        if isPro && !app.isClientNameKnown(thread.clientID) { return nil }
         return otherName(thread)
     }
 
@@ -136,11 +136,14 @@ struct ThreadView: View {
         .safeAreaInset(edge: .bottom, spacing: 0) {
             composer(thread)
         }
-        .hdNavHeader(knownName(thread), showsHairline: linked == nil) {
-            Avatar(name: name, seed: isPro ? thread.clientID.hdSeed : (app.pro(thread.proID)?.seed ?? 0), size: 28,
-                   photo: otherPhoto(thread))
-                .frame(width: 44, height: 44)
-        }
+        // The avatar sits beside the name, centred with it; a shimmer stands in for a name still on its way.
+        .hdNavHeader(knownName(thread), showsHairline: linked == nil, titleMark: AnyView(
+            HStack(spacing: Space.s) {
+                Avatar(name: name, seed: isPro ? thread.clientID.hdSeed : (app.pro(thread.proID)?.seed ?? 0), size: 28,
+                       photo: otherPhoto(thread))
+                if knownName(thread) == nil { SkeletonBlock(width: 72, height: 14) }
+            }
+        ))
         .animation(Motion.gentle, value: app.isOffline)
         .onAppear {
             app.markRead(thread)
@@ -260,12 +263,13 @@ struct ThreadView: View {
             VStack(alignment: mine ? .trailing : .leading, spacing: 4) {
                 Text(text)
                     .font(HDFont.body)
-                    .foregroundStyle(mine ? Palette.paper : Palette.ink)
+                    .foregroundStyle(mine ? Palette.onInk : Palette.ink)
                     .multilineTextAlignment(.leading)
                     .padding(.horizontal, 14)
                     .padding(.vertical, 10)
-                    .background(mine ? Palette.ink : Palette.paper, in: BubbleShape(mine: mine))
-                    .overlay(BubbleShape(mine: mine).strokeBorder(mine ? Color.clear : Palette.line, lineWidth: 1))
+                    // The ink ground, not `Palette.ink` (cream in dark), with its edge for dark paper.
+                    .background(mine ? Palette.inkGround : Palette.paper, in: BubbleShape(mine: mine))
+                    .overlay(BubbleShape(mine: mine).strokeBorder(mine ? Palette.inkEdge : Palette.line, lineWidth: mine ? 0.5 : 1))
                     .fixedSize(horizontal: false, vertical: true)
                 Text(caption)
                     .font(HDFont.caption)
@@ -332,9 +336,11 @@ struct ThreadView: View {
         } label: {
             Image(systemName: "arrow.up")
                 .font(.system(size: 17, weight: ready ? .regular : .light))
-                .foregroundStyle(ready ? Palette.paper : Palette.inkFaint)
+                .foregroundStyle(ready ? Palette.onInk : Palette.inkFaint)
                 .frame(width: 32, height: 32)
-                .background(ready ? Palette.ink : Color.clear, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+                .background(ready ? Palette.inkGround : Color.clear, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: Radius.card, style: .continuous)
+                    .strokeBorder(ready ? Palette.inkEdge : Color.clear, lineWidth: 0.5))
                 .frame(width: 44, height: 44)
                 .contentShape(Rectangle())
         }

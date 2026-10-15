@@ -2,8 +2,8 @@ import SwiftUI
 
 /// Something she picks. Two shapes, one rule: hairlines and ink, never a lacquer ring.
 ///
-/// - `.box` (default): 6pt corners, 1pt `line` border, at least 40pt tall. Selected = ink fill and
-///   paper text for a short label, or an ink border and an ink check for rich content.
+/// - `.box` (default): 6pt corners, 1pt `line` border, at least 40pt tall. Selected = `inkGround`
+///   fill and `onInk` text (with an ink edge, cream in dark) for a short label, or an ink border and an ink check for rich content.
 ///   Tips, km presets, time slots, address labels, quick replies, payment methods.
 /// - `.row`: a hairline row with no box; selected = an ink check on the right. Decline reasons,
 ///   services as a price list, addresses.
@@ -36,12 +36,14 @@ struct OptionBox<Content: View>: View {
                 if isLabel {
                     content
                         .font(HDFont.subMedium)
-                        .foregroundStyle(isSelected ? Palette.paper : Palette.ink)
+                        .foregroundStyle(isSelected ? Palette.onInk : Palette.ink)
                         .multilineTextAlignment(.center)
                         .padding(.horizontal, 14)
                         .padding(.vertical, 10)
                         .frame(minHeight: 40)
-                        .background(isSelected ? Palette.ink : Color.clear, in: shape)
+                        // The ink ground, not `Palette.ink` (cream in dark). The ink border is
+                        // invisible on it in light and a cream edge in dark, so the pick still stands out.
+                        .background(isSelected ? Palette.inkGround : Color.clear, in: shape)
                         .overlay(shape.strokeBorder(isSelected ? Palette.ink : Palette.line, lineWidth: 1))
                         .contentShape(shape)
                 } else {
@@ -68,7 +70,7 @@ struct OptionBox<Content: View>: View {
 }
 
 extension OptionBox where Content == Text {
-    /// A short label ("$10", "15 km", "6:30 pm", "On my way"). Selected = ink fill, paper text.
+    /// A short label ("$10", "15 km", "6:30 pm", "On my way"). Selected = ink ground, paper text.
     init(title: String, isSelected: Bool, action: @escaping () -> Void) {
         self.isSelected = isSelected
         self.style = .box

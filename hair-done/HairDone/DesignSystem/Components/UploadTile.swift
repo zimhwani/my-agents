@@ -6,12 +6,13 @@ enum UploadState: Equatable {
     /// 0...1. Shows as a 2pt ink line growing along the bottom edge.
     case uploading(Double)
     case done
-    /// Shows "Didn't upload. Tap to try again." over the photo at 45%; tapping calls `onRetry`.
+    /// The photo at 45% with a retry glyph, and "Didn't upload. Tap to try again." under the tile
+    /// (it wraps at large text sizes, so the view grows taller); tapping either calls `onRetry`.
     case failed
 }
 
 /// A photo she picked (work, inspo, a cover), 104x130 by default at 2pt corners, with its upload
-/// state. Always shows *her* picked image, never a stand-in photo (audit M21).
+/// state. A failed one is taller: its words sit under the tile. Always shows *her* picked image, never a stand-in photo (audit M21).
 ///
 ///     UploadTile(image: picked.image, state: picked.state) { retry(picked) }
 ///     UploadTile(state: .failed, onRetry: retry) { WorkTile(item: item, cornerRadius: 0) }
@@ -33,6 +34,32 @@ struct UploadTile<Photo: View>: View {
     }
 
     var body: some View {
+        VStack(alignment: .leading, spacing: Space.xs) {
+            tile
+            if state == .failed {
+                // Under the tile, not on it, so the words can wrap at any text size.
+                Button {
+                    Haptics.light()
+                    onRetry?()
+                } label: {
+                    Text("Didn't upload. Tap to try again.")
+                        .font(HDFont.caption)
+                        .foregroundStyle(Palette.ink)
+                        .multilineTextAlignment(.leading)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(width: size.width, alignment: .leading)
+                        .frame(minHeight: 44, alignment: .topLeading)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Didn't upload. Try again")
+            }
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(accessibilityText)
+    }
+
+    private var tile: some View {
         ZStack(alignment: .bottomLeading) {
             Palette.photoGround
             photo
@@ -51,19 +78,19 @@ struct UploadTile<Photo: View>: View {
                 .frame(height: 2)
                 .animation(Motion.gentle, value: progress)
             case .failed:
+                // The faded photo is a retry target too, with a small outline glyph to say so.
                 Button {
                     Haptics.light()
                     onRetry?()
                 } label: {
-                    Text("Didn't upload. Tap to try again.")
-                        .font(HDFont.caption)
+                    Image(systemName: "arrow.clockwise")
+                        .font(.system(size: 17, weight: .light))
                         .foregroundStyle(Palette.ink)
-                        .multilineTextAlignment(.leading)
-                        .padding(Space.s)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                .accessibilityHidden(true)
             case .done:
                 EmptyView()
             }
@@ -89,8 +116,6 @@ struct UploadTile<Photo: View>: View {
                 .accessibilityLabel("Remove photo")
             }
         }
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel(accessibilityText)
     }
 
     private var accessibilityText: String {
