@@ -71,6 +71,10 @@ protocol DataService: AnyObject {
     func payouts(proID: String) async throws -> [Payout]
     /// Asks Stripe (through the server) whether payouts are on yet. The server records the answer too.
     func payoutStatus() async throws -> Bool
+
+    // Switches
+    /// Server-side switches (`app_flags`), read before sign-in. Empty if they couldn't be loaded.
+    func appFlags() async -> [String: Bool]
     func closeProProfile() async throws
     func reopenProProfile() async throws
 

@@ -308,6 +308,8 @@ final class MockDataService: DataService {
     func payouts(proID: String) async throws -> [Payout] { await pause(); return payouts }
     func payoutStatus() async throws -> Bool { await pause(0.5); return proSelf.payoutsConnected }
 
+    func appFlags() async -> [String: Bool] { ["phone_sign_in": true] }
+
     func closeProProfile() async throws {
         await pause()
         let live = bookings.contains { $0.proID == proSelf.id && ($0.status.isUpcoming || $0.status == .done) }

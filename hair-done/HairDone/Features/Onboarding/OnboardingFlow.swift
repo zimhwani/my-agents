@@ -402,8 +402,10 @@ private struct OnboardingEmail: View {
         .safeAreaInset(edge: .bottom) {
             OnboardingFooter {
                 InkButton(title: "Continue", isLoading: sending, isEnabled: !email.trimmingCharacters(in: .whitespaces).isEmpty, action: submit)
-                // Still here for the test numbers.
-                TertiaryButton(title: "Use your phone instead", action: onPhone)
+                // Hidden until texts to Australian numbers are switched on (app_flags.phone_sign_in).
+                if app.phoneSignInOn {
+                    TertiaryButton(title: "Use your phone instead", action: onPhone)
+                }
             }
         }
         .onAppear { focused = true }

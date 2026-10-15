@@ -141,6 +141,16 @@ final class AppState {
     /// unsaved input). While any is up, a tapped notification waits instead of switching sides or
     /// moving things underneath her. Counted by `.holdsPushRoutes()`.
     var busySurfaces = 0
+    /// Whether sign-in by text message is offered (server switch `phone_sign_in`). Off until Twilio's
+    /// Australian sender registration is approved. Builds run from Xcode always offer it, for the test numbers.
+    var phoneSignInOn: Bool = AppState.phoneSignInDefault
+    private static var phoneSignInDefault: Bool {
+        #if DEBUG
+        return true
+        #else
+        return false
+        #endif
+    }
     /// She tapped "Do hair, nails or makeup? Get booked here." on Welcome: after sign-in, You opens pro onboarding.
     var wantsProOnboarding = false
 
@@ -237,6 +247,7 @@ final class AppState {
     /// Picks up a saved session at launch. Straight to Home if she's finished onboarding before.
     /// Called once, from the app's launch task.
     func restoreSession() async {
+        await loadFlags()
         // From here, notification taps reach the app (one that launched it is opened once she's in).
         PushCenter.shared.attach(self)
         guard let restored = await data.currentClient() else {
@@ -259,6 +270,14 @@ final class AppState {
             pendingProLink = nil
             openProLink(link)
         }
+    }
+
+    /// Reads the server switches. A build from Xcode keeps the phone option whatever they say.
+    func loadFlags() async {
+        let flags = await data.appFlags()
+        #if !DEBUG
+        if let on = flags["phone_sign_in"] { phoneSignInOn = on }
+        #endif
     }
 
     /// Texts a code. False (with `lastError` set) if it didn't go.

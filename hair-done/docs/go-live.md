@@ -59,6 +59,11 @@ Never paste a secret key into a chat, an issue or the repo. They go straight int
 - **Phone.** Run `tools/setup-sms.sh`. It connects Twilio Verify (no number to buy; Twilio picks the sender)
   after you've made a Twilio account, upgraded it, and created a Verify service called "Hair Done" with
   6-digit codes. The test numbers (`61400000001` to `61400000003`, code `123456`) keep working and send nothing.
+  Texts to Australian numbers also need your sender name registered with Twilio (Phone Numbers → Alphanumeric
+  Sender IDs → Australia; ABN and photo ID; up to two weeks). Until it's approved, the phone option is hidden
+  in TestFlight and App Store builds (builds from Xcode still show it, for the test numbers). Once approved,
+  turn it on in Supabase → SQL editor:
+  `update private.app_flags set value = true where key = 'phone_sign_in';`
 - **Apple.** Turn it on. In **Client IDs** put `com.keithchinyanda.hairdone`. The app signs in natively, so no
   secret key is needed for the iPhone.
 - **URL configuration.** Set the site URL to `hairdone://auth`.

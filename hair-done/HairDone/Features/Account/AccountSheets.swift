@@ -203,7 +203,8 @@ struct AccountDetailsSheet: View {
                     .font(HDFont.body.monospacedDigit())
                     .foregroundStyle(client?.phone.isEmpty == false ? Palette.ink : Palette.inkSoft)
                 Spacer()
-                if phoneStep == nil {
+                // Changing the number sends a text, so it waits on the same switch as phone sign-in.
+                if phoneStep == nil && app.phoneSignInOn {
                     TertiaryButton(title: client?.phone.isEmpty == false ? "Change" : "Add", tint: Palette.ink) {
                         newPhone = ""; code = ""; phoneProblem = nil; phoneDone = false
                         withAnimation(Motion.spring) { phoneStep = .enter }

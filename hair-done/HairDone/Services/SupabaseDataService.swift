@@ -956,6 +956,13 @@ final class SupabaseDataService: DataService {
 
     private struct PayoutStatusReply: Decodable { let payoutsConnected: Bool }
 
+    func appFlags() async -> [String: Bool] {
+        let empty = Data("{}".utf8)
+        guard let data = try? await api.call("POST", "rest/v1/rpc/app_flags", body: empty, signedIn: false),
+              let flags = try? JSONDecoder().decode([String: Bool].self, from: data) else { return [:] }
+        return flags
+    }
+
     func payoutStatus() async throws -> Bool {
         do {
             let data = try await api.call("GET", "functions/v1/connect-onboarding", query: [q("status", "1")])

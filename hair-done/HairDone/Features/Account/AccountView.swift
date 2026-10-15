@@ -107,7 +107,7 @@ struct AccountView: View {
                 Text(client.phone).font(HDFont.sub.monospacedDigit()).foregroundStyle(Palette.inkSoft)
             } else if !client.email.isEmpty {
                 Text(client.email).font(HDFont.sub).foregroundStyle(Palette.inkSoft)
-            } else {
+            } else if app.phoneSignInOn {
                 TertiaryButton(title: "Add your mobile", tint: Palette.ink) { showDetails = true }
                     .padding(.leading, -8)
             }
