@@ -78,7 +78,8 @@ class TradingLoop:
             r = getattr(self.strategy, "r", None)
             self.scanner = GapScanner(broker, settings, min_gap_pct=getattr(r, "min_gap_pct", 3.0),
                                       min_price=getattr(r, "min_price_usd", 3.0),
-                                      min_market_cap=getattr(r, "min_market_cap_usd", 1e9))
+                                      min_market_cap=getattr(r, "min_market_cap_usd", 1e9),
+                                      day_check=getattr(self.strategy, "day_check", None))
         else:
             self.scanner = UniverseScanner(broker, settings)
         self.watchlist: list[Candidate] = []
@@ -202,6 +203,8 @@ class TradingLoop:
             else:
                 names = "\n".join(c.line() for c in self.watchlist)
             names = esc(names) or "(nothing passed the filters)"
+            if getattr(self.scanner, "summary", ""):
+                names += f"\n{esc(self.scanner.summary)}"
             notes = self._news_notes([c.symbol for c in self.watchlist])
             self.notify.send(f"📋 <b>Watchlist {now:%a %b %d}</b> · {esc(self.loaded.name)} · "
                              f"equity ${equity:,.0f}\n<pre>{names}</pre>" + (f"\n📰 {esc(notes)}" if notes else ""))

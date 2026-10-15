@@ -169,7 +169,10 @@ def cmd_scan(args) -> None:
     try:
         if loaded.scan_kind == "gap":
             r = loaded.strategy.r
-            watch = GapScanner(b, s, r.min_gap_pct, r.min_price_usd, r.min_market_cap_usd).scan()
+            sc = GapScanner(b, s, r.min_gap_pct, r.min_price_usd, r.min_market_cap_usd,
+                            day_check=getattr(loaded.strategy, "day_check", None))
+            watch = sc.scan()
+            print(sc.summary)
         else:
             watch = UniverseScanner(b, s).scan()
     finally:

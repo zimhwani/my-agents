@@ -8,8 +8,11 @@ the names most likely to produce a clean range breakout come first.
 from __future__ import annotations
 
 import logging
+from collections import Counter
 from dataclasses import dataclass
+from typing import Callable
 
+from . import clock
 from .broker import Broker
 from .config import Settings
 from .indicators import atr
@@ -86,12 +89,18 @@ class GapScanner:
     symbol by symbol. Results are filtered to what the broker can trade."""
 
     def __init__(self, broker: Broker, settings: Settings, min_gap_pct: float = 3.0,
-                 min_price: float = 3.0, min_market_cap: float = 1e9):
+                 min_price: float = 3.0, min_market_cap: float = 1e9,
+                 day_check: Callable | None = None, max_checked: int = 40):
         self.b = broker
         self.s = settings
         self.min_gap_pct = min_gap_pct
         self.min_price = min_price
         self.min_market_cap = min_market_cap
+        # the strategy's daily filter (TJL: prior close above SMA200, gap): checked at scan time so the
+        # watchlist slots go to names that can actually trade today, not the biggest gappers that can't
+        self.day_check = day_check
+        self.max_checked = max_checked
+        self.summary = ""
 
     def _tradable(self, symbol: str) -> bool:
         check = getattr(self.b, "is_tradable", None)
@@ -145,7 +154,37 @@ class GapScanner:
         for c in found:
             log.info("GAP %-6s $%8.2f  gap %+5.1f%%", c.symbol, c.price, c.gap_pct)
         log.info("Gap scan via %s: %d candidates", source, len(found))
+        self.summary = f"{len(found)} gappers >= {self.min_gap_pct:g}% via {source}"
+        if self.day_check is not None and found:
+            return self._prefilter(found)
         return found[: self.s.max_watchlist]
+
+    def _prefilter(self, found: list[Candidate]) -> list[Candidate]:
+        """Keep gappers that pass the daily filter, biggest gap first, until the watchlist is full."""
+        today = clock.now_et().date()
+        kept: list[Candidate] = []
+        why_not: Counter = Counter()
+        for c in found[: self.max_checked]:
+            if len(kept) >= self.s.max_watchlist:
+                break
+            try:
+                prior = [d for d in self.b.daily_bars(c.symbol, 260) if d.time.date() < today]
+                why, detail = self.day_check(c.price, prior)
+            except Exception as exc:  # data hiccup: let the live loop decide on the symbol
+                log.warning("%s: daily filter check failed at scan (%s); keeping it", c.symbol, exc)
+                kept.append(c)
+                continue
+            if why == "ok":
+                kept.append(c)
+            else:
+                c.rejected = why
+                why_not[why] += 1
+                log.info("GAP %-6s dropped: %s (%s)", c.symbol, why, detail)
+        if why_not:
+            self.summary += "; dropped " + ", ".join(f"{n} {k}" for k, n in why_not.most_common())
+        self.summary += f"; {len(kept)} pass the daily filters"
+        log.info("Gap scan: %s", self.summary)
+        return kept
 
 
 class StaticScanner:

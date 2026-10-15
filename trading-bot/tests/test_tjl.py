@@ -246,3 +246,32 @@ def test_day_check_reasons_and_notes():
     falling = [Bar(b.time, b.open, b.high, b.low, 100 - i * 0.1, b.volume) for i, b in enumerate(rising)]
     why, detail = s.day_check(falling[-1].close * 1.05, falling)
     assert why == "below_sma200" and "SMA200" in detail and "gap +5.0%" in detail
+
+
+def test_gap_scan_fills_the_watchlist_with_names_that_pass_the_daily_filter(settings):
+    from tradebot.marketdata import Gapper
+
+    def history(trend):  # 220 prior closes: rising (last close above SMA200) or falling (below it)
+        return [Bar(clock.at(DAY - timedelta(days=220 - i), clock.MARKET_CLOSE), 0, 0, 0,
+                    100 + trend * i * 0.1, 1e6) for i in range(220)]
+
+    class Data:
+        def gappers(self, min_gap_pct, min_price, min_market_cap, limit=100):
+            return [Gapper("DOWN1", 50.0, 20.0, 5e9), Gapper("DOWN2", 50.0, 12.0, 5e9),
+                    Gapper("UP1", 130.0, 6.0, 5e9), Gapper("UP2", 128.0, 4.0, 5e9)]
+
+    class Broker:
+        data = Data()
+
+        def is_tradable(self, symbol):
+            return True
+
+        def daily_bars(self, symbol, days):
+            return history(1 if symbol.startswith("UP") else -1)
+
+    settings.max_watchlist = 3
+    sc = GapScanner(Broker(), settings, 3.0, 3.0, 1e9, day_check=TrendJoinLong().day_check)
+    assert [c.symbol for c in sc.scan()] == ["UP1", "UP2"]  # the two biggest gappers are below their SMA200
+    assert "dropped 2 below_sma200" in sc.summary and "2 pass" in sc.summary
+    plain = GapScanner(Broker(), settings, 3.0, 3.0, 1e9)
+    assert [c.symbol for c in plain.scan()] == ["DOWN1", "DOWN2", "UP1"]  # without it: slots wasted
