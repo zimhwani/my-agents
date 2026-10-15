@@ -56,9 +56,9 @@ Never paste a secret key into a chat, an issue or the repo. They go straight int
 
 ## 3. Sign-in (Supabase → Authentication → Sign In / Providers)
 
-- **Phone.** Turn it on and pick **Twilio** (or Twilio Verify, or MessageBird). You'll need a Twilio account
-  with an Australian-capable sender. For testing without SMS, add test numbers in "Test phone numbers
-  and OTPs", like `61400000001=123456`. They sign in with that fixed code and nothing is sent.
+- **Phone.** Run `tools/setup-sms.sh`. It connects Twilio Verify (no number to buy; Twilio picks the sender)
+  after you've made a Twilio account, upgraded it, and created a Verify service called "Hair Done" with
+  6-digit codes. The test numbers (`61400000001` to `61400000003`, code `123456`) keep working and send nothing.
 - **Apple.** Turn it on. In **Client IDs** put `com.keithchinyanda.hairdone`. The app signs in natively, so no
   secret key is needed for the iPhone.
 - **URL configuration.** Set the site URL to `hairdone://auth`.
