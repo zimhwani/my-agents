@@ -258,7 +258,7 @@ def test_gap_scan_fills_the_watchlist_with_names_that_pass_the_daily_filter(sett
     class Data:
         def gappers(self, min_gap_pct, min_price, min_market_cap, limit=100):
             return [Gapper("DOWN1", 50.0, 20.0, 5e9), Gapper("DOWN2", 50.0, 12.0, 5e9),
-                    Gapper("UP1", 130.0, 6.0, 5e9), Gapper("UP2", 128.0, 4.0, 5e9)]
+                    Gapper("UP3", 129.0, 5.8, 5e9), Gapper("UP1", 130.0, 6.0, 5e9), Gapper("UP2", 128.0, 4.0, 5e9)]
 
     class Broker:
         data = Data()
@@ -269,9 +269,15 @@ def test_gap_scan_fills_the_watchlist_with_names_that_pass_the_daily_filter(sett
         def daily_bars(self, symbol, days):
             return history(1 if symbol.startswith("UP") else -1)
 
+        def intraday_bars(self, symbol, bar_minutes=5, days=5, include_premarket=False):
+            today = clock.now_et().date()  # UP3 opened flat (122.5 vs 121.9) and ran up by the scan
+            o = {"UP3": 122.5}.get(symbol, 130.0)
+            return [Bar(clock.at(today, clock.parse_hhmm("09:25")), 125, 125, 125, 125, 1e3),
+                    Bar(clock.at(today, clock.parse_hhmm("09:30")), o, o + 1, o - 1, o, 1e5)]
+
     settings.max_watchlist = 3
     sc = GapScanner(Broker(), settings, 3.0, 3.0, 1e9, day_check=TrendJoinLong().day_check)
     assert [c.symbol for c in sc.scan()] == ["UP1", "UP2"]  # the two biggest gappers are below their SMA200
-    assert "dropped 2 below_sma200" in sc.summary and "2 pass" in sc.summary
+    assert "2 below_sma200" in sc.summary and "1 gap_small" in sc.summary and "2 pass" in sc.summary
     plain = GapScanner(Broker(), settings, 3.0, 3.0, 1e9)
     assert [c.symbol for c in plain.scan()] == ["DOWN1", "DOWN2", "UP1"]  # without it: slots wasted

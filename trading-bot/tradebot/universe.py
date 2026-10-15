@@ -159,6 +159,17 @@ class GapScanner:
             return self._prefilter(found)
         return found[: self.s.max_watchlist]
 
+    def _today_open(self, symbol: str, today) -> float | None:
+        """Open of today's first regular-session bar: the strategy measures the gap from the open, not
+        from the price at scan time (a flat open that runs 3% by 09:36 is not a gap)."""
+        try:
+            bars = self.b.intraday_bars(symbol, 5, 2, include_premarket=True)
+        except Exception as exc:
+            log.debug("%s: no intraday bars at scan (%s)", symbol, exc)
+            return None
+        rth = [b for b in bars or [] if b.time.date() == today and clock.MARKET_OPEN <= b.time.time() < clock.MARKET_CLOSE]
+        return rth[0].open if rth else None
+
     def _prefilter(self, found: list[Candidate]) -> list[Candidate]:
         """Keep gappers that pass the daily filter, biggest gap first, until the watchlist is full."""
         today = clock.now_et().date()
@@ -169,7 +180,7 @@ class GapScanner:
                 break
             try:
                 prior = [d for d in self.b.daily_bars(c.symbol, 260) if d.time.date() < today]
-                why, detail = self.day_check(c.price, prior)
+                why, detail = self.day_check(self._today_open(c.symbol, today) or c.price, prior)
             except Exception as exc:  # data hiccup: let the live loop decide on the symbol
                 log.warning("%s: daily filter check failed at scan (%s); keeping it", c.symbol, exc)
                 kept.append(c)
