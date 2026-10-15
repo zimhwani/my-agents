@@ -407,7 +407,7 @@ struct ProHelpSheet: View {
         .presentationBackground(Palette.paper)
     }
 
-    private static let supportEmail = "hello@hairdone.app"
+    private static let supportEmail = "hello@hairdonenailsdone.app"
 
     /// Mail if there's an account set up (as on the client side's Help); otherwise the address
     /// goes on the clipboard and says so.

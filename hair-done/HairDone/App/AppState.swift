@@ -1075,7 +1075,7 @@ final class AppState {
 
     // MARK: Links
 
-    /// The link "Share" sends for a pro. This should become https://hairdone.app/pro/<id> once the domain
+    /// The link "Share" sends for a pro. This should become https://hairdonenailsdone.app/pro/<id> once the domain
     /// serves apple-app-site-association, so it opens the app for people who have it and the site for
     /// people who don't.
     func shareURL(for pro: Pro) -> URL {
