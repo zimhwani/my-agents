@@ -31,8 +31,8 @@ add it to the "Requests" section at the bottom rather than reaching into a file 
 - `close_pro_profile()` (error `live_booking` while she has a job that isn't finished), `reopen_pro_profile()`.
 - `submit_id_check()` (error `id_docs_missing` unless two files are in `id-docs/<uid>/`).
 - `save_pro_schedule(p_hours jsonb, p_days_off date[])`: hours as `[{"weekday":0-6 (0 = Sunday),"start":540,"end":1020}]`.
-  **Not applied yet** (it's waiting on the founder). Call it; if PostgREST says the function doesn't exist
-  (HTTP 404, code `PGRST202`), fall back to the current delete-then-insert.
+  Live since 15 Oct. The app still falls back to delete-then-insert if PostgREST says it doesn't exist
+  (HTTP 404, code `PGRST202`).
 - Storage buckets: `work` (public, `<uid>/<file>.jpg`), `avatars` (public, `<uid>/<file>.jpg`),
   `inspo` (private, `<uid>/<booking>/<n>.jpg`, readable by both sides once a `booking_inspo` row points at it),
   `id-docs` (private, `<uid>/photo-id.jpg` and `<uid>/selfie.jpg`).
