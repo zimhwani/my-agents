@@ -23,14 +23,10 @@ struct RootView: View {
                     OnboardingFlow()
                         .transition(.opacity)
                 case .ready:
-                    // Swapped outright, no transition: the ink frame covers a change of sides. An
-                    // animated swap could leave the outgoing shell stuck on screen, frozen, over the
-                    // live one: her edits went in underneath and the screen never changed (Profile
-                    // edit's km boxes, Taking bookings) until the app was reopened.
                     Group {
                         if app.mode == .pro { ProShell() } else { ClientShell() }
                     }
-                    .transition(.identity)
+                    .transition(shellTransition)
                 }
             }
 
@@ -44,6 +40,7 @@ struct RootView: View {
             }
         }
         .animation(Motion.springSlow, value: app.stage)
+        .animation(Motion.springSlow, value: app.mode)
         .overlay(alignment: .bottom) { ToastView() }
         // Back from Stripe with nothing payout-related on screen (the app was closed in between).
         .payoutNoticeAlert(fallback: true)
@@ -66,6 +63,16 @@ struct RootView: View {
     private var curtainMode: AppMode? {
         guard inShells, let settled = settledMode, settled != app.mode else { return nil }
         return app.mode
+    }
+
+    /// Under the frame the new shell fades in late (a cross-fade, so the same under Reduce Motion).
+    /// Arriving from onboarding it rises from the bottom, or fades under Reduce Motion.
+    private var shellTransition: AnyTransition {
+        if curtainMode != nil {
+            return .asymmetric(insertion: .opacity.animation(.easeOut(duration: 0.2).delay(0.2)), removal: .opacity)
+        }
+        if reduceMotion { return .opacity }
+        return .asymmetric(insertion: .move(edge: .bottom).combined(with: .opacity), removal: .opacity)
     }
 
     /// `AppState.switchMode` gives the medium haptic; this adds the frame and the announcement.
@@ -218,15 +225,6 @@ struct TabStack<Tab: Hashable, Content: View>: View {
     @State private var opened: Set<Tab> = []
 
     var body: some View {
-        if DebugSwitch.on("hdPlainTabs") {
-            // Debug experiment: only the current tab, nothing kept.
-            content(selected).id(selected)
-        } else {
-            stack
-        }
-    }
-
-    private var stack: some View {
         ZStack {
             ForEach(tabs, id: \.self) { tab in
                 if tab == selected || opened.contains(tab) {

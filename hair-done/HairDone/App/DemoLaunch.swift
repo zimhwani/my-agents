@@ -32,22 +32,3 @@ extension AppState {
     }
 }
 #endif
-
-/// Debug builds only: lets the screen tour switch one piece off (launch with `-hdNoMap YES`) to find
-/// which one is at fault. Always false in a release build.
-enum DebugSwitch {
-    static func on(_ key: String) -> Bool {
-        #if DEBUG
-        return UserDefaults.standard.bool(forKey: key)
-        #else
-        return false
-        #endif
-    }
-}
-
-/// Debug probe: counts how many times a view's body ran. Does nothing useful in a release build.
-enum ProbeCount {
-    private static var counts: [String: Int] = [:]
-    static func bump(_ key: String) { counts[key, default: 0] += 1 }
-    static func value(_ key: String) -> Int { counts[key] ?? 0 }
-}

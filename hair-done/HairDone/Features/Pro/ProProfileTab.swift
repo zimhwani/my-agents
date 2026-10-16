@@ -17,8 +17,6 @@ struct ProProfileTab: View {
     @State private var closing = false
     @State private var closeProblem: String? = nil
     @State private var savingActive = false
-    /// Debug experiment (`-hdEditInSheet YES`): Profile edit in its own sheet, away from the tabs.
-    @State private var editInSheet = false
 
     private enum Destination: Hashable {
         case edit(ProEditSection?)
@@ -46,9 +44,7 @@ struct ProProfileTab: View {
                         group("How clients see you") {
                             HairlineRow(title: "Work", value: ProFlow.count(pro.work.count, "photo", "photos")) { path.wrappedValue.append(Route.proWork) }
                             HairlineRow(title: "Services and prices", value: "\(pro.services.count)") { path.wrappedValue.append(Destination.edit(.services)) }
-                            HairlineRow(title: "Travel area and fee", value: "\(Int(pro.travelRadiusKm)) km · \(Money.format(pro.travelFeeCents))") {
-                                if DebugSwitch.on("hdEditInSheet") { editInSheet = true } else { path.wrappedValue.append(Destination.edit(.travel)) }
-                            }
+                            HairlineRow(title: "Travel area and fee", value: "\(Int(pro.travelRadiusKm)) km · \(Money.format(pro.travelFeeCents))") { path.wrappedValue.append(Destination.edit(.travel)) }
                         }
                         group("How you work") {
                             HairlineRow(title: "Hours", value: hoursValue(pro)) { path.wrappedValue.append(Destination.hours) }
@@ -89,7 +85,6 @@ struct ProProfileTab: View {
             return false
         }
         .sheet(isPresented: $showPayouts) { PayoutDetailsSheet() }
-        .sheet(isPresented: $editInSheet) { NavigationStack { ProProfileEditView(focus: .travel) } }
         .sheet(isPresented: $showNotifications) { ProNotificationsSheet() }
         .sheet(isPresented: $showHelp) { ProHelpSheet() }
         .sheet(isPresented: $showNotice) { ProNoticeSheet() }
@@ -210,10 +205,6 @@ struct ProProfileTab: View {
                      isOn: Binding(get: { pro.isActive }, set: { on in Task { await setActive(on) } }))
                 .disabled(savingActive || app.isOffline)
                 .padding(.vertical, Space.s)
-            if DebugSwitch.on("hdProbe") {
-                Text("probe row=\(pro.isActive) app=\(app.proSelf?.isActive ?? false) saving=\(savingActive) offline=\(app.isOffline)")
-                    .font(.caption2).accessibilityIdentifier("probe-root")
-            }
         }
         .overlay(alignment: .bottom) { Rectangle().fill(Palette.lineStrong).frame(height: 0.5) }
     }

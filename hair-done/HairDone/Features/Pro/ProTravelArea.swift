@@ -21,8 +21,6 @@ struct ProTravelArea: View {
     @State private var position: MapCameraPosition = .automatic
     /// The suburb the pin belongs to. Set on the first look; a lookup only runs once `base` differs.
     @State private var pinnedBase: String? = nil
-    /// Debug probe (`-hdProbe YES`): how many times a km box's action ran.
-    @State private var probeTaps = 0
 
     private var hasPin: Bool { latitude != 0 || longitude != 0 }
     private var typed: String { base.trimmingCharacters(in: .whitespacesAndNewlines) }
@@ -35,7 +33,19 @@ struct ProTravelArea: View {
                         caption: looking ? "Finding it on the map." : nil,
                         error: notFound ? "We couldn't find that one. Try the suburb and postcode." : nil)
 
-            if !DebugSwitch.on("hdNoMap") { map }
+            Map(position: $position, interactionModes: []) {
+                MapCircle(center: centre, radius: radiusKm * 1000)
+                    .foregroundStyle(Palette.ink.opacity(0.08))
+                    .stroke(Palette.ink, lineWidth: 1)
+                Annotation("", coordinate: centre) {
+                    Circle().fill(Palette.ink).frame(width: 8, height: 8)
+                        .overlay(Circle().strokeBorder(Palette.paper, lineWidth: 1.5))
+                }
+            }
+            .frame(height: 200)
+            .photoShape()
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("Map: \(Int(radiusKm)) kilometres around \(base.isEmpty ? "your base" : base)")
 
             VStack(alignment: .leading, spacing: Space.s) {
                 HStack(alignment: .firstTextBaseline) {
@@ -50,17 +60,12 @@ struct ProTravelArea: View {
                 ProFlowLayout {
                     ForEach([5, 10, 15, 25], id: \.self) { km in
                         OptionBox(title: "\(km) km", isSelected: Int(radiusKm) == km) {
-                            probeTaps += 1
                             withAnimation(Motion.spring) { radiusKm = Double(km) }
                         }
                     }
                 }
                 Text("Clients inside the circle can book you.")
                     .font(HDFont.caption).foregroundStyle(Palette.inkSoft)
-                if DebugSwitch.on("hdProbe") {
-                    Text("probe taps=\(probeTaps) radius=\(Int(radiusKm))")
-                        .font(.caption2).accessibilityIdentifier("probe-travel")
-                }
             }
         }
         .onAppear { frame(animated: false) }
@@ -68,22 +73,6 @@ struct ProTravelArea: View {
         .onChange(of: latitude) { _, _ in frame(animated: true) }
         .onChange(of: longitude) { _, _ in frame(animated: true) }
         .task(id: base) { await lookUp() }
-    }
-
-    private var map: some View {
-        Map(position: $position, interactionModes: []) {
-            MapCircle(center: centre, radius: radiusKm * 1000)
-                .foregroundStyle(Palette.ink.opacity(0.08))
-                .stroke(Palette.ink, lineWidth: 1)
-            Annotation("", coordinate: centre) {
-                Circle().fill(Palette.ink).frame(width: 8, height: 8)
-                    .overlay(Circle().strokeBorder(Palette.paper, lineWidth: 1.5))
-            }
-        }
-        .frame(height: 200)
-        .photoShape()
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Map: \(Int(radiusKm)) kilometres around \(base.isEmpty ? "your base" : base)")
     }
 
     private func frame(animated: Bool) {

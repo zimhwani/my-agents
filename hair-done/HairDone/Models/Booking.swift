@@ -263,9 +263,17 @@ struct Booking: Identifiable, Hashable, Codable {
         return Int((Double(price.servicesCents + price.travelFeeCents) * Fees.lateCancellationRate).rounded())
     }
 
+    /// Every field, so a change to any of them redraws (SwiftUI skips a redraw when the new value
+    /// equals the old). Inspo photos by path, not whole URL: a fresh signature on the same photo
+    /// isn't a change.
     static func == (lhs: Booking, rhs: Booking) -> Bool {
-        lhs.id == rhs.id && lhs.status == rhs.status && lhs.start == rhs.start && lhs.review == rhs.review && lhs.price == rhs.price
-            // Paths, not whole URLs: a fresh signature on the same photo isn't a change.
+        lhs.id == rhs.id && lhs.proID == rhs.proID && lhs.clientID == rhs.clientID
+            && lhs.services == rhs.services && lhs.start == rhs.start && lhs.address == rhs.address
+            && lhs.notes == rhs.notes && lhs.inspoSeeds == rhs.inspoSeeds && lhs.status == rhs.status
+            && lhs.price == rhs.price && lhs.createdAt == rhs.createdAt && lhs.events == rhs.events
+            && lhs.review == rhs.review && lhs.declineReason == rhs.declineReason
+            && lhs.paymentMethodID == rhs.paymentMethodID && lhs.reference == rhs.reference
+            && lhs.holdState == rhs.holdState
             && lhs.inspoURLs.map(\.path) == rhs.inspoURLs.map(\.path)
     }
     func hash(into hasher: inout Hasher) { hasher.combine(id) }

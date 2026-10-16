@@ -68,7 +68,10 @@ struct Pro: Identifiable, Hashable, Codable {
         return a.distance(from: b) / 1000
     }
 
-    static func == (lhs: Pro, rhs: Pro) -> Bool { lhs.id == rhs.id }
+    // Equality is every field (synthesised). SwiftUI skips a redraw when a new value equals the old,
+    // so comparing ids alone meant an edit to her own profile (the km boxes, How far, Instant book,
+    // Taking bookings) changed nothing on screen until something else redrew it. Hashing by id
+    // stays: equal pros always share an id.
     func hash(into hasher: inout Hasher) { hasher.combine(id) }
 }
 
@@ -111,14 +114,4 @@ struct Review: Identifiable, Hashable, Codable {
     var serviceName: String
     var proReply: String? = nil
     var photoSeed: Int? = nil
-}
-
-extension Optional where Wrapped: Hashable {
-    /// The value, or `fallback` while there isn't one; setting it stores the value. Lets a screen
-    /// with an optional draft hand its form `$draft[orElse: current]`, a binding that reads and writes
-    /// the state directly (a key path) rather than through closures.
-    subscript(orElse fallback: Wrapped) -> Wrapped {
-        get { self ?? fallback }
-        set { self = newValue }
-    }
 }

@@ -169,11 +169,7 @@ private struct HDNavHeaderPlacement<Header: View>: ViewModifier {
             }
         }
         .toolbar(.hidden, for: .navigationBar)
-        .background {
-            if !DebugSwitch.on("hdNoSwipeEnabler") {
-                SwipeBackEnabler().frame(width: 0, height: 0).accessibilityHidden(true)
-            }
-        }
+        .background(SwipeBackEnabler().frame(width: 0, height: 0).accessibilityHidden(true))
     }
 }
 

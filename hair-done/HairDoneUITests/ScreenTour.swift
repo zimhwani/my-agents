@@ -22,37 +22,10 @@ final class ScreenTour: XCTestCase {
         }
     }
 
-    /// Profile > Travel area and fee: taps the km boxes, drags the slider, flips Instant book and types
-    /// a travel fee, naming each picture with what changed. Run three ways to find what stops taps on
-    /// that screen: as it is, without the map, and without the swipe-back helper. Findings are assertion
-    /// messages (in the run log) and picture names.
+    /// Profile > Travel area and fee: taps the km boxes, drags the slider and flips Instant book,
+    /// naming each picture with what changed. Guards against edits not redrawing the screen (a pro
+    /// compared by id alone made SwiftUI skip the redraw).
     func testTravelArea() { travelExperiment("travel", extra: []) }
-
-    /// With the app's debug probe on: after each tap, what the km box's action count, the travel
-    /// control's radius and the edit screen's draft say, and whether the screen was rebuilt.
-    /// Reported as assertion messages so they land in the run log.
-    func testTravelProbe() { travelProbe("base", extra: []) }
-    func testTravelProbePlainTabs() { travelProbe("plaintabs", extra: ["-hdPlainTabs", "YES"]) }
-    func testTravelProbeInSheet() { travelProbe("insheet", extra: ["-hdEditInSheet", "YES"]) }
-
-    private func travelProbe(_ name: String, extra: [String]) {
-        let app = openProfileEdit(viaTravelRow: true, extra: ["-hdProbe", "YES"] + extra)
-        let travel = app.staticTexts["probe-travel"], screen = app.staticTexts["probe-edit"]
-        guard travel.waitForExistence(timeout: 10) else { XCTFail("PROBE: no travel probe"); return }
-        sleep(2)
-        func report(_ step: String) {
-            let copies = "edit screens=\(app.staticTexts.matching(identifier: "probe-edit").count) "
-                + "travel=\(app.staticTexts.matching(identifier: "probe-travel").count) "
-                + "Today tabs=\(app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Today'")).count)"
-            XCTFail("PROBE \(name) \(step): \(travel.label) | \(screen.exists ? screen.label : "edit probe off screen") | \(copies)")
-        }
-        report("open")
-        app.buttons["15 km"].tap(); sleep(1); report("after 15 km")
-        app.buttons["25 km"].tap(); sleep(1); report("after 25 km")
-        let instant = app.switches.firstMatch
-        if instant.exists { instant.tap(); sleep(1); report("after Instant book") }
-        shoot("probe-\(name)")
-    }
 
     private func travelExperiment(_ name: String, extra: [String]) {
         let app = openProfileEdit(viaTravelRow: true, extra: extra)
@@ -91,14 +64,11 @@ final class ScreenTour: XCTestCase {
     /// A switch on a tab's own screen (not pushed), to compare: Profile's Taking bookings.
     func testRootSwitch() {
         let app = XCUIApplication()
-        app.launchArguments = ["-hdDemo", "pro", "-hdTab", "profile", "-push.asked.client", "YES", "-push.asked.pro", "YES",
-                               "-hdProbe", "YES"]
+        app.launchArguments = ["-hdDemo", "pro", "-hdTab", "profile", "-push.asked.client", "YES", "-push.asked.pro", "YES"]
         app.launch()
         _ = app.buttons["Profile"].waitForExistence(timeout: 20)
         sleep(3)
         for _ in 0..<4 where !app.switches.firstMatch.isHittable { app.swipeUp(velocity: .slow) }
-        let probe = app.staticTexts["probe-root"]
-        XCTFail("PROBE root before: \(probe.exists ? probe.label : "none")")
         let sw = app.switches.firstMatch
         guard sw.exists else { XCTFail("ROOT: no switch"); return }
         let was = tag(sw.value)
@@ -108,7 +78,6 @@ final class ScreenTour: XCTestCase {
         let flipped = tag(sw.value) != was
         let asked = app.buttons.count > 0 && app.staticTexts.containing(NSPredicate(format: "label CONTAINS[c] '?'")).count > 0
         shoot("root-switch-\(was)-to-\(tag(sw.value))-asked-\(asked)")
-        XCTFail("PROBE root after: \(probe.exists ? probe.label : "none")")
         XCTAssertTrue(flipped || asked, "ROOT: Taking bookings didn't respond")
     }
 
