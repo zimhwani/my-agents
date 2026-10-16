@@ -584,14 +584,7 @@ private struct HomeRequestBanner: View {
 
     private var who: String { clientName == "Client" || clientName.isEmpty ? "A client" : clientName }
 
-    /// "a gel set", "a BIAB overlay", "an eyelash lift", "a gel set and 1 more"
-    private var what: String {
-        guard let first = request.services.first else { return "a booking" }
-        let name = first.name.prefix(2).allSatisfy(\.isUppercase) ? first.name : first.name.lowercasedFirst
-        let article = name.first.map { "aeiouAEIOU".contains($0) } == true ? "an" : "a"
-        let more = request.services.count > 1 ? " and \(request.services.count - 1) more" : ""
-        return "\(article) \(name)\(more)"
-    }
+    private var what: String { request.wantsLine }
 
     private var when: String {
         let cal = Calendar.current

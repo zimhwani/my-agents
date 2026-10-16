@@ -226,6 +226,16 @@ struct Booking: Identifiable, Hashable, Codable {
         Self.list(services.enumerated().map { i, s in i == 0 ? s.name : Self.midSentence(s.name) })
     }
 
+    /// What she's asking for, mid-sentence after "wants": "a gel set", "a BIAB overlay",
+    /// "an eyelash lift", "a gel set and 1 more".
+    var wantsLine: String {
+        guard let first = services.first else { return "a booking" }
+        let name = first.name.prefix(2).allSatisfy(\.isUppercase) ? first.name : first.name.lowercasedFirst
+        let article = name.first.map { "aeiouAEIOU".contains($0) } == true ? "an" : "a"
+        let more = services.count > 1 ? " and \(services.count - 1) more" : ""
+        return "\(article) \(name)\(more)"
+    }
+
     /// "A", "A and B", "A, B and C".
     static func list(_ items: [String]) -> String {
         guard let last = items.last else { return "" }

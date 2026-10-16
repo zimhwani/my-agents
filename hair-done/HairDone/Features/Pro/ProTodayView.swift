@@ -293,7 +293,7 @@ struct ProTodayView: View {
                 HStack(alignment: .top, spacing: Space.l) {
                     VStack(alignment: .leading, spacing: Space.xs) {
                         if !known { SkeletonBlock(width: 96, height: 18) }
-                        Text(known ? "\(client) wants \(b.servicesLine)" : "Wants \(b.servicesLine)")
+                        Text(known ? "\(client) wants \(b.wantsLine)" : "Wants \(b.wantsLine)")
                             .font(HDFont.name).foregroundStyle(Palette.ink)
                             .fixedSize(horizontal: false, vertical: true)
                         Text("\(b.start.friendlyDayTime) · \(b.address.suburb)").font(HDFont.sub).foregroundStyle(Palette.inkSoft)

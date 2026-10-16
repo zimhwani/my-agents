@@ -32,11 +32,16 @@ enum Route: Hashable {
     }
 }
 
-/// Also makes room for the tab bar under the tab's root and every screen pushed onto it (`tabBarRoom`).
+/// Also makes room for the tab bar under the tab's root and every screen pushed onto it (`tabBarRoom`),
+/// and puts paper behind the status bar on the root, which has no header of its own.
 struct RouteDestinations: ViewModifier {
     func body(content: Content) -> some View {
         content
             .tabBarRoom()
+            .overlay(alignment: .top) {
+                // With the system bar hidden, a scrolled root ran its text into the clock.
+                Palette.paper.frame(height: 0).ignoresSafeArea(edges: .top).allowsHitTesting(false)
+            }
             .navigationDestination(for: Route.self) { route in
                 Group {
                     switch route {
