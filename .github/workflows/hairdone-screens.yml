@@ -14,6 +14,11 @@ on:
       - "hair-done/project.yml"
       - ".github/workflows/hairdone-screens.yml"
 
+# The pictures are also committed to the branch (hair-done/docs/qa/screens/, small JPEGs, replaced
+# each run), because artifacts download from a host that a Claude Code session can't reach.
+permissions:
+  contents: write
+
 concurrency:
   group: hairdone-screens-${{ github.ref }}
   cancel-in-progress: true
@@ -101,6 +106,30 @@ jobs:
                       shutil.copy(src, f"screens/{look}-{base}.png")
           print("\n".join(sorted(os.listdir("screens"))))
           PY
+
+      - name: Commit the pictures to the branch
+        run: |
+          set -e
+          OUT="$RUNNER_TEMP/small"; mkdir -p "$OUT"
+          for f in screens/*.png; do
+            sips -s format jpeg -s formatOptions 60 -Z 1000 "$f" --out "$OUT/$(basename "${f%.png}").jpg" >/dev/null
+          done
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          BRANCH="${GITHUB_REF_NAME}"
+          for attempt in 1 2 3; do
+            git fetch -q origin "$BRANCH"
+            git checkout -q -B screens-commit "origin/$BRANCH"
+            rm -rf docs/qa/screens; mkdir -p docs/qa/screens
+            cp "$OUT"/*.jpg docs/qa/screens/
+            printf 'Screen tour of %s (run %s).\n' "${GITHUB_SHA:0:7}" "$GITHUB_RUN_ID" > docs/qa/screens/README.md
+            git add -A docs/qa/screens
+            git diff --cached --quiet && exit 0
+            git commit -q -m "Screen tour pictures for ${GITHUB_SHA:0:7}"
+            git push -q origin "HEAD:$BRANCH" && exit 0
+            sleep 5
+          done
+          exit 1
 
       - uses: actions/upload-artifact@v4
         with:
