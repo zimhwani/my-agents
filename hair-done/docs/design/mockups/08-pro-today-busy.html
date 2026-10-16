@@ -1,0 +1,185 @@
+<!doctype html><html lang="en-AU"><head><meta charset="utf-8"><title>Today, busy</title><link rel="stylesheet" href="common.css"><style>
+:root{ --success:#3E7A5A; --warn:#B9741F; --inkFaint:#948880; --onInk:#F4ECE4;
+  --onInkSoft:rgba(244,236,228,.62); --inkLine:rgba(244,236,228,.14); --line:#E8DFD5; }
+html,body{width:430px;height:884px}
+.bezel{width:412px;height:866px}
+.screen{width:390px;height:844px}
+.status{width:390px}
+.island{left:132px}
+.homeind{left:128px;background:#F4ECE4}
+.pic{position:relative;overflow:hidden;background:#cbbfb2;flex:none}
+.pic img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block}
+.num{font-feature-settings:"tnum"}
+.soft{color:var(--inkSoft)}
+.col{position:absolute;left:0;width:390px;padding:0 20px}
+.statusveil{position:absolute;left:0;top:0;width:390px;height:54px;z-index:45;background:rgba(248,243,236,.86);
+  backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px)}
+.eyebrow{font-size:12px;font-weight:500;letter-spacing:.08em;text-transform:uppercase;line-height:16px}
+.display{font-size:40px;line-height:46px;letter-spacing:-.4px}
+.section{font-size:26px;line-height:32px}
+.sub{font-size:15px;line-height:21px}
+.cap{font-size:13px;line-height:18px}
+.dot{display:inline-block;width:6px;height:6px;border-radius:3px;margin-right:8px;vertical-align:1.5px}
+.dot.warn{background:var(--warn)} .dot.ok{background:var(--success)}
+.between{display:flex;justify-content:space-between;align-items:baseline}
+.link{font-size:15px;font-weight:500;color:var(--ink);display:flex;align-items:center;gap:6px}
+.hair{height:.5px;background:var(--lineStrong)}
+.btn{height:44px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:600}
+.btn.ink{background:var(--ink);color:var(--onInk)}
+.btn.out{box-shadow:0 0 0 1px var(--ink) inset;color:var(--ink)}
+.btn.paper{background:var(--onInk);color:var(--ink);height:52px}
+
+/* header */
+.head{display:flex;justify-content:space-between;align-items:flex-start;padding-top:64px}
+.head .face{margin-top:24px}
+
+/* request */
+.req{margin-top:26px;padding-bottom:18px;border-bottom:.5px solid var(--lineStrong)}
+.track{height:1px;background:var(--line);margin:10px 0 16px;position:relative}
+.track b{position:absolute;left:0;top:0;height:1px;background:var(--ink)}
+.reqname{font-size:22px;line-height:27px}
+.quote{font-size:17px;line-height:23px}
+
+/* ink hero */
+.hero{margin-top:20px;background:var(--ink);color:var(--onInk);border-radius:6px;padding:20px 20px 8px}
+.jt{font-size:56px;line-height:58px;font-weight:300;letter-spacing:-1.4px}
+.jt small{font-size:22px;font-weight:300;letter-spacing:0;margin-left:4px}
+.hero .who{font-size:24px;line-height:29px;margin-top:6px}
+.hero .facts{font-size:15px;line-height:21px;color:var(--onInkSoft)}
+.hero .acts{display:flex;gap:28px;height:46px;align-items:center;font-size:15px;font-weight:500}
+
+/* job rows */
+.job{display:flex;align-items:center;padding:14px 0;border-bottom:.5px solid var(--lineStrong)}
+.job .t{width:76px;font-size:15px;line-height:24px;align-self:flex-start;padding-top:1px}
+.job .mid{flex:1}
+.job .nm{font-size:19px;line-height:24px}
+.job .pr{font-size:15px;margin-right:12px;align-self:flex-start;padding-top:2px}
+.job .chev{color:var(--inkFaint)}
+
+/* week strip */
+.strip{display:flex;gap:0;margin-top:14px}
+.day{flex:1;height:84px;border-radius:6px;display:flex;flex-direction:column;align-items:center;padding-top:10px}
+.day .wd{font-size:11px;font-weight:500;letter-spacing:.08em;text-transform:uppercase;color:var(--inkSoft)}
+.day .dn{font-size:20px;line-height:26px;font-weight:400;margin-top:2px}
+.day .mk{height:8px;display:flex;gap:3px;margin-top:5px;align-items:center}
+.day .mk i{width:5px;height:5px;border-radius:3px;background:var(--ink)}
+.day .mk i.rq{background:none;box-shadow:0 0 0 1px var(--ink) inset}
+.day .hr{font-size:11px;line-height:14px;color:var(--inkSoft);margin-top:4px}
+.day.off .dn{color:var(--inkSoft)}
+.day.today{background:var(--ink);color:var(--onInk)}
+.day.today .wd,.day.today .hr{color:var(--onInkSoft)}
+.day.today .mk i{background:var(--onInk)}
+.stripwrap{border-top:.5px solid var(--lineStrong);border-bottom:.5px solid var(--lineStrong);padding:10px 0;margin-top:14px}
+.stripwrap .strip{margin-top:0}
+
+/* money */
+.money{display:flex;align-items:center;padding:16px 0;border-top:.5px solid var(--lineStrong);border-bottom:.5px solid var(--lineStrong)}
+.money .v{font-size:17px;line-height:23px}
+.lq{color:var(--lacquer);font-size:22px;line-height:0;font-weight:700}
+
+/* nudges */
+.nudge{display:flex;align-items:flex-start;padding:15px 0;border-bottom:.5px solid var(--lineStrong)}
+.nudge .gl{width:36px;color:var(--ink);padding-top:1px;flex:none}
+.nudge .tx{flex:1}
+.nudge .tt{font-size:17px;line-height:22px}
+.nudge .ss{font-size:13px;line-height:18px;color:var(--inkSoft);margin-top:3px}
+.nudge .tr{margin-left:12px;padding-top:1px;font-size:15px;font-weight:500;flex:none}
+.thumbs{display:flex;gap:4px;margin-top:10px}
+.empty{width:30px;height:38px;border-radius:2px;box-shadow:0 0 0 1px var(--line) inset;display:flex;align-items:center;justify-content:center;color:var(--inkFaint)}
+.sw{width:40px;height:24px;border-radius:6px;background:var(--line);position:relative;margin-top:-1px}
+.sw b{position:absolute;left:3px;top:3px;width:18px;height:18px;border-radius:4px;background:var(--paper);box-shadow:0 1px 2px rgba(36,26,22,.18)}
+
+/* record */
+.facts2{display:flex;margin-top:14px}
+.facts2 > div{flex:1}
+.facts2 .vr{width:.5px;background:var(--lineStrong);flex:none;margin:0 16px}
+.big{font-size:22px;line-height:28px;margin-top:4px}
+.rquote{font-size:19px;line-height:27px;margin-top:22px}
+
+/* pro tab bar: solid ink, paper icons 55% / 100%, lacquer dots */
+.protabs{position:absolute;left:0;bottom:0;width:390px;height:83px;z-index:40;background:#241A16;display:flex;padding:6px 12px 0}
+.ptab{flex:1;height:49px;display:flex;flex-direction:column;align-items:center;color:rgba(244,236,228,.55)}
+.ptab .ic{position:relative;height:26px}
+.ptab svg{width:26px;height:26px;stroke:currentColor;fill:none;stroke-width:1.2;stroke-linecap:round;stroke-linejoin:round}
+.ptab span{font-size:10px;font-weight:500;margin-top:3px;line-height:12px}
+.ptab b{width:4px;height:4px;border-radius:2px;margin-top:3px}
+.ptab.on{color:#F4ECE4} .ptab.on span{font-weight:600} .ptab.on b{background:#C8323A}
+.ptab .unread{position:absolute;right:-3px;top:-1px;width:7px;height:7px;border-radius:4px;background:#C8323A;box-shadow:0 0 0 1.5px #241A16}
+</style></head><body><div class="bezel"></div><div class="screen">
+<div class="status "><div class="time">10:48</div>
+<div class="icons">
+<svg width="19" height="12" viewBox="0 0 19 12" fill="currentColor"><rect x="0" y="8" width="3.2" height="4" rx="1"/><rect x="5" y="5.5" width="3.2" height="6.5" rx="1"/><rect x="10" y="3" width="3.2" height="9" rx="1"/><rect x="15" y="0" width="3.2" height="12" rx="1"/></svg>
+<svg width="17" height="12" viewBox="0 0 17 12" fill="currentColor"><path d="M8.5 2.3c2.4 0 4.6.9 6.3 2.5l1.2-1.2C14 1.6 11.4.5 8.5.5S3 1.6 1 3.6l1.2 1.2c1.7-1.6 3.9-2.5 6.3-2.5z"/><path d="M8.5 5.8c1.5 0 2.8.5 3.8 1.5l1.2-1.2c-1.3-1.3-3.1-2-5-2s-3.7.7-5 2l1.2 1.2c1-1 2.3-1.5 3.8-1.5z"/><path d="M8.5 9.2c.6 0 1.1.2 1.5.6l-1.5 1.7L7 9.8c.4-.4.9-.6 1.5-.6z"/></svg>
+<svg width="27" height="13" viewBox="0 0 27 13"><rect x=".5" y=".5" width="23" height="12" rx="3.8" fill="none" stroke="currentColor" stroke-opacity=".4"/><rect x="2" y="2" width="16" height="9" rx="2.4" fill="currentColor"/><path d="M25 4.5v4c.8-.3 1.3-1.1 1.3-2s-.5-1.7-1.3-2z" fill="currentColor" fill-opacity=".45"/></svg>
+</div></div><div class="island"></div>
+<div class="col" style="top:0px"><div class="head"><div>
+  <div class="eyebrow soft">Pro · Mati</div>
+  <div class="serif display" style="margin-top:6px">Morning, <i>Mati</i>.</div>
+  <div class="sub soft" style="margin-top:6px">Friday 16 October · 4 jobs · <span class="num">$334.40</span> to you</div>
+</div><div class="face"><div class="pic" style="width:32px;height:40px;border-radius:2px;"><img src="file:///home/user/my-agents/hair-done/HairDone/Resources/Work/work-nails-4.jpg" style="object-position:50% 35%;"></div></div></div>
+<div class="req">
+  <div class="between">
+    <div class="eyebrow soft">New request</div>
+    <div class="cap" style="font-weight:500"><i class="dot warn"></i><span class="num">1 h 12 min</span> to answer</div>
+  </div>
+  <div class="track"><b style="width:60%"></b></div>
+  <div style="display:flex;gap:16px">
+    <div style="flex:1">
+      <div class="serif reqname">Tash wants a French tip set</div>
+      <div class="sub soft" style="margin-top:4px">Tomorrow, 10:00 am · Thornbury</div>
+      <div class="serif quote" style="margin-top:8px">“Short and squoval, a fine white tip.”</div>
+      <div style="font-size:17px;margin-top:6px"><span class="num">$110</span> to you <span class="soft" style="font-size:15px">· 1 h 30</span></div>
+    </div>
+    <div class="pic" style="width:56px;height:70px;border-radius:2px;"><img src="file:///home/user/my-agents/hair-done/HairDone/Resources/Work/work-nails-3.jpg" style="object-position:50% 50%;object-view-box:inset(30.0% 40.0% 38.0% 10.0%);"></div>
+  </div>
+  <div style="display:flex;gap:8px;margin-top:16px"><div class="btn ink" style="flex:1">Accept</div><div class="btn out" style="flex:1">Decline</div></div>
+  <div class="cap soft" style="margin-top:8px">Lapses at 12:00 pm. A lapsed request counts against you.</div>
+</div>
+
+<div class="hero">
+  <div class="between">
+    <div class="eyebrow" style="color:var(--onInkSoft)"><i class="dot ok" style="background:#6FBF8F"></i>Next up · Confirmed</div>
+    <div style="color:var(--onInkSoft)"><svg width="7" height="12" viewBox="0 0 8 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m1.5 1.5 5 5.5-5 5.5"/></svg></div>
+  </div>
+  <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-top:8px">
+    <div class="jt num">12:30<small>pm</small></div>
+    <div style="margin-bottom:4px"><div style="display:flex;gap:4px"><div class="pic" style="width:38px;height:48px;border-radius:2px;"><img src="file:///home/user/my-agents/hair-done/HairDone/Resources/Work/work-nails-1.jpg" style="object-position:50% 22%;transform:scale(1.3);transform-origin:45% 25%;"></div><div class="pic" style="width:38px;height:48px;border-radius:2px;"><img src="file:///home/user/my-agents/hair-done/HairDone/Resources/Work/work-nails-4.jpg" style="object-position:50% 38%;"></div></div><div style="font-size:11px;line-height:14px;margin-top:5px;color:var(--onInkSoft)">Her inspo</div></div>
+  </div>
+  <div class="serif who">Ruby · BIAB overlay</div>
+  <div class="facts" style="margin-top:4px">8 Glenlyon Rd, Brunswick East</div>
+  <div class="facts num">1 h 15 · $96.80 to you</div>
+  <div class="btn paper" style="margin-top:18px">On my way</div>
+  <div class="acts"><span>Directions</span><span>Message Ruby</span></div>
+</div>
+
+<div class="serif section" style="margin-top:32px">Later today</div>
+<div style="margin-top:6px">
+<div class="job"><div class="t num">3:00 pm</div><div class="mid"><div class="serif nm">Grace</div><div class="cap soft" style="margin-top:2px">Gel pedicure · 1 h · Fitzroy North</div></div><div class="pr num">$83.60</div><div class="chev"><svg width="7" height="12" viewBox="0 0 8 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m1.5 1.5 5 5.5-5 5.5"/></svg></div></div>
+<div class="job"><div class="t num">6:15 pm</div><div class="mid"><div class="serif nm">Lily</div><div class="cap soft" style="margin-top:2px">BIAB infill · 1 h · Carlton North</div></div><div class="pr num">$79.20</div><div class="chev"><svg width="7" height="12" viewBox="0 0 8 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m1.5 1.5 5 5.5-5 5.5"/></svg></div></div>
+</div>
+<div class="eyebrow soft" style="margin-top:22px">Earlier</div>
+<div style="margin-top:2px">
+<div class="job"><div class="t num">8:30 am</div><div class="mid"><div class="serif nm">Sophie</div><div class="cap soft" style="margin-top:2px">Gel manicure · 1 h · Northcote</div><div class="eyebrow" style="font-size:11px;margin-top:6px"><i class="dot ok"></i>Done · paying you</div></div><div class="pr num">$74.80</div><div class="chev"><svg width="7" height="12" viewBox="0 0 8 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m1.5 1.5 5 5.5-5 5.5"/></svg></div></div>
+</div>
+
+<div style="margin-top:32px">
+<div class="between"><div class="eyebrow soft">Next 7 days</div><div class="link">Calendar <span style="color:var(--inkFaint)"><svg width="7" height="12" viewBox="0 0 8 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m1.5 1.5 5 5.5-5 5.5"/></svg></span></div></div><div class="sub soft" style="margin-top:6px">10 jobs booked, 19 hours still open.</div>
+<div class="stripwrap"><div class="strip">
+<div class="day today"><div class="wd">Fri</div><div class="dn num">16</div><div class="mk"><i></i><i></i><i></i><i></i></div><div class="hr">1 h</div></div>
+<div class="day"><div class="wd">Sat</div><div class="dn num">17</div><div class="mk"><i></i><i></i><i class="rq"></i></div><div class="hr">2 h</div></div>
+<div class="day off"><div class="wd">Sun</div><div class="dn num">18</div><div class="mk"></div><div class="hr">Off</div></div>
+<div class="day off"><div class="wd">Mon</div><div class="dn num">19</div><div class="mk"></div><div class="hr">Off</div></div>
+<div class="day"><div class="wd">Tue</div><div class="dn num">20</div><div class="mk"><i></i></div><div class="hr">6 h</div></div>
+<div class="day"><div class="wd">Wed</div><div class="dn num">21</div><div class="mk"><i></i><i></i></div><div class="hr">4 h</div></div>
+<div class="day"><div class="wd">Thu</div><div class="dn num">22</div><div class="mk"><i></i></div><div class="hr">6 h</div></div>
+</div></div>
+</div>
+
+<div style="margin-top:28px">
+<div class="money"><div style="flex:1"><div class="v"><span class="num">$642.40</span> <span class="soft">this week</span> · <span class="num">$237.60</span> <span class="soft">on its way</span></div><div class="cap soft" style="margin-top:2px">Lands Mon 19 Oct<span class="lq">.</span></div></div><div style="color:var(--inkFaint)"><svg width="7" height="12" viewBox="0 0 8 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m1.5 1.5 5 5.5-5 5.5"/></svg></div></div>
+</div>
+<div style="height:140px"></div>
+</div>
+<div class="protabs"><div class="ptab on"><div class="ic"><svg viewBox="0 0 26 26"><path d="M3.5 17.5h19"/><path d="M7.6 17.5a5.4 5.4 0 0 1 10.8 0"/><path d="M13 6.2v2.4M6.1 9.2l1.6 1.6M19.9 9.2l-1.6 1.6M3.6 14h1.9M20.5 14h1.9"/><path d="M8 21h10"/></svg><i class="unread"></i></div><span>Today</span><b></b></div><div class="ptab"><div class="ic"><svg viewBox="0 0 26 26"><rect x="4" y="6" width="18" height="15.5" rx="1.6"/><path d="M4 10.8h18M9 3.8v4M17 3.8v4"/></svg></div><span>Calendar</span><b></b></div><div class="ptab"><div class="ic"><svg viewBox="0 0 26 26"><path d="M5.2 5.8h15.6c.9 0 1.6.7 1.6 1.6v9.4c0 .9-.7 1.6-1.6 1.6H11.2l-4.6 3.4v-3.4H5.2c-.9 0-1.6-.7-1.6-1.6V7.4c0-.9.7-1.6 1.6-1.6z"/></svg></div><span>Inbox</span><b></b></div><div class="ptab"><div class="ic"><svg viewBox="0 0 26 26"><path d="M4 21.5h18"/><rect x="5.5" y="12.5" width="3.4" height="7" rx=".6"/><rect x="11.3" y="7.5" width="3.4" height="12" rx=".6"/><rect x="17.1" y="4" width="3.4" height="15.5" rx=".6"/></svg></div><span>Earnings</span><b></b></div><div class="ptab"><div class="ic"><svg viewBox="0 0 26 26"><circle cx="13" cy="13" r="9.4"/><circle cx="13" cy="10.6" r="3.3"/><path d="M6.6 19.7c1.4-2.6 3.7-3.9 6.4-3.9s5 1.3 6.4 3.9"/></svg></div><span>Profile</span><b></b></div></div>
+<div class="homeind"></div>
+</div></body></html>
