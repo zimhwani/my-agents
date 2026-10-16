@@ -22,6 +22,39 @@ final class ScreenTour: XCTestCase {
         }
     }
 
+    /// Profile > Travel area and fee: taps 15 km and 25 km, drags the slider, and names each picture
+    /// with what the slider says afterwards, so a control that doesn't respond shows up in the names.
+    func testTravelArea() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-hdDemo", "pro", "-hdTab", "profile", "-push.asked.client", "YES", "-push.asked.pro", "YES"]
+        app.launch()
+        _ = app.buttons["Profile"].waitForExistence(timeout: 20)
+        sleep(3)
+        let row = app.buttons.containing(NSPredicate(format: "label CONTAINS[c] 'Travel area'")).firstMatch
+        guard row.waitForExistence(timeout: 10) else { shoot("travel-0-no-row"); return }
+        row.tap()
+        let slider = app.sliders["How far"]
+        guard slider.waitForExistence(timeout: 10) else { shoot("travel-0-no-slider"); return }
+        sleep(2)
+        shoot("travel-1-open-\(tag(slider.value))")
+
+        for km in ["15 km", "25 km"] {
+            let box = app.buttons[km]
+            if !box.isHittable { app.swipeUp(velocity: .slow) }
+            box.tap()
+            sleep(1)
+            shoot("travel-2-tapped-\(km.replacingOccurrences(of: " ", with: ""))-now-\(tag(slider.value))")
+        }
+        slider.adjust(toNormalizedSliderPosition: 0.2)
+        sleep(1)
+        shoot("travel-3-dragged-now-\(tag(slider.value))")
+        XCTAssertNotEqual(tag(slider.value), "25kilometres", "the slider didn't move")
+    }
+
+    private func tag(_ value: Any?) -> String {
+        "\(value ?? "none")".replacingOccurrences(of: " ", with: "")
+    }
+
     // MARK: -
 
     private func tour(side: String, tab: String, waitFor title: String) {
