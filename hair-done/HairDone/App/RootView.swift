@@ -218,6 +218,15 @@ struct TabStack<Tab: Hashable, Content: View>: View {
     @State private var opened: Set<Tab> = []
 
     var body: some View {
+        if DebugSwitch.on("hdPlainTabs") {
+            // Debug experiment: only the current tab, nothing kept.
+            content(selected).id(selected)
+        } else {
+            stack
+        }
+    }
+
+    private var stack: some View {
         ZStack {
             ForEach(tabs, id: \.self) { tab in
                 if tab == selected || opened.contains(tab) {

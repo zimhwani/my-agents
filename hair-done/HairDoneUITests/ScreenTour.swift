@@ -32,9 +32,8 @@ final class ScreenTour: XCTestCase {
     /// control's radius and the edit screen's draft say, and whether the screen was rebuilt.
     /// Reported as assertion messages so they land in the run log.
     func testTravelProbe() { travelProbe("base", extra: []) }
-    func testTravelProbeNoScrim() { travelProbe("noscrim", extra: ["-hdNoScrim", "YES"]) }
-    func testTravelProbeNoRoom() { travelProbe("noroom", extra: ["-hdNoRoom", "YES"]) }
-    func testTravelProbeNoBoth() { travelProbe("noboth", extra: ["-hdNoScrim", "YES", "-hdNoRoom", "YES"]) }
+    func testTravelProbePlainTabs() { travelProbe("plaintabs", extra: ["-hdPlainTabs", "YES"]) }
+    func testTravelProbeInSheet() { travelProbe("insheet", extra: ["-hdEditInSheet", "YES"]) }
 
     private func travelProbe(_ name: String, extra: [String]) {
         let app = openProfileEdit(viaTravelRow: true, extra: ["-hdProbe", "YES"] + extra)
