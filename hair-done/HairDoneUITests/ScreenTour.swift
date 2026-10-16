@@ -34,7 +34,7 @@ final class ScreenTour: XCTestCase {
         sleep(2)
         shoot("travel-1-open-\(tag(slider.value))")
 
-        for km in ["15 km", "25 km"] {
+        for km in ["15 km", "25 km", "5 km", "10 km", "15 km"] {
             let box = app.buttons[km]
             XCTAssertTrue(box.isHittable, "TRAVEL: \(km) not hittable, frame \(box.frame)")
             box.tap()
@@ -84,6 +84,19 @@ final class ScreenTour: XCTestCase {
         sleep(1)
         shoot("traveltop-1-tapped-15km-now-\(tag(slider.value))-save-\(app.buttons["Save"].exists)")
         XCTAssertTrue(tag(slider.value).hasPrefix("15"), "TOP: tapped 15 km, slider says \(tag(slider.value))")
+    }
+
+    /// With the system bar hidden, a swipe from the left edge still goes back (iOS's own on iOS 26).
+    func testSwipeBack() {
+        let app = openProfileEdit(viaTravelRow: false)
+        _ = app.sliders["How far"].waitForExistence(timeout: 10)
+        sleep(2)
+        let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.01, dy: 0.5))
+        start.press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.85, dy: 0.5)))
+        sleep(2)
+        let back = app.buttons.containing(NSPredicate(format: "label CONTAINS[c] 'Edit your profile'")).firstMatch.exists
+        shoot("swipeback-\(back ? "went-back" : "stayed")")
+        XCTAssertTrue(back, "SWIPE: an edge swipe didn't go back from Profile edit")
     }
 
     private func openProfileEdit(viaTravelRow: Bool) -> XCUIApplication {

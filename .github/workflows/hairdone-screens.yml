@@ -77,7 +77,7 @@ jobs:
             xcodebuild test-without-building -project HairDone.xcodeproj -scheme HairDone \
               -destination "id=$UDID" -derivedDataPath build \
               -resultBundlePath "results-$look.xcresult" > "test-$look.log" 2>&1 || true
-            grep -E "Test Case|error|failed" "test-$look.log" | tail -20 || true
+            grep -E "Test Case|error|failed" "test-$look.log" | tail -40 || true
             mkdir -p "raw-$look"
             xcrun xcresulttool export attachments --path "results-$look.xcresult" --output-path "raw-$look" || true
           done
@@ -85,7 +85,7 @@ jobs:
       - name: Name the pictures
         run: |
           python3 - <<'PY'
-          import json, os, shutil, glob
+          import json, os, re, shutil, glob
           os.makedirs("screens", exist_ok=True)
           def walk(x, out):
               if isinstance(x, dict):
@@ -102,6 +102,9 @@ jobs:
               for exported, human in pairs:
                   base = human.split("_0_")[0].split(".")[0]
                   src = f"raw-{look}/{exported}"
+                  # Only our own pictures: a failing test also leaves Xcode's recordings and UI dumps.
+                  if not re.fullmatch(r"[a-z0-9-]+", base):
+                      continue
                   if os.path.exists(src):
                       shutil.copy(src, f"screens/{look}-{base}.png")
           print("\n".join(sorted(os.listdir("screens"))))

@@ -175,8 +175,9 @@ private struct HDNavHeaderPlacement<Header: View>: ViewModifier {
 
 // MARK: - Swipe back with the bar hidden
 
-/// Hiding the system bar also turns off the edge swipe back. This puts it back for the stack the
-/// screen is in, allowing the swipe only when there's somewhere to go back to.
+/// Before iOS 26, hiding the system bar also turns off the edge swipe back. This puts it back for the
+/// stack the screen is in, allowing the swipe only when there's somewhere to go back to. On iOS 26
+/// it does nothing: the system keeps its own swipe back.
 private struct SwipeBackEnabler: UIViewControllerRepresentable {
     func makeUIViewController(context: Context) -> Controller { Controller() }
     func updateUIViewController(_ controller: Controller, context: Context) { controller.enable() }
@@ -191,6 +192,10 @@ private struct SwipeBackEnabler: UIViewControllerRepresentable {
             enable()
         }
         func enable() {
+            // iOS 26 does the swipe back itself, from anywhere on the screen. Taking over its delegate
+            // there let the pop gesture claim touches all over a pushed screen, so buttons, sliders and
+            // switches on it often did nothing (Profile edit's km boxes, How far, Instant book).
+            if #available(iOS 26, *) { return }
             guard let nav = navigationController, let pop = nav.interactivePopGestureRecognizer else { return }
             if !(pop.delegate is SwipeBackDelegate) {
                 let delegate = SwipeBackDelegate(nav: nav)
