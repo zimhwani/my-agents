@@ -71,7 +71,7 @@ def _roll(bars: list[Bar], minutes: int) -> list[Bar]:
 
 
 def download(symbol: str, days: int, fetch: Fetch | None = None, workers: int = 4,
-             end: date | None = None, max_missing: float = 0.03) -> list[Bar]:
+             end: date | None = None, max_missing: float = 0.03, retry_pause: float = 2.0) -> list[Bar]:
     """5-minute bars for ``symbol`` over the last ``days`` calendar days (weekends simply absent).
 
     A day whose file still fails after retries is skipped and reported (a gap of a day barely moves a
@@ -82,7 +82,7 @@ def download(symbol: str, days: int, fetch: Fetch | None = None, workers: int = 
     end = end or datetime.now(timezone.utc).date() - timedelta(days=1)
     days_list = [end - timedelta(days=i) for i in range(days)][::-1]
     days_list = [d for d in days_list if d.weekday() != 5]  # Saturday never trades
-    failed: list[str] = []
+    failed_days: dict[date, str] = {}
     done = [0]
 
     def one(d: date) -> list[Bar]:
@@ -90,21 +90,29 @@ def download(symbol: str, days: int, fetch: Fetch | None = None, workers: int = 
         try:
             raw = fetch(url)
         except ConnectionError as exc:
-            failed.append(str(exc))
+            failed_days[d] = str(exc)
             raw = None
         done[0] += 1
         if done[0] % 50 == 0:  # long downloads: show they're moving (a two-year fetch can take an hour)
-            log.info("Dukascopy %s: %d/%d days fetched, %d failed", inst, done[0], len(days_list), len(failed))
+            log.info("Dukascopy %s: %d/%d days fetched, %d failed", inst, done[0], len(days_list), len(failed_days))
         return _roll(decode_day(raw or b"", d, divisor), 5) if raw else []
 
     with ThreadPoolExecutor(max_workers=workers) as pool:
-        chunks = list(pool.map(one, days_list))
+        chunks = dict(zip(days_list, pool.map(one, days_list)))
+    if failed_days and len(failed_days) <= 0.5 * len(days_list):
+        # the feed answers bursts with 503s: retry the misses one at a time, slowly (a dead feed skips this)
+        log.info("Dukascopy %s: retrying %d failed days one by one", inst, len(failed_days))
+        for d in sorted(failed_days):
+            _time.sleep(retry_pause)
+            del failed_days[d]
+            chunks[d] = one(d)
+    failed = list(failed_days.values())
     if failed:
         if len(failed) > max(1, max_missing * len(days_list)):
             raise ConnectionError(f"Dukascopy {inst}: {len(failed)} of {len(days_list)} days failed, e.g. {failed[0]}")
         log.warning("Dukascopy %s: skipped %d of %d days that would not download (e.g. %s)",
                     inst, len(failed), len(days_list), failed[0])
-    bars = [b for chunk in chunks for b in chunk]
+    bars = [b for d in days_list for b in chunks[d]]
     lo_hi = PLAUSIBLE.get(inst)
     if bars and lo_hi:
         med = statistics.median(b.close for b in bars[:: max(1, len(bars) // 500)])

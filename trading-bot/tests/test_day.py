@@ -138,8 +138,20 @@ def test_dukascopy_skips_a_day_that_times_out_but_not_a_dead_feed():
             raise ConnectionError(url + ": The read operation timed out")
         return _bi5(rows)
 
-    out = dk.download("XAU/USD", 60, fetch=flaky, workers=2, end=day)
+    out = dk.download("XAU/USD", 60, fetch=flaky, workers=2, end=day, retry_pause=0)
     assert len({b.time.date() for b in out}) == 50  # 60 days - 9 Saturdays - the one that timed out
+
+    calls: dict = {}
+
+    def burst_limited(url):  # 503 on the first try of a third of the days, fine when asked again
+        calls[url] = calls.get(url, 0) + 1
+        if calls[url] == 1 and hash(url) % 3 == 0:
+            raise ConnectionError(url + ": HTTP Error 503: Service Unavailable")
+        return _bi5(rows)
+
+    out = dk.download("XAU/USD", 60, fetch=burst_limited, workers=2, end=day, retry_pause=0)
+    assert len({b.time.date() for b in out}) == 51  # every weekday recovered by the slow second pass
+    assert [b.time for b in out] == sorted(b.time for b in out)
 
     def dead(url):
         raise ConnectionError(url + ": timed out")
