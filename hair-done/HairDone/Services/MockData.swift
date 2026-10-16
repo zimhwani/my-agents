@@ -283,18 +283,18 @@ enum MockData {
         func addr(_ id: String, _ line: String, _ suburb: String, _ pc: String, _ lat: Double, _ lon: Double) -> Address {
             Address(id: id, label: "Home", line1: line, suburb: suburb, postcode: pc, latitude: lat, longitude: lon)
         }
-        func make(_ id: String, _ clientID: String, _ services: [Service], _ start: Date, _ address: Address, _ status: BookingStatus, notes: String = "", created: Date, tip: Int = 0, ref: String) -> Booking {
+        func make(_ id: String, _ clientID: String, _ services: [Service], _ start: Date, _ address: Address, _ status: BookingStatus, notes: String = "", inspo: [Int] = [], created: Date, tip: Int = 0, ref: String) -> Booking {
             var price = PriceBreakdown(servicesCents: services.reduce(0) { $0 + $1.priceCents }, travelFeeCents: kiara.travelFeeCents)
             price.tipCents = tip
             let events: [BookingStatus] = BookingStatus.timeline.contains(status) ? Array(BookingStatus.timeline.prefix(while: { $0 != status })) + [status] : [.requested, .confirmed, status]
             let evs = events.enumerated().map { i, s in StatusEvent(id: "\(id)_e\(i)", status: s, at: created.adding(minutes: i * 40)) }
-            return Booking(id: id, proID: kiara.id, clientID: clientID, services: services, start: start, address: address, notes: notes, inspoSeeds: [], status: status, price: price, createdAt: created, events: evs, reference: ref)
+            return Booking(id: id, proID: kiara.id, clientID: clientID, services: services, start: start, address: address, notes: notes, inspoSeeds: inspo, status: status, price: price, createdAt: created, events: evs, reference: ref)
         }
         return [
             make("pb_1", "client_priya", [kiara.services[0]], today.at(hour: 10, minute: 30), addr("a1", "3/22 Lygon St", "Brunswick East", "3057", -37.7720, 144.9720), .paid, created: daysAgo(3), tip: 1000, ref: "HD-1AAB"),
             make("pb_2", "client_georgia", [kiara.services[2]], today.at(hour: 13, minute: 0), addr("a2", "8 Albert St", "Brunswick", "3056", -37.7670, 144.9590), .done, notes: "Cherry red, coffin, medium.", created: daysAgo(2), ref: "HD-1BBC"),
             make("pb_3", "client_tash", [kiara.services[0]], today.at(hour: 18, minute: 15), client.addresses[0], .confirmed, notes: "Milky pink please, short almond. Same as last time.", created: daysAgo(2), ref: "HD-4K2P"),
-            make("pb_4", "client_zoe", [kiara.services[1]], today.adding(days: 1).at(hour: 9, minute: 0), addr("a4", "41 Pigdon St", "Carlton North", "3054", -37.7850, 144.9700), .requested, notes: "Something chrome? Open to ideas.", created: now.adding(hours: -2), ref: "HD-1CCD"),
+            make("pb_4", "client_zoe", [kiara.services[1]], today.adding(days: 1).at(hour: 9, minute: 0), addr("a4", "41 Pigdon St", "Carlton North", "3054", -37.7850, 144.9700), .requested, notes: "Something chrome? Open to ideas.", inspo: [41, 58], created: now.adding(minutes: -48), ref: "HD-1CCD"),
             make("pb_5", "client_hannah", [kiara.services[3]], today.adding(days: 1).at(hour: 15, minute: 30), addr("a5", "12 Barkly St", "Brunswick", "3056", -37.7660, 144.9620), .requested, created: now.adding(minutes: -25), ref: "HD-1DDE"),
             make("pb_6", "client_amira", [kiara.services[1]], today.adding(days: 3).at(hour: 11, minute: 0), addr("a6", "77 Hope St", "Brunswick West", "3055", -37.7620, 144.9450), .confirmed, notes: "For my mum, she's 78. Please be patient with her hands.", created: daysAgo(1), ref: "HD-1EEF"),
             make("pb_7", "client_lucy", [kiara.services[2]], daysAgo(1).at(hour: 14, minute: 0), addr("a7", "5 Union St", "Brunswick", "3056", -37.7690, 144.9610), .paid, created: daysAgo(4), tip: 1500, ref: "HD-1FFG"),

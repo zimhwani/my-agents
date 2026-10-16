@@ -243,17 +243,8 @@ struct ProProfileView: View {
         .padding(.top, 2)
     }
 
-    /// Plain text that works for anyone, app or not. hairdone:// only opens with the app installed, so
-    /// it rides along as a labelled last line rather than as the share item (no dead link preview).
-    /// Swap in the web link once the domain exists.
-    private var shareText: String {
-        // "does nails", "does the lot"
-        return [
-            "\(live.displayName) does \(live.primaryCategory.label.lowercased()) in \(live.suburb). Book her on Hair Done.",
-            "Get Hair Done on the App Store.",
-            "Got the app? \(app.shareURL(for: live).absoluteString)"
-        ].joined(separator: "\n")
-    }
+    /// See `AppState.shareText(for:)`; Today's "Share your profile" sends the same.
+    private var shareText: String { app.shareText(for: live) }
 
     // MARK: Facts
 
@@ -930,7 +921,8 @@ private struct ProfileExplainerSheet: View {
     }
 }
 
-private struct ProfileAllReviewsSheet: View {
+/// Every review, read-only. Also opened from the pro's own Today ("All 23").
+struct ProfileAllReviewsSheet: View {
     var pro: Pro
     @Environment(\.dismiss) private var dismiss
 

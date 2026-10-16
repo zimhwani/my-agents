@@ -91,7 +91,10 @@ struct ProCalendarView: View {
         }
         .onAppear {
             if !hoursLoaded { hoursDraft = savedHours; hoursLoaded = true }
+            takeCalendarDay()
         }
+        // A cell in Today's strip: open on that day.
+        .onChange(of: app.calendarDay) { _, _ in takeCalendarDay() }
         .onChange(of: hoursDirty) { _, dirty in
             ProUnsavedWork.shared.update(unsavedID, dirty: dirty, save: { await saveHours() }, discard: { discardHours() })
         }
@@ -123,6 +126,16 @@ struct ProCalendarView: View {
             .overlay(alignment: .top) { Rectangle().fill(Palette.inkEdge).frame(height: 0.5) }
             .transition(.move(edge: .bottom).combined(with: .opacity))
         }
+    }
+
+    /// The day another tab asked for (`AppState.calendarDay`): Week, that week, that day selected.
+    private func takeCalendarDay() {
+        guard let day = app.calendarDay else { return }
+        app.calendarDay = nil
+        segment = .week
+        weekStart = ProWeek.monday(of: day)
+        selectedDay = day.startOfDay
+        if !path.wrappedValue.isEmpty { path.wrappedValue = NavigationPath() }
     }
 
     private func discardHours() {

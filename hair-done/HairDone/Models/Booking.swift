@@ -219,7 +219,26 @@ struct Booking: Identifiable, Hashable, Codable {
 
     var minutes: Int { services.reduce(0) { $0 + $1.minutes } }
     var end: Date { start.adding(minutes: minutes) }
-    var servicesLine: String { services.map(\.name).joined(separator: " + ") }
+    /// "BIAB overlay", "Removal and gel manicure", "Classic set, infill and brow tint": words, not "+"
+    /// (build brief, rule 11). A name after the first reads mid-sentence, so its capital goes, unless
+    /// it's an acronym ("BIAB").
+    var servicesLine: String {
+        Self.list(services.enumerated().map { i, s in i == 0 ? s.name : Self.midSentence(s.name) })
+    }
+
+    /// "A", "A and B", "A, B and C".
+    static func list(_ items: [String]) -> String {
+        guard let last = items.last else { return "" }
+        guard items.count > 1 else { return last }
+        return items.dropLast().joined(separator: ", ") + " and " + last
+    }
+
+    /// "Gel manicure" → "gel manicure"; "BIAB overlay" stays.
+    private static func midSentence(_ name: String) -> String {
+        let chars = Array(name)
+        guard chars.count > 1, chars[0].isUppercase, !chars[1].isUppercase else { return name }
+        return chars[0].lowercased() + String(chars.dropFirst())
+    }
     var isToday: Bool { Calendar.current.isDateInToday(start) }
     var primaryCategory: Category { services.first?.category ?? .hair }
 

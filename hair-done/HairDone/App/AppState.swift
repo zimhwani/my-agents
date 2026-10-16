@@ -162,6 +162,8 @@ final class AppState {
     /// Set when the client taps a pro from anywhere; the home tab pushes it.
     var selectedTab: ClientTab = .home
     var selectedProTab: ProTab = .today
+    /// A day another pro tab asked Calendar to open on (a cell in Today's strip). Calendar takes it and clears it.
+    var calendarDay: Date? = nil
     /// Screens that want the tab bar out of the way (a pro's profile, a chat). A count, not a flag,
     /// so a chat pushed on top of a profile can't bring the bar back when either one leaves.
     private(set) var tabBarHiders = 0
@@ -1099,6 +1101,18 @@ final class AppState {
     /// people who don't.
     func shareURL(for pro: Pro) -> URL {
         URL(string: "hairdone://pro/\(pro.id)") ?? URL(string: "hairdone://pro")!
+    }
+
+    /// What "Share" sends for a pro: plain text that works for anyone, app or not. hairdone:// only opens
+    /// with the app installed, so it rides along as a labelled last line rather than as the share item
+    /// (no dead link preview). Swap in the web link once the domain exists.
+    func shareText(for pro: Pro) -> String {
+        // "does nails", "does the lot"
+        [
+            "\(pro.displayName) does \(pro.primaryCategory.label.lowercased()) in \(pro.suburb). Book her on Hair Done.",
+            "Get Hair Done on the App Store.",
+            "Got the app? \(shareURL(for: pro).absoluteString)"
+        ].joined(separator: "\n")
     }
 
     /// A pro link was opened (hairdone://pro/<id>): her profile, on Home, in booking mode. Waits for

@@ -95,13 +95,25 @@ enum ProFlow {
         return deadline <= now ? "About to lapse" : "Reply by \(deadline.clock)"
     }
 
-    /// "1h 12m left", "48 min left".
+    /// "1 h 12 min to answer", "48 min to answer", "About to lapse". Minutes are "min": "m" is metres.
     static func timeLeft(_ b: Booking, now: Date = Date()) -> String {
         let minutes = Int(deadline(b).timeIntervalSince(now) / 60)
         if minutes <= 0 { return "About to lapse" }
-        if minutes < 60 { return "\(minutes) min left" }
-        return "\(minutes / 60)h \(minutes % 60)m left"
+        if minutes < 60 { return "\(minutes) min to answer" }
+        return minutes % 60 == 0 ? "\(minutes / 60) h to answer" : "\(minutes / 60) h \(minutes % 60) min to answer"
     }
+
+    /// How much of the two hours is left, 1 to 0: the line under a request that empties as it runs down.
+    static func timeLeftFraction(_ b: Booking, now: Date = Date()) -> Double {
+        let whole = Double(Fees.autoDeclineHours * 3600)
+        return min(max(deadline(b).timeIntervalSince(now) / whole, 0), 1)
+    }
+
+    /// `On my way` opens this long before the start (product spec §5).
+    static let onMyWayLeadHours = 3
+
+    /// When `On my way` opens for a confirmed job. Before it, the job shows "On my way opens at 9:30 am."
+    static func onMyWayOpens(_ b: Booking) -> Date { b.start.adding(hours: -onMyWayLeadHours) }
 
     /// "today", "tomorrow" or "Tue 24 Sep", for the middle of a sentence.
     static func inSentence(_ date: Date) -> String {
@@ -580,16 +592,25 @@ struct StatusActionButton: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Space.s) {
             if let step = ProFlow.nextStep(for: booking.status) {
-                if quiet {
-                    OutlineButton(title: step.title, isLoading: busy, isEnabled: !app.isOffline, tone: onInk ? .onInk : .paper) { tap(step) }
+                if booking.status == .confirmed {
+                    // On my way opens 3 hours before the start; until then, when it does. Looks again
+                    // every 30 seconds, so it opens on time without a refresh.
+                    TimelineView(.periodic(from: .now, by: 30)) { context in
+                        let opens = ProFlow.onMyWayOpens(booking)
+                        // "at 9:30 am" on the day; "tomorrow at 7:00 am" from a job further out.
+                        let when = Calendar.current.isDateInToday(opens) ? "at \(opens.clock)" : "\(ProFlow.inSentence(opens)) at \(opens.clock)"
+                        if context.date < opens {
+                            Text("On my way opens \(when).")
+                                .font(HDFont.sub).foregroundStyle(soft)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .frame(minHeight: 44, alignment: .leading)
+                        } else {
+                            live(step)
+                        }
+                    }
                 } else {
-                    InkButton(title: step.title, isLoading: busy, isEnabled: !app.isOffline, tone: onInk ? .onInk : .ink) { tap(step) }
+                    live(step)
                 }
-                if app.isOffline {
-                    Text("Updates need a connection. Try again when you're back.")
-                        .font(HDFont.caption).foregroundStyle(soft)
-                }
-                if booking.status == .arrived { noShow }
             } else if booking.status == .done {
                 WarnDotLine(text: "Waiting for \(who) to pay.", color: strong)
                     .frame(minHeight: 44, alignment: .leading)
@@ -613,6 +634,22 @@ struct StatusActionButton: View {
 
     private var who: String { ProFlow.who(clientName) }
     private var whoLead: String { ProFlow.whoLead(clientName) }
+
+    /// The button for the step, with the offline line and (once she's there) No show under it.
+    private func live(_ step: (title: String, next: BookingStatus)) -> some View {
+        VStack(alignment: .leading, spacing: Space.s) {
+            if quiet {
+                OutlineButton(title: step.title, isLoading: busy, isEnabled: !app.isOffline, tone: onInk ? .onInk : .paper) { tap(step) }
+            } else {
+                InkButton(title: step.title, isLoading: busy, isEnabled: !app.isOffline, tone: onInk ? .onInk : .ink) { tap(step) }
+            }
+            if app.isOffline {
+                Text("Updates need a connection. Try again when you're back.")
+                    .font(HDFont.caption).foregroundStyle(soft)
+            }
+            if booking.status == .arrived { noShow }
+        }
+    }
 
     private func tap(_ step: (title: String, next: BookingStatus)) {
         if step.next == .done { confirmDone = true } else { Task { await move(to: step.next) } }
@@ -754,13 +791,15 @@ struct DeclineSheet: View {
 // MARK: - A booking as a row
 
 /// One line of a day: time, client, what, status. Used on Today and in Calendar. While the client's
-/// name is still loading (`nameKnown` false) a shimmer stands where it goes.
+/// name is still loading (`nameKnown` false) a shimmer stands where it goes. Today's rows
+/// (`showsPayout`) add the suburb and her payout on the right, and leave Confirmed unsaid.
 struct ProBookingRow: View {
     var booking: Booking
     var clientName: String
     var nameKnown = true
     var showDay = false
     var showsHairline = true
+    var showsPayout = false
     @Environment(\.dynamicTypeSize) private var typeSize
 
     var body: some View {
@@ -774,15 +813,23 @@ struct ProBookingRow: View {
                     .foregroundStyle(Palette.ink)
                     .frame(minWidth: showDay ? 0 : 68, alignment: .leading)
                 VStack(alignment: .leading, spacing: 3) {
-                    if nameKnown {
-                        Text(clientName).font(HDFont.nameSmall).foregroundStyle(Palette.ink)
-                    } else {
-                        SkeletonBlock(width: 96, height: 18).padding(.vertical, 2)
+                    HStack(alignment: .firstTextBaseline, spacing: Space.s) {
+                        if nameKnown {
+                            Text(clientName).font(HDFont.nameSmall).foregroundStyle(Palette.ink)
+                        } else {
+                            SkeletonBlock(width: 96, height: 18).padding(.vertical, 2)
+                        }
+                        if showsPayout {
+                            Spacer(minLength: Space.s)
+                            Text(Money.format(booking.price.proPayoutCents)).font(HDFont.priceSmall).foregroundStyle(Palette.ink)
+                        }
                     }
-                    Text("\(booking.servicesLine) · \(booking.minutes.minutesLabel)")
+                    Text(detailLine)
                         .font(HDFont.caption).foregroundStyle(Palette.inkSoft)
                         .fixedSize(horizontal: false, vertical: true)
-                    StatusBadge(status: booking.status, forPro: true).padding(.top, 2)
+                    if !(showsPayout && booking.status == .confirmed) {
+                        StatusBadge(status: booking.status, forPro: true).padding(.top, 2)
+                    }
                 }
             }
             Spacer(minLength: 0)
@@ -798,6 +845,13 @@ struct ProBookingRow: View {
         }
         .accessibilityElement(children: .combine)
         .accessibilityHint("Opens the booking")
+    }
+
+    /// "BIAB overlay · 1 hr 15 min", or on Today "Gel pedicure · 1 h · Fitzroy North".
+    private var detailLine: String {
+        showsPayout
+            ? "\(booking.servicesLine) · \(booking.minutes.shortDuration) · \(booking.address.suburb)"
+            : "\(booking.servicesLine) · \(booking.minutes.minutesLabel)"
     }
 }
 

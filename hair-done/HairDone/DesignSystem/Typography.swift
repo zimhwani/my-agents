@@ -75,8 +75,8 @@ enum HDFont {
     static var priceDisplay: Font { sans(36, relativeTo: .largeTitle).monospacedDigit() }
     /// 56 light: Earnings' week total.
     static var priceHero: Font { sans(56, relativeTo: .largeTitle, weight: .light).monospacedDigit() }
-    /// 40 light: a time as the hero of a block ("6:15 pm" on the next job).
-    static var timeDisplay: Font { sans(40, relativeTo: .largeTitle, weight: .light).monospacedDigit() }
+    /// 56 light: a time as the hero of a block ("12:30" on Today's Next up, the biggest thing there).
+    static var timeDisplay: Font { sans(56, relativeTo: .largeTitle, weight: .light).monospacedDigit() }
     /// Deprecated alias of `priceTotal`. Was serif.
     static var numeral: Font { priceTotal }
 

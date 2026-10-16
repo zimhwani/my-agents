@@ -69,6 +69,15 @@ extension Int {
     }
 }
 
+extension Int {
+    /// The copy deck's short form, for tight rows: 90 → "1 h 30", 60 → "1 h", 45 → "45 min".
+    var shortDuration: String {
+        let h = self / 60, m = self % 60
+        if h == 0 { return "\(m) min" }
+        return m == 0 ? "\(h) h" : "\(h) h \(String(format: "%02d", m))"
+    }
+}
+
 extension Double {
     /// 1.2 → "1.2 km", 0.8 → "800 m", 12.4 → "12 km"
     var distanceLabel: String {

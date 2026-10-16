@@ -57,7 +57,7 @@ Serif, New York, **regular**, scales with Dynamic Type:
 
 SF: `body` 17 · `bodyStrong` 17 semibold (buttons) · `sub` 15 · `subStrong` · `subMedium` 15 medium (links, tabs, options) · `caption` 13 · `eyebrow` 12 medium (`label` is an alias).
 
-Money, SF monospaced, never serif: `price` 17 · `priceStrong` 17 semibold · `priceSmall` 15 (replaces `HomeFont.price`) · `priceLarge` 22 (was serif) · `priceTotal` 28 · `priceDisplay` 36 (one per screen, the ticket total) · `priceHero` 56 light (Earnings) · `timeDisplay` 40 light (the job time). `numeral` is an alias of `priceTotal`.
+Money, SF monospaced, never serif: `price` 17 · `priceStrong` 17 semibold · `priceSmall` 15 (replaces `HomeFont.price`) · `priceLarge` 22 (was serif) · `priceTotal` 28 · `priceDisplay` 36 (one per screen, the ticket total) · `priceHero` 56 light (Earnings) · `timeDisplay` 56 light (the job time on Today). `numeral` is an alias of `priceTotal`.
 
 Builders for odd sizes: `HDFont.serif(_ size:, relativeTo:, weight:)` and `HDFont.sans(...)`. Same signature as `BookingInk.serif/sans`, so swapping is a rename.
 

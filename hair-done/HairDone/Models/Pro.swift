@@ -45,10 +45,11 @@ struct Pro: Identifiable, Hashable, Codable {
     var idSubmitted: Bool = false
     var avatarURL: URL? = nil
 
-    /// "Kiara M.", or just "Kiara" when there's no last initial.
+    /// "Kiara M.", or just "Kiara" when there's no last initial. Only a letter counts as one, so a
+    /// stray space, newline or full stop can't give "Kiara ." (or "Kiara ..").
     var displayName: String {
-        let initial = lastInitial.trimmingCharacters(in: .whitespaces)
-        return initial.isEmpty ? firstName : "\(firstName) \(initial)."
+        guard let initial = lastInitial.trimmingCharacters(in: .whitespacesAndNewlines).first, initial.isLetter else { return firstName }
+        return "\(firstName) \(initial)."
     }
     var primaryCategory: Category { specialties.first ?? .hair }
     var coordinate: CLLocationCoordinate2D { CLLocationCoordinate2D(latitude: latitude, longitude: longitude) }

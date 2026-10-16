@@ -194,7 +194,7 @@ struct ProProfileEditView: View {
             LinearGradient(colors: [Color.black.opacity(0), Color.black.opacity(0.45)], startPoint: .center, endPoint: .bottom)
                 .allowsHitTesting(false)
             HStack(alignment: .lastTextBaseline) {
-                Text(pro.firstName.isEmpty ? "Your name" : "\(pro.firstName) \(pro.lastInitial).")
+                Text(pro.firstName.isEmpty ? "Your name" : pro.displayName)
                     .font(HDFont.heroName)
                     .foregroundStyle(Palette.onPhoto)
                     .lineLimit(2)
