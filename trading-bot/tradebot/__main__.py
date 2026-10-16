@@ -222,6 +222,8 @@ def cmd_kill(args) -> None:
     if args.resume:
         s.kill_switch_file.unlink(missing_ok=True)
         print("Kill switch removed; new entries allowed again.")
+    elif s.kill_switch_file.exists():
+        print(f"Kill switch already ON ({s.kill_switch_file}).")
     else:
         s.kill_switch_file.write_text("created by `python -m tradebot kill`\n")
         print(f"Kill switch ON ({s.kill_switch_file}). No new entries; open trades still managed. "
