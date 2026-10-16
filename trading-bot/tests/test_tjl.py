@@ -281,3 +281,19 @@ def test_gap_scan_fills_the_watchlist_with_names_that_pass_the_daily_filter(sett
     assert "2 below_sma200" in sc.summary and "1 gap_small" in sc.summary and "2 pass" in sc.summary
     plain = GapScanner(Broker(), settings, 3.0, 3.0, 1e9)
     assert [c.symbol for c in plain.scan()] == ["DOWN1", "DOWN2", "UP1"]  # without it: slots wasted
+
+
+def test_events_ring_keeps_scan_and_errors_not_gate_lines():
+    import logging
+    from tradebot.loop import _RingLog, _is_event
+    ring = _RingLog(n=10, keep=_is_event, datefmt="%m-%d %H:%M:%S")
+    lg = logging.getLogger("tradebot.test_events")
+    lg.addHandler(ring)
+    lg.setLevel(logging.INFO)
+    try:
+        lg.info("bar 12:10 gates: gap_small 4 · below_sma200 3")
+        lg.info("Gap scan: 14 gappers >= 3% via screener; 5 pass the daily filters")
+        lg.warning("T212 order rejected")
+    finally:
+        lg.removeHandler(ring)
+    assert len(ring.lines) == 2 and "Gap scan" in ring.lines[0] and "rejected" in ring.lines[1]

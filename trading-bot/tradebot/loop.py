@@ -33,17 +33,37 @@ from .universe import Candidate, GapScanner, StaticScanner, UniverseScanner
 log = logging.getLogger("tradebot.loop")
 
 
+EVENT_WORDS = ("Watchlist", "Gap scan", "SIGNAL", "ENTRY", "CLOSED", "stop hit", "daily filter", "Config:",
+               "Daily filter", "skipped", "rejected", "refused")
+
+
+def _is_event(record: logging.LogRecord) -> bool:
+    """Lines worth keeping for days (scan results, signals, fills, errors), unlike the per-bar gate lines."""
+    try:
+        msg = record.getMessage()
+    except Exception:  # pragma: no cover
+        return False
+    if record.levelno >= logging.WARNING:
+        return True
+    if record.name == "tradebot.universe":
+        return not (msg.startswith("GAP ") and "dropped" not in msg)  # skip the raw list of every gapper
+    return record.name == "tradebot.execution" or any(w in msg for w in EVENT_WORDS)
+
+
 class _RingLog(logging.Handler):
     """Keeps the last N log lines for the dashboard's execution log."""
 
-    def __init__(self, n: int = 40):
+    def __init__(self, n: int = 40, keep=None, datefmt: str = "%H:%M:%S"):
         super().__init__(level=logging.INFO)
         self.lines: list[str] = []
         self.n = n
-        self.setFormatter(logging.Formatter("%(asctime)s %(levelname).1s %(message)s", "%H:%M:%S"))
+        self.keep = keep  # optional record filter (the events ring keeps only what matters for diagnosis)
+        self.setFormatter(logging.Formatter("%(asctime)s %(levelname).1s %(message)s", datefmt))
 
     def emit(self, record: logging.LogRecord) -> None:
         try:
+            if self.keep is not None and not self.keep(record):
+                return
             self.lines.append(self.format(record))
             del self.lines[:-self.n]
         except Exception:  # pragma: no cover
@@ -96,6 +116,8 @@ class TradingLoop:
         self._closed_seen = -1
         self._ring = _RingLog()
         logging.getLogger("tradebot").addHandler(self._ring)
+        self._events = _RingLog(n=150, keep=_is_event, datefmt="%m-%d %H:%M:%S")
+        logging.getLogger("tradebot").addHandler(self._events)
         self.publisher = None
         if settings.vercel_blob_token:
             from .publish import BlobPublisher
@@ -371,7 +393,7 @@ class TradingLoop:
                 log.debug("chart snapshot %s: %s", focus, exc)
         payload = {
             "updated": now.isoformat(), "strategy": self.loaded.name, "mode": self.s.describe(),
-            "chart": chart, "log": list(self._ring.lines),
+            "chart": chart, "log": list(self._ring.lines), "events": list(self._events.lines),
             "equity": round(equity, 2), "day_start_equity": round(self.day.start_equity, 2),
             "realized_r": round(self.day.realized_r, 2), "realized_pnl": round(self.day.realized_pnl, 2),
             "closed_today": len(self.exec.closed_today), "open": open_rows,
