@@ -33,6 +33,23 @@ final class ScreenTour: XCTestCase {
         guard slider.waitForExistence(timeout: 10) else { shoot("\(name)-0-no-slider"); XCTFail("\(name): no slider"); return }
         sleep(2)
         shoot("\(name)-1-open-\(tag(slider.value))")
+
+        // Instant book first, while no Save bar covers the bottom of the screen.
+        let instant = app.switches.firstMatch
+        if instant.waitForExistence(timeout: 5) {
+            scrollIntoView(instant, in: app)
+            let was = tag(instant.value)
+            instant.tap()
+            sleep(1)
+            shoot("\(name)-4-instant-\(was)-to-\(tag(instant.value))")
+            XCTAssertNotEqual(tag(instant.value), was, "\(name): Instant book didn't flip")
+            instant.tap() // back as it was
+            sleep(1)
+        } else {
+            XCTFail("\(name): no Instant book switch found")
+        }
+        scrollIntoView(slider, in: app)
+
         for km in ["15 km", "25 km", "5 km"] {
             let box = app.buttons[km]
             XCTAssertTrue(box.isHittable, "\(name): \(km) not hittable, frame \(box.frame)")
@@ -49,16 +66,6 @@ final class ScreenTour: XCTestCase {
         shoot("\(name)-3-dragged-now-\(tag(slider.value))")
         XCTAssertNotEqual(tag(slider.value), before, "\(name): slider didn't move after a drag")
 
-        let instant = app.switches.firstMatch
-        if instant.exists {
-            let was = tag(instant.value)
-            instant.tap()
-            sleep(1)
-            shoot("\(name)-4-instant-\(was)-to-\(tag(instant.value))")
-            XCTAssertNotEqual(tag(instant.value), was, "\(name): Instant book didn't flip")
-        } else {
-            XCTFail("\(name): no Instant book switch found")
-        }
     }
 
     /// A switch on a tab's own screen (not pushed), to compare: Profile's Taking bookings.
@@ -68,9 +75,9 @@ final class ScreenTour: XCTestCase {
         app.launch()
         _ = app.buttons["Profile"].waitForExistence(timeout: 20)
         sleep(3)
-        for _ in 0..<4 where !app.switches.firstMatch.isHittable { app.swipeUp(velocity: .slow) }
         let sw = app.switches.firstMatch
-        guard sw.exists else { XCTFail("ROOT: no switch"); return }
+        guard sw.waitForExistence(timeout: 5) else { XCTFail("ROOT: no switch"); return }
+        scrollIntoView(sw, in: app)
         let was = tag(sw.value)
         sw.tap()
         sleep(2)
@@ -104,6 +111,22 @@ final class ScreenTour: XCTestCase {
         let row = app.buttons.containing(NSPredicate(format: "label CONTAINS[c] %@", label)).firstMatch
         if row.waitForExistence(timeout: 10) { row.tap() } else { XCTFail("no \(label) button") }
         return app
+    }
+
+    /// Scrolls until the element sits in the middle band of the screen, clear of the status bar at the
+    /// top and the tab bar (or a Save bar) at the bottom, so a tap lands on it and nothing else.
+    private func scrollIntoView(_ element: XCUIElement, in app: XCUIApplication) {
+        let window = app.windows.firstMatch.frame
+        for _ in 0..<8 {
+            let f = element.frame
+            if f.minY > window.minY + 120 && f.maxY < window.maxY - 200 { return }
+            if f.maxY >= window.maxY - 200 {
+                app.swipeUp(velocity: .slow)
+            } else {
+                app.swipeDown(velocity: .slow)
+            }
+            sleep(1)
+        }
     }
 
     private func tag(_ value: Any?) -> String {
