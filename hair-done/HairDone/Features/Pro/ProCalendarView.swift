@@ -238,7 +238,7 @@ struct ProCalendarView: View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(alignment: .firstTextBaseline) {
                 Text(selectedDay.weekday.long).font(HDFont.titleSmall).foregroundStyle(Palette.ink)
-                Text(selectedDay.shortDay).font(HDFont.sub).foregroundStyle(Palette.inkSoft)
+                Text("\(selectedDay.dayNumber) \(selectedDay.monthShort)").font(HDFont.sub).foregroundStyle(Palette.inkSoft)
                 Spacer()
                 if blocked { Tag(text: "Blocked") } else if off { Tag(text: "Off") }
             }
