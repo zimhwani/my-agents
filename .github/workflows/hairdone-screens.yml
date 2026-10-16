@@ -1,0 +1,109 @@
+name: Hair Done screens
+
+# Runs the app in the iPhone simulator on the sample data and screenshots every tab on both sides,
+# top and bottom, in light and dark (HairDoneUITests/ScreenTour.swift). The pictures are an artifact
+# named "screens". Uses the newest Xcode and iOS on the runner, to match current phones.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [claude/youthful-wright-9n079z]
+    paths:
+      - "hair-done/HairDone/**"
+      - "hair-done/HairDoneUITests/**"
+      - "hair-done/project.yml"
+      - ".github/workflows/hairdone-screens.yml"
+
+concurrency:
+  group: hairdone-screens-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  screens:
+    runs-on: macos-15
+    timeout-minutes: 60
+    defaults:
+      run:
+        working-directory: hair-done
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Tools
+        run: |
+          brew install xcodegen >/dev/null
+          XCODE=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1)
+          [ -n "$XCODE" ] || XCODE=$(ls -d /Applications/Xcode_16*.app | sort -V | tail -1)
+          sudo xcode-select -s "$XCODE"
+          xcodebuild -version
+          : > HairDone.xcconfig   # no backend: the sample data
+          xcodegen generate
+
+      - name: Simulator
+        run: |
+          UDID=$(xcrun simctl list devices available -j | python3 -c '
+          import json, re, sys
+          d = json.load(sys.stdin)["devices"]
+          best = None
+          for runtime, devs in d.items():
+              m = re.search(r"iOS-(\d+)-(\d+)", runtime)
+              if not m: continue
+              ver = (int(m.group(1)), int(m.group(2)))
+              for dev in devs:
+                  if re.match(r"iPhone \d+ Pro$", dev["name"]):
+                      key = (ver, dev["name"])
+                      if best is None or key > best[0]: best = (key, dev["udid"])
+          print(best[1]); print(best[0], file=sys.stderr)')
+          echo "UDID=$UDID" >> "$GITHUB_ENV"
+          xcrun simctl boot "$UDID"
+          xcrun simctl bootstatus "$UDID" -b
+          xcrun simctl privacy "$UDID" grant location com.keithchinyanda.hairdone || true
+          xcrun simctl privacy "$UDID" grant photos com.keithchinyanda.hairdone || true
+
+      - name: Build
+        run: |
+          xcodebuild build-for-testing -project HairDone.xcodeproj -scheme HairDone \
+            -destination "id=$UDID" -derivedDataPath build CODE_SIGNING_ALLOWED=NO > build.log 2>&1 \
+            || { grep -E 'error:|BUILD FAILED' build.log | head -60; tail -40 build.log; exit 1; }
+
+      - name: Tour (light and dark)
+        run: |
+          for look in light dark; do
+            xcrun simctl ui "$UDID" appearance $look
+            xcodebuild test-without-building -project HairDone.xcodeproj -scheme HairDone \
+              -destination "id=$UDID" -derivedDataPath build \
+              -resultBundlePath "results-$look.xcresult" > "test-$look.log" 2>&1 || true
+            grep -E "Test Case|error|failed" "test-$look.log" | tail -20 || true
+            mkdir -p "raw-$look"
+            xcrun xcresulttool export attachments --path "results-$look.xcresult" --output-path "raw-$look" || true
+          done
+
+      - name: Name the pictures
+        run: |
+          python3 - <<'PY'
+          import json, os, shutil, glob
+          os.makedirs("screens", exist_ok=True)
+          def walk(x, out):
+              if isinstance(x, dict):
+                  if "exportedFileName" in x and "suggestedHumanReadableName" in x:
+                      out.append((x["exportedFileName"], x["suggestedHumanReadableName"]))
+                  for v in x.values(): walk(v, out)
+              elif isinstance(x, list):
+                  for v in x: walk(v, out)
+          for look in ["light", "dark"]:
+              man = f"raw-{look}/manifest.json"
+              if not os.path.exists(man): continue
+              pairs = []
+              walk(json.load(open(man)), pairs)
+              for exported, human in pairs:
+                  base = human.split("_0_")[0].split(".")[0]
+                  src = f"raw-{look}/{exported}"
+                  if os.path.exists(src):
+                      shutil.copy(src, f"screens/{look}-{base}.png")
+          print("\n".join(sorted(os.listdir("screens"))))
+          PY
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: screens
+          path: hair-done/screens
+          retention-days: 14

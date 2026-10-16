@@ -15,7 +15,13 @@ struct HairDoneApp: App {
                 .environment(app)
                 .tint(Palette.ink)
                 // Hooks up notification taps, then picks up a saved session (and loads it).
-                .task { await app.restoreSession() }
+                .task {
+                    #if DEBUG
+                    // The CI screen tour: straight onto a tab on the sample data.
+                    if DemoLaunch.isOn { await app.startDemo(); return }
+                    #endif
+                    await app.restoreSession()
+                }
                 .onOpenURL { url in open(url) }
                 .onChange(of: scenePhase) { _, phase in
                     if phase == .active { app.becameActive() }

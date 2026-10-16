@@ -102,6 +102,21 @@ targets:
         SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: NO
         SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD: NO
 
+  # The CI screen tour (HairDoneUITests/ScreenTour.swift): screenshots of every tab, both sides.
+  HairDoneUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: HairDoneUITests
+    dependencies:
+      - target: HairDone
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.keithchinyanda.hairdone.uitests
+        GENERATE_INFOPLIST_FILE: YES
+        TARGETED_DEVICE_FAMILY: "1"
+        TEST_TARGET_NAME: HairDone
+
 schemes:
   HairDone:
     build:
@@ -109,5 +124,9 @@ schemes:
         HairDone: all
     run:
       config: Debug
+    test:
+      config: Debug
+      targets:
+        - HairDoneUITests
     archive:
       config: Release
