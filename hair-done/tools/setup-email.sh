@@ -74,6 +74,38 @@ else
   echo "    Supabase said no (HTTP $CODE):"; cat "$OUT"; echo; rm -f "$OUT"; exit 1
 fi
 rm -f "$OUT"
+
+# Read it back: Supabase can answer 200 and still leave a setting as it was.
+echo "==> Checking it took"
+WANT_SMTP=$([[ -n "$RESEND" ]] && echo yes || echo no)
+curl -sS -H "Authorization: Bearer $SBP" "https://api.supabase.com/v1/projects/$REF/config/auth" | \
+  WANT_SMTP="$WANT_SMTP" FROM="$FROM" SUBJECT="$SUBJECT" python3 -c "
+import json, os, sys
+d = json.load(sys.stdin)
+checks = [
+  ('email sign-in on',          d.get('external_email_enabled') is True),
+  ('6-digit codes',             d.get('mailer_otp_length') == 6),
+  ('code email subject',        d.get('mailer_subjects_magic_link') == os.environ['SUBJECT']),
+  ('code in the email',         '{{ .Token }}' in (d.get('mailer_templates_magic_link_content') or '')),
+  ('code in the sign-up email', '{{ .Token }}' in (d.get('mailer_templates_confirmation_content') or '')),
+]
+if os.environ['WANT_SMTP'] == 'yes':
+  checks += [
+    ('sent through Resend',    d.get('smtp_host') == 'smtp.resend.com'),
+    ('from your address',      d.get('smtp_admin_email') == os.environ['FROM']),
+  ]
+bad = [name for name, ok in checks if not ok]
+for name, ok in checks:
+  print(('    ok:   ' if ok else '    NOT SET: ') + name)
+if bad:
+  print()
+  print('    Some settings did not stick. Set them by hand in Supabase:')
+  print('      Authentication > Emails > SMTP Settings: host smtp.resend.com, port 465, user resend,')
+  print('        password = your Resend key, sender ' + (os.environ['FROM'] or 'hello@yourdomain') + ', name Hair Done')
+  print('      Authentication > Emails > Templates > Magic Link and Confirm signup: put {{ .Token }} in the body')
+  print('      Authentication > Providers > Email: OTP length 6')
+sys.exit(1 if bad else 0)
+"
 unset SBP RESEND AUTH
 
 echo
