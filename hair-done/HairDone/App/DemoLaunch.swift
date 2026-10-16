@@ -32,3 +32,15 @@ extension AppState {
     }
 }
 #endif
+
+/// Debug builds only: lets the screen tour switch one piece off (launch with `-hdNoMap YES`) to find
+/// which one is at fault. Always false in a release build.
+enum DebugSwitch {
+    static func on(_ key: String) -> Bool {
+        #if DEBUG
+        return UserDefaults.standard.bool(forKey: key)
+        #else
+        return false
+        #endif
+    }
+}

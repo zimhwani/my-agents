@@ -33,19 +33,7 @@ struct ProTravelArea: View {
                         caption: looking ? "Finding it on the map." : nil,
                         error: notFound ? "We couldn't find that one. Try the suburb and postcode." : nil)
 
-            Map(position: $position, interactionModes: []) {
-                MapCircle(center: centre, radius: radiusKm * 1000)
-                    .foregroundStyle(Palette.ink.opacity(0.08))
-                    .stroke(Palette.ink, lineWidth: 1)
-                Annotation("", coordinate: centre) {
-                    Circle().fill(Palette.ink).frame(width: 8, height: 8)
-                        .overlay(Circle().strokeBorder(Palette.paper, lineWidth: 1.5))
-                }
-            }
-            .frame(height: 200)
-            .photoShape()
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel("Map: \(Int(radiusKm)) kilometres around \(base.isEmpty ? "your base" : base)")
+            if !DebugSwitch.on("hdNoMap") { map }
 
             VStack(alignment: .leading, spacing: Space.s) {
                 HStack(alignment: .firstTextBaseline) {
@@ -73,6 +61,22 @@ struct ProTravelArea: View {
         .onChange(of: latitude) { _, _ in frame(animated: true) }
         .onChange(of: longitude) { _, _ in frame(animated: true) }
         .task(id: base) { await lookUp() }
+    }
+
+    private var map: some View {
+        Map(position: $position, interactionModes: []) {
+            MapCircle(center: centre, radius: radiusKm * 1000)
+                .foregroundStyle(Palette.ink.opacity(0.08))
+                .stroke(Palette.ink, lineWidth: 1)
+            Annotation("", coordinate: centre) {
+                Circle().fill(Palette.ink).frame(width: 8, height: 8)
+                    .overlay(Circle().strokeBorder(Palette.paper, lineWidth: 1.5))
+            }
+        }
+        .frame(height: 200)
+        .photoShape()
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Map: \(Int(radiusKm)) kilometres around \(base.isEmpty ? "your base" : base)")
     }
 
     private func frame(animated: Bool) {

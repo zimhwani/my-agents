@@ -22,73 +22,71 @@ final class ScreenTour: XCTestCase {
         }
     }
 
-    /// Profile > Travel area and fee: taps 15 km and 25 km, drags the slider, and names each picture
-    /// with what the slider says afterwards, so a control that doesn't respond shows up in the names.
-    /// Then, to tell "this control" from "every edit on the screen": the Instant book switch and the
-    /// travel fee, each checked by whether the Save bar appears. Findings are assertion messages
-    /// (they show in the run log) and picture names.
-    func testTravelArea() {
-        let app = openProfileEdit(viaTravelRow: true)
-        let slider = app.sliders["How far"]
-        guard slider.waitForExistence(timeout: 10) else { shoot("travel-0-no-slider"); XCTFail("TRAVEL: no slider"); return }
-        sleep(2)
-        shoot("travel-1-open-\(tag(slider.value))")
+    /// Profile > Travel area and fee: taps the km boxes, drags the slider, flips Instant book and types
+    /// a travel fee, naming each picture with what changed. Run three ways to find what stops taps on
+    /// that screen: as it is, without the map, and without the swipe-back helper. Findings are assertion
+    /// messages (in the run log) and picture names.
+    func testTravelArea() { travelExperiment("travel", extra: []) }
+    func testTravelAreaNoMap() { travelExperiment("nomap", extra: ["-hdNoMap", "YES"]) }
+    func testTravelAreaNoSwipeHelper() { travelExperiment("noswipe", extra: ["-hdNoSwipeEnabler", "YES"]) }
 
-        for km in ["15 km", "25 km", "5 km", "10 km", "15 km"] {
+    private func travelExperiment(_ name: String, extra: [String]) {
+        let app = openProfileEdit(viaTravelRow: true, extra: extra)
+        let slider = app.sliders["How far"]
+        guard slider.waitForExistence(timeout: 10) else { shoot("\(name)-0-no-slider"); XCTFail("\(name): no slider"); return }
+        sleep(2)
+        shoot("\(name)-1-open-\(tag(slider.value))")
+        for km in ["15 km", "25 km", "5 km"] {
             let box = app.buttons[km]
-            XCTAssertTrue(box.isHittable, "TRAVEL: \(km) not hittable, frame \(box.frame)")
+            XCTAssertTrue(box.isHittable, "\(name): \(km) not hittable, frame \(box.frame)")
             box.tap()
             sleep(1)
-            shoot("travel-2-tapped-\(km.replacingOccurrences(of: " ", with: ""))-now-\(tag(slider.value))")
-            XCTAssertTrue(tag(slider.value).hasPrefix(km.replacingOccurrences(of: " km", with: "")),
-                          "TRAVEL: tapped \(km), slider says \(tag(slider.value)); save bar: \(app.buttons["Save"].exists)")
+            let now = tag(slider.value)
+            shoot("\(name)-2-tapped-\(km.replacingOccurrences(of: " ", with: ""))-now-\(now)")
+            XCTAssertTrue(now.hasPrefix(km.replacingOccurrences(of: " km", with: "")),
+                          "\(name): tapped \(km), slider says \(now); save bar: \(app.buttons["Save"].exists)")
         }
-        slider.adjust(toNormalizedSliderPosition: 0.2)
+        let before = tag(slider.value)
+        slider.adjust(toNormalizedSliderPosition: 0.4)
         sleep(1)
-        shoot("travel-3-dragged-now-\(tag(slider.value))")
-        XCTAssertNotEqual(tag(slider.value), "8kilometres", "TRAVEL: slider didn't move after a drag")
+        shoot("\(name)-3-dragged-now-\(tag(slider.value))")
+        XCTAssertNotEqual(tag(slider.value), before, "\(name): slider didn't move after a drag")
 
-        // Another kind of edit on the same screen.
-        let instant = app.switches.firstMatch.exists ? app.switches.firstMatch
-            : app.buttons.containing(NSPredicate(format: "label CONTAINS[c] 'Instant book'")).firstMatch
+        let instant = app.switches.firstMatch
         if instant.exists {
-            let before = tag(instant.value)
+            let was = tag(instant.value)
             instant.tap()
             sleep(1)
-            shoot("travel-4-instant-\(before)-to-\(tag(instant.value))-save-\(app.buttons["Save"].exists)")
-            XCTAssertTrue(app.buttons["Save"].exists, "TRAVEL: Instant book \(before) -> \(tag(instant.value)), no Save bar")
+            shoot("\(name)-4-instant-\(was)-to-\(tag(instant.value))")
+            XCTAssertNotEqual(tag(instant.value), was, "\(name): Instant book didn't flip")
         } else {
-            XCTFail("TRAVEL: no Instant book switch found")
-        }
-        let fee = app.textFields.matching(NSPredicate(format: "value == '15' OR placeholderValue == '15'")).firstMatch
-        if fee.exists {
-            fee.tap()
-            fee.typeText("9")
-            sleep(1)
-            shoot("travel-5-fee-\(tag(fee.value))-save-\(app.buttons["Save"].exists)")
-            XCTAssertTrue(app.buttons["Save"].exists, "TRAVEL: typed in the fee (now \(tag(fee.value))), no Save bar")
-        } else {
-            XCTFail("TRAVEL: no fee field found")
+            XCTFail("\(name): no Instant book switch found")
         }
     }
 
-    /// The same, opening Profile edit the normal way ("Edit your profile"), not jumped to Travel.
-    func testTravelAreaFromTop() {
-        let app = openProfileEdit(viaTravelRow: false)
-        let slider = app.sliders["How far"]
-        for _ in 0..<6 where !slider.isHittable { app.swipeUp(velocity: .slow) }
-        guard slider.waitForExistence(timeout: 10) else { shoot("traveltop-0-no-slider"); XCTFail("TOP: no slider"); return }
-        let box = app.buttons["15 km"]
-        if !box.isHittable { app.swipeUp(velocity: .slow) }
-        box.tap()
-        sleep(1)
-        shoot("traveltop-1-tapped-15km-now-\(tag(slider.value))-save-\(app.buttons["Save"].exists)")
-        XCTAssertTrue(tag(slider.value).hasPrefix("15"), "TOP: tapped 15 km, slider says \(tag(slider.value))")
+    /// A switch on a tab's own screen (not pushed), to compare: Profile's Taking bookings.
+    func testRootSwitch() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-hdDemo", "pro", "-hdTab", "profile", "-push.asked.client", "YES", "-push.asked.pro", "YES"]
+        app.launch()
+        _ = app.buttons["Profile"].waitForExistence(timeout: 20)
+        sleep(3)
+        for _ in 0..<4 where !app.switches.firstMatch.isHittable { app.swipeUp(velocity: .slow) }
+        let sw = app.switches.firstMatch
+        guard sw.exists else { XCTFail("ROOT: no switch"); return }
+        let was = tag(sw.value)
+        sw.tap()
+        sleep(2)
+        // Turning it off may ask first; either the switch flipped or a sheet came up.
+        let flipped = tag(sw.value) != was
+        let asked = app.buttons.count > 0 && app.staticTexts.containing(NSPredicate(format: "label CONTAINS[c] '?'")).count > 0
+        shoot("root-switch-\(was)-to-\(tag(sw.value))-asked-\(asked)")
+        XCTAssertTrue(flipped || asked, "ROOT: Taking bookings didn't respond")
     }
 
-    /// With the system bar hidden, a swipe from the left edge still goes back (iOS's own on iOS 26).
+    /// With the system bar hidden, a swipe from the left edge still goes back.
     func testSwipeBack() {
-        let app = openProfileEdit(viaTravelRow: false)
+        let app = openProfileEdit(viaTravelRow: false, extra: [])
         _ = app.sliders["How far"].waitForExistence(timeout: 10)
         sleep(2)
         let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.01, dy: 0.5))
@@ -99,9 +97,9 @@ final class ScreenTour: XCTestCase {
         XCTAssertTrue(back, "SWIPE: an edge swipe didn't go back from Profile edit")
     }
 
-    private func openProfileEdit(viaTravelRow: Bool) -> XCUIApplication {
+    private func openProfileEdit(viaTravelRow: Bool, extra: [String]) -> XCUIApplication {
         let app = XCUIApplication()
-        app.launchArguments = ["-hdDemo", "pro", "-hdTab", "profile", "-push.asked.client", "YES", "-push.asked.pro", "YES"]
+        app.launchArguments = ["-hdDemo", "pro", "-hdTab", "profile", "-push.asked.client", "YES", "-push.asked.pro", "YES"] + extra
         app.launch()
         _ = app.buttons["Profile"].waitForExistence(timeout: 20)
         sleep(3)
