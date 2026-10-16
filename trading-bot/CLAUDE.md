@@ -60,4 +60,5 @@ can lose money.
 | `dukascopy.py` | years of free minute-level gold / silver / FX history (research only) |
 | `deriv.py` | gold / forex / index CFD candle history from Deriv's public API (research only) |
 | `paper.py` | virtual CFD broker on live Yahoo prices + MT5 copy instructions (`BROKER=paper`, gold bot) |
+| `jobs.py` | research jobs from `deploy/job.json`, run by the auto-deploy, log published to Blob |
 | `worldmonitor.py` | news: macro-event blackout + watchlist headlines (World Monitor or free sources) |

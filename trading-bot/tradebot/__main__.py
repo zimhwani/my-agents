@@ -230,6 +230,24 @@ def cmd_kill(args) -> None:
               "Use `flatten` to close everything now.")
 
 
+def cmd_job(args) -> None:
+    """Run a research job file (started by the auto-deploy from deploy/job.json); see tradebot/jobs.py."""
+    from .jobs import load_job, run_job
+    job = load_job(args.file)
+    args.env = job["env"]
+    s = _settings(args)
+    _logging(s)
+    upload = None
+    if s.vercel_blob_token:
+        from .publish import BlobPublisher
+        pub = BlobPublisher(s.vercel_blob_token, s.vercel_blob_prefix)
+        upload = pub.put
+    status = run_job(job, s.data_dir / "jobs" / f"{job['id']}.log", upload)
+    print(f"job {job['id']}: {status}")
+    if not status.startswith("done"):
+        sys.exit(1)
+
+
 def cmd_telegram_test(args) -> None:
     s = _settings(args)
     n = _notifier(s)
@@ -982,6 +1000,8 @@ def main(argv: list[str] | None = None) -> None:
     p = sub.add_parser("tjl-check", help="show the equities daily-filter numbers for symbols (live data)")
     p.add_argument("symbols", nargs="+")
     p.add_argument("--strategy")
+    p = sub.add_parser("job", help="run a research job file (deploy/job.json); output published to Blob")
+    p.add_argument("file")
     p = sub.add_parser("notify", help="send a Telegram message")
     p.add_argument("--text", required=True)
     p = sub.add_parser("news", help="World Monitor: macro calendar, headlines, earnings (or --raw JSON)")
@@ -1057,7 +1077,7 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--snapshot", action="store_true", help="with --publish: refresh the offline equity snapshot even if a session snapshot exists")
 
     args = ap.parse_args(argv)
-    {"check": cmd_check, "scan": cmd_scan, "run": cmd_run, "flatten": cmd_flatten, "kill": cmd_kill,
+    {"check": cmd_check, "scan": cmd_scan, "run": cmd_run, "flatten": cmd_flatten, "kill": cmd_kill, "job": cmd_job,
      "telegram-test": cmd_telegram_test, "fetch-data": cmd_fetch_data, "backtest": cmd_backtest,
      "analyze": cmd_analyze, "sweep": cmd_sweep, "dashboard": cmd_dashboard,
      "fetch-gappers": cmd_fetch_gappers, "fetch-crypto": cmd_fetch_crypto,

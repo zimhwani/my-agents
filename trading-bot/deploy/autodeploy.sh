@@ -49,5 +49,19 @@ fi
 if systemctl is-enabled --quiet tradebot-crypto 2>/dev/null; then systemctl restart tradebot-crypto; fi
 if systemctl is-active --quiet tradebot; then systemctl restart tradebot; fi
 if systemctl is-enabled --quiet tradebot-gold 2>/dev/null; then systemctl restart tradebot-gold; fi
+# deploy/job.json: a research job (allow-listed tradebot commands, see tradebot/jobs.py). A new id starts it once,
+# detached, as the bot user, memory-capped so it can't starve the trading bots; its log is published to Blob.
+if [ -f deploy/job.json ]; then
+  JOB_ID=$("$PY" -c 'import json,sys; print(json.load(open(sys.argv[1]))["id"])' deploy/job.json 2>/dev/null)
+  JOB_LAST=$(cat /var/lib/tradebot/job.last 2>/dev/null)
+  if [ -n "$JOB_ID" ] && [ "$JOB_ID" != "$JOB_LAST" ]; then
+    mkdir -p /var/lib/tradebot && echo "$JOB_ID" > /var/lib/tradebot/job.last
+    for d in "$BOT"/data "$BOT"/data-*; do [ -d "$d" ] && chown -R tradebot:tradebot "$d"; done  # files made by root ssh runs
+    systemd-run --collect --unit="tradebot-job-$(date +%s)" --uid=tradebot --gid=tradebot \
+      --working-directory="$BOT" -p MemoryMax=300M -p Nice=10 -p RuntimeMaxSec=21600 \
+      -E PYTHONUNBUFFERED=1 "$PY" -m tradebot job deploy/job.json && echo "started job $JOB_ID"
+  fi
+fi
+
 echo "deployed $OLD -> $NEW: $SUBJECT"
 "$PY" -m tradebot --env .env.crypto notify --text "🚀 Deployed ${NEW%${NEW#???????}}: $SUBJECT" || true
