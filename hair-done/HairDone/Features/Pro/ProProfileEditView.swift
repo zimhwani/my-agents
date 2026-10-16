@@ -42,8 +42,11 @@ struct ProProfileEditView: View {
 
     var body: some View {
         Group {
-            if let binding = Binding($draft) {
-                form(binding)
+            if let current = draft {
+                // An explicit get/set, not `Binding($draft)`: on iOS 26 edits made through that
+                // unwrapped binding's fields (the km boxes, How far, Instant book) never reached
+                // `draft`, so nothing changed and Save didn't come up.
+                form(Binding(get: { draft ?? current }, set: { draft = $0 }))
             } else {
                 ListSkeleton(rows: 3).padding(.top, Space.xl)
             }
