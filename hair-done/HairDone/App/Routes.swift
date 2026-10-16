@@ -38,15 +38,7 @@ struct RouteDestinations: ViewModifier {
     func body(content: Content) -> some View {
         content
             .tabBarRoom()
-            .safeAreaInset(edge: .top, spacing: 0) {
-                // With the system bar hidden, a scrolled root ran its text into the clock. A zero-height
-                // inset sits just under the status bar; its paper reaches up behind it. (An overlay
-                // doesn't work: a ScrollView's frame already runs under the status bar.)
-                Color.clear.frame(height: 0)
-                    .background(Palette.paper.ignoresSafeArea(edges: .top))
-                    .allowsHitTesting(false)
-                    .accessibilityHidden(true)
-            }
+            .modifier(StatusBarPaper())
             .navigationDestination(for: Route.self) { route in
                 Group {
                     switch route {
@@ -85,9 +77,33 @@ extension EnvironmentValues {
 private struct TabBarRoom: ViewModifier {
     @Environment(\.tabBarRoom) private var room
 
+    @ViewBuilder
     func body(content: Content) -> some View {
-        content.safeAreaInset(edge: .bottom, spacing: 0) {
-            Color.clear.frame(height: room).allowsHitTesting(false).accessibilityHidden(true)
+        if DebugSwitch.on("hdNoRoom") {
+            content
+        } else {
+            content.safeAreaInset(edge: .bottom, spacing: 0) {
+                Color.clear.frame(height: room).allowsHitTesting(false).accessibilityHidden(true)
+            }
+        }
+    }
+}
+
+/// With the system bar hidden, a scrolled tab root ran its text into the clock. A zero-height inset
+/// sits just under the status bar; its paper reaches up behind it. (An overlay doesn't work: a
+/// ScrollView's frame already runs under the status bar.)
+private struct StatusBarPaper: ViewModifier {
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if DebugSwitch.on("hdNoScrim") {
+            content
+        } else {
+            content.safeAreaInset(edge: .top, spacing: 0) {
+                Color.clear.frame(height: 0)
+                    .background(Palette.paper.ignoresSafeArea(edges: .top))
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+            }
         }
     }
 }
