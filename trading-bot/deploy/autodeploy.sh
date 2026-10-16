@@ -46,7 +46,7 @@ if [ -f deploy/gold.strategy ] && [ -f .env.gold ]; then
   fi
 fi
 
-systemctl restart tradebot-crypto
+if systemctl is-enabled --quiet tradebot-crypto 2>/dev/null; then systemctl restart tradebot-crypto; fi
 if systemctl is-active --quiet tradebot; then systemctl restart tradebot; fi
 if systemctl is-enabled --quiet tradebot-gold 2>/dev/null; then systemctl restart tradebot-gold; fi
 echo "deployed $OLD -> $NEW: $SUBJECT"
