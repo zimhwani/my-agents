@@ -205,6 +205,10 @@ struct ProProfileTab: View {
                      isOn: Binding(get: { pro.isActive }, set: { on in Task { await setActive(on) } }))
                 .disabled(savingActive || app.isOffline)
                 .padding(.vertical, Space.s)
+            if DebugSwitch.on("hdProbe") {
+                Text("probe row=\(pro.isActive) app=\(app.proSelf?.isActive ?? false) saving=\(savingActive) offline=\(app.isOffline)")
+                    .font(.caption2).accessibilityIdentifier("probe-root")
+            }
         }
         .overlay(alignment: .bottom) { Rectangle().fill(Palette.lineStrong).frame(height: 0.5) }
     }

@@ -32,8 +32,10 @@ struct ProProfileEditView: View {
     @Environment(\.dynamicTypeSize) private var typeSize
 
     private let unsavedID = "profile.edit"
-    /// Debug probe (`-hdProbe YES`): changes if this screen is rebuilt from scratch.
+    /// Debug probe (`-hdProbe YES`): changes if this screen is rebuilt from scratch; how many times
+    /// the draft's radius changed; how many times the body ran.
     @State private var probeID = String(UUID().uuidString.prefix(4))
+    @State private var probeChanges = 0
 
     private var isDirty: Bool {
         guard let draft, let saved = app.proSelf else { return false }
@@ -41,12 +43,13 @@ struct ProProfileEditView: View {
     }
 
     var body: some View {
+        let _ = ProbeCount.bump("edit")
         Group {
             if let current = draft {
-                // An explicit get/set, not `Binding($draft)`: on iOS 26 edits made through that
-                // unwrapped binding's fields (the km boxes, How far, Instant book) never reached
-                // `draft`, so nothing changed and Save didn't come up.
-                form(Binding(get: { draft ?? current }, set: { draft = $0 }))
+                // Straight off the state's own binding through a key path, so every field reads and
+                // writes `draft` where it lives. `Binding($draft)` (and a get/set closure after it)
+                // left the km boxes, How far and Instant book not reaching `draft` on iOS 26.
+                form($draft[orElse: current])
             } else {
                 ListSkeleton(rows: 3).padding(.top, Space.xl)
             }
@@ -64,6 +67,7 @@ struct ProProfileEditView: View {
             register()
         }
         .onChange(of: isDirty) { _, _ in register() }
+        .onChange(of: draft?.travelRadiusKm) { _, _ in probeChanges += 1 }
         .onDisappear { ProUnsavedWork.shared.clear(unsavedID) }
         .sheet(isPresented: $addingService) {
             ServiceEditorSheet(categories: draft?.specialties ?? []) { s in
@@ -158,7 +162,7 @@ struct ProProfileEditView: View {
                         servicesSection(pro).id(ProEditSection.services)
                         travelSection(pro).id(ProEditSection.travel)
                         if DebugSwitch.on("hdProbe") {
-                            Text("probe screen=\(probeID) draft=\(Int(pro.wrappedValue.travelRadiusKm)) instant=\(pro.wrappedValue.instantBook) dirty=\(isDirty)")
+                            Text("probe screen=\(probeID) draft=\(Int(pro.wrappedValue.travelRadiusKm)) instant=\(pro.wrappedValue.instantBook) dirty=\(isDirty) changes=\(probeChanges) bodies=\(ProbeCount.value("edit"))")
                                 .font(.caption2).accessibilityIdentifier("probe-edit")
                         }
                         section("Instant book") {

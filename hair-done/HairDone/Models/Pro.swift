@@ -112,3 +112,13 @@ struct Review: Identifiable, Hashable, Codable {
     var proReply: String? = nil
     var photoSeed: Int? = nil
 }
+
+extension Optional where Wrapped: Hashable {
+    /// The value, or `fallback` while there isn't one; setting it stores the value. Lets a screen
+    /// with an optional draft hand its form `$draft[orElse: current]`, a binding that reads and writes
+    /// the state directly (a key path) rather than through closures.
+    subscript(orElse fallback: Wrapped) -> Wrapped {
+        get { self ?? fallback }
+        set { self = newValue }
+    }
+}

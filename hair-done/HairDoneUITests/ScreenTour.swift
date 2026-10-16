@@ -84,11 +84,14 @@ final class ScreenTour: XCTestCase {
     /// A switch on a tab's own screen (not pushed), to compare: Profile's Taking bookings.
     func testRootSwitch() {
         let app = XCUIApplication()
-        app.launchArguments = ["-hdDemo", "pro", "-hdTab", "profile", "-push.asked.client", "YES", "-push.asked.pro", "YES"]
+        app.launchArguments = ["-hdDemo", "pro", "-hdTab", "profile", "-push.asked.client", "YES", "-push.asked.pro", "YES",
+                               "-hdProbe", "YES"]
         app.launch()
         _ = app.buttons["Profile"].waitForExistence(timeout: 20)
         sleep(3)
         for _ in 0..<4 where !app.switches.firstMatch.isHittable { app.swipeUp(velocity: .slow) }
+        let probe = app.staticTexts["probe-root"]
+        XCTFail("PROBE root before: \(probe.exists ? probe.label : "none")")
         let sw = app.switches.firstMatch
         guard sw.exists else { XCTFail("ROOT: no switch"); return }
         let was = tag(sw.value)
@@ -98,6 +101,7 @@ final class ScreenTour: XCTestCase {
         let flipped = tag(sw.value) != was
         let asked = app.buttons.count > 0 && app.staticTexts.containing(NSPredicate(format: "label CONTAINS[c] '?'")).count > 0
         shoot("root-switch-\(was)-to-\(tag(sw.value))-asked-\(asked)")
+        XCTFail("PROBE root after: \(probe.exists ? probe.label : "none")")
         XCTAssertTrue(flipped || asked, "ROOT: Taking bookings didn't respond")
     }
 
