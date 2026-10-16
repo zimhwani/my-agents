@@ -90,7 +90,7 @@ class GapScanner:
 
     def __init__(self, broker: Broker, settings: Settings, min_gap_pct: float = 3.0,
                  min_price: float = 3.0, min_market_cap: float = 1e9,
-                 day_check: Callable | None = None, max_checked: int = 40):
+                 day_check: Callable | None = None, max_checked: int = 100):
         self.b = broker
         self.s = settings
         self.min_gap_pct = min_gap_pct

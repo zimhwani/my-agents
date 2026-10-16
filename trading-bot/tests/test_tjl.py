@@ -61,7 +61,7 @@ def test_rules_load_and_exit_rules():
     assert ls.exits.partial_r == 0.75 and ls.exits.breakeven_r == 1.0 and ls.exits.trail_mode == "swing_low"
     assert ls.exits.final_target_r == 0 and ls.exits.time_stop_minutes == 0
     assert ls.force_close == clock.parse_hhmm("15:51")
-    assert ls.risk_overrides["max_positions"] == 5 and ls.risk_overrides["max_position_pct"] == 10.0
+    assert ls.risk_overrides["max_positions"] == 5 and ls.risk_overrides["max_position_pct"] == 20.0
     r = TJLRules()
     assert r.stop_for(100.0) == pytest.approx(99.0)
     assert TJLRules(initial_stop_rule="lod").stop_for(50.0) == 50.0
