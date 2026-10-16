@@ -4,7 +4,7 @@
   "trade_timeframe": "5m",
   "universe_filters": {
     "min_market_cap_usd": 300000000,
-    "min_price_usd": 3.0
+    "min_price_usd": 10.0
   },
   "daily_filters": {
     "D1_above_prior_day_high": true,
