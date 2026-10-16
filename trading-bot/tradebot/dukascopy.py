@@ -18,6 +18,7 @@ import urllib.error
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, timedelta, timezone
+from pathlib import Path
 from typing import Callable
 
 from . import clock
@@ -71,11 +72,14 @@ def _roll(bars: list[Bar], minutes: int) -> list[Bar]:
 
 
 def download(symbol: str, days: int, fetch: Fetch | None = None, workers: int = 4,
-             end: date | None = None, max_missing: float = 0.03, retry_pause: float = 2.0) -> list[Bar]:
+             end: date | None = None, max_missing: float = 0.10, retry_pause: float = 2.0,
+             cache_dir: Path | None = None) -> list[Bar]:
     """5-minute bars for ``symbol`` over the last ``days`` calendar days (weekends simply absent).
 
-    A day whose file still fails after retries is skipped and reported (a gap of a day barely moves a
-    two-year test); more than ``max_missing`` of the days failing means the feed is down: raise."""
+    A day whose file still fails after retries is skipped and reported (a few missing days barely move a
+    two-year test); more than ``max_missing`` of the days failing means the feed is down: raise.
+    With ``cache_dir`` each day's raw file is kept on disk, so a re-run only fetches what it lacks (the feed
+    throttles hard: a cold two-year fetch takes hours)."""
     inst = INSTRUMENTS.get(symbol, symbol.replace("/", ""))
     divisor = DIVISORS.get(inst, 100000.0)
     fetch = fetch or _http
@@ -85,13 +89,24 @@ def download(symbol: str, days: int, fetch: Fetch | None = None, workers: int = 
     failed_days: dict[date, str] = {}
     done = [0]
 
+    cache = Path(cache_dir) / inst if cache_dir else None
+    if cache is not None:
+        cache.mkdir(parents=True, exist_ok=True)
+    settled = end - timedelta(days=3)  # older days are final; a missing recent file may still be published
+
     def one(d: date) -> list[Bar]:
         url = URL.format(inst=inst, y=d.year, m=d.month - 1, d=d.day)
-        try:
-            raw = fetch(url)
-        except ConnectionError as exc:
-            failed_days[d] = str(exc)
-            raw = None
+        hit = cache / f"{d.isoformat()}.bi5" if cache is not None else None
+        if hit is not None and hit.exists():
+            raw = hit.read_bytes() or None  # an empty file records a day with no data (holiday)
+        else:
+            try:
+                raw = fetch(url)
+                if hit is not None and (raw or d < settled):
+                    hit.write_bytes(raw or b"")
+            except ConnectionError as exc:
+                failed_days[d] = str(exc)
+                raw = None
         done[0] += 1
         if done[0] % 50 == 0:  # long downloads: show they're moving (a two-year fetch can take an hour)
             log.info("Dukascopy %s: %d/%d days fetched, %d failed", inst, done[0], len(days_list), len(failed_days))

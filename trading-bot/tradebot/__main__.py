@@ -645,7 +645,7 @@ def cmd_research(args) -> None:
                     mins = sorted({int(getattr(loaded[f].strategy, "bar_minutes", 60)) for f in cfd
                                    if sym in (loaded[f].universe or [])})
                     try:
-                        b5 = duka_download(sym, args.fetch_days)
+                        b5 = duka_download(sym, args.fetch_days, cache_dir=data / "dukascopy")
                         if not b5:
                             raise ValueError("no bars returned")
                         for m, bars in timeframes(b5, mins).items():

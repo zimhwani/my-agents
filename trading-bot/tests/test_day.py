@@ -160,6 +160,23 @@ def test_dukascopy_skips_a_day_that_times_out_but_not_a_dead_feed():
         dk.download("XAU/USD", 60, fetch=dead, workers=2, end=day)
 
 
+def test_dukascopy_cache_means_a_rerun_only_fetches_missing_days(tmp_path):
+    from tradebot import dukascopy as dk
+    day = date(2026, 9, 28)
+    rows = [(60 * i, 4_000_000, 4_000_050, 3_999_900, 4_000_200, 1.0) for i in range(10)]
+    urls = []
+
+    def fetch(url):
+        urls.append(url)
+        return None if "/2026/08/21/" in url else _bi5(rows)  # one holiday with no file
+
+    first = dk.download("XAU/USD", 20, fetch=fetch, workers=2, end=day, cache_dir=tmp_path)
+    n = len(urls)
+    second = dk.download("XAU/USD", 20, fetch=fetch, workers=2, end=day, cache_dir=tmp_path)
+    assert len(urls) == n and [b.time for b in second] == [b.time for b in first]  # all from the cache
+    assert (tmp_path / "XAUUSD" / "2026-09-21.bi5").read_bytes() == b""  # holiday recorded, not refetched
+
+
 def test_day_rule_files_load_as_day_traders():
     for name in ("gold_day_breakout_15m", "gold_day_breakout_5m", "gold_day_pullback_15m",
                  "gold_day_london_15m", "gold_day_newyork_15m"):
