@@ -37,7 +37,10 @@ final class ScreenTour: XCTestCase {
         guard travel.waitForExistence(timeout: 10) else { XCTFail("PROBE: no travel probe"); return }
         sleep(2)
         func report(_ step: String) {
-            XCTFail("PROBE \(step): \(travel.label) | \(screen.exists ? screen.label : "edit probe off screen")")
+            let copies = "edit screens=\(app.staticTexts.matching(identifier: "probe-edit").count) "
+                + "travel=\(app.staticTexts.matching(identifier: "probe-travel").count) "
+                + "Today tabs=\(app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Today'")).count)"
+            XCTFail("PROBE \(step): \(travel.label) | \(screen.exists ? screen.label : "edit probe off screen") | \(copies)")
         }
         report("open")
         app.buttons["15 km"].tap(); sleep(1); report("after 15 km")
