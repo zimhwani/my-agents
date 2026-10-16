@@ -69,8 +69,12 @@ def load_job(path: str | Path) -> dict:
 
 
 def run_job(job: dict, log_path: Path, upload: Callable[[str, bytes, str], object] | None = None,
-            python: str = sys.executable, popen=subprocess.Popen, poll_seconds: float = 60.0) -> str:
-    """Run every step (stopping at the first failure); returns 'done' or 'failed: ...'."""
+            python: str = sys.executable, popen=subprocess.Popen, poll_seconds: float = 60.0,
+            env: dict | None = None) -> str:
+    """Run every step (stopping at the first failure); returns 'done' or 'failed: ...'.
+
+    ``env`` is the environment for the steps: pass the one from before any .env file was loaded, since
+    settings never override variables already set and one bot's .env would leak into another's step."""
     log_path.parent.mkdir(parents=True, exist_ok=True)
     jid = job["id"]
 
@@ -94,7 +98,7 @@ def run_job(job: dict, log_path: Path, upload: Callable[[str, bytes, str], objec
             f.write(f"\n[job] step {i}/{len(job['steps'])} ({step['env']}): {' '.join(step['args'])}\n")
             f.flush()
             started = _time.monotonic()
-            proc = popen(cmd, stdout=f, stderr=subprocess.STDOUT)
+            proc = popen(cmd, stdout=f, stderr=subprocess.STDOUT, env=env)
             push(f"running step {i}/{len(job['steps'])}")
             while proc.poll() is None:
                 if _time.monotonic() - started > job["timeout_minutes"] * 60:

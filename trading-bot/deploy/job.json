@@ -1,5 +1,5 @@
 {
-  "id": "2026-10-16-tjl90-gold2y",
+  "id": "2026-10-16b-tjl90-gold2y",
   "env": ".env.gold",
   "timeout_minutes": 180,
   "steps": [

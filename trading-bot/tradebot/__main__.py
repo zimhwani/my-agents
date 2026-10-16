@@ -232,7 +232,9 @@ def cmd_kill(args) -> None:
 
 def cmd_job(args) -> None:
     """Run a research job file (started by the auto-deploy from deploy/job.json); see tradebot/jobs.py."""
+    import os
     from .jobs import load_job, run_job
+    clean_env = dict(os.environ)  # before any .env is loaded: each step must read only its own env file
     job = load_job(args.file)
     args.env = job["env"]
     s = _settings(args)
@@ -242,7 +244,7 @@ def cmd_job(args) -> None:
         from .publish import BlobPublisher
         pub = BlobPublisher(s.vercel_blob_token, s.vercel_blob_prefix)
         upload = pub.put
-    status = run_job(job, s.data_dir / "jobs" / f"{job['id']}.log", upload)
+    status = run_job(job, s.data_dir / "jobs" / f"{job['id']}.log", upload, env=clean_env)
     print(f"job {job['id']}: {status}")
     if not status.startswith("done"):
         sys.exit(1)

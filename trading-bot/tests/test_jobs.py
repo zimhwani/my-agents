@@ -44,17 +44,19 @@ def test_run_job_runs_steps_publishes_log_and_files(tmp_path, monkeypatch):
     (tmp_path / "out.md").write_text("# report\n")
     calls, uploads = [], {}
 
-    def fake_popen(cmd, stdout, stderr):
+    def fake_popen(cmd, stdout, stderr, env=None):
         calls.append(cmd)
+        assert env == {"PATH": "x"}  # the clean environment, not this process's
+        env = None
         code = "print('ok')" if cmd[-1] != "boom" else "import sys; print('bad'); sys.exit(3)"
-        return subprocess.Popen([sys.executable, "-c", code], stdout=stdout, stderr=stderr)
+        return subprocess.Popen([sys.executable, "-c", code], stdout=stdout, stderr=stderr, env=env)
 
     job = {"id": "j1", "env": ".env.gold", "steps": [{"env": ".env.gold", "args": ["report"]},
                                                      {"env": ".env", "args": ["research", "boom"]},
                                                      {"env": ".env.gold", "args": ["report"]}],
            "publish": ["out.md", "missing.md"], "timeout_minutes": 5}
     status = run_job(job, tmp_path / "logs" / "j1.log", lambda n, b, c: uploads.__setitem__(n, b),
-                     popen=fake_popen, poll_seconds=0.01)
+                     popen=fake_popen, poll_seconds=0.01, env={"PATH": "x"})
     assert status == "failed at step 2 (exit 3)" and len(calls) == 2  # stops at the first failure
     assert calls[0][-4:] == ["tradebot", "--env", ".env.gold", "report"] and calls[1][-3] == ".env"
     log = uploads["jobs/j1.log"].decode()
