@@ -83,6 +83,7 @@ def download(symbol: str, days: int, fetch: Fetch | None = None, workers: int = 
     days_list = [end - timedelta(days=i) for i in range(days)][::-1]
     days_list = [d for d in days_list if d.weekday() != 5]  # Saturday never trades
     failed: list[str] = []
+    done = [0]
 
     def one(d: date) -> list[Bar]:
         url = URL.format(inst=inst, y=d.year, m=d.month - 1, d=d.day)
@@ -90,8 +91,11 @@ def download(symbol: str, days: int, fetch: Fetch | None = None, workers: int = 
             raw = fetch(url)
         except ConnectionError as exc:
             failed.append(str(exc))
-            return []
-        return _roll(decode_day(raw or b"", d, divisor), 5)
+            raw = None
+        done[0] += 1
+        if done[0] % 50 == 0:  # long downloads: show they're moving (a two-year fetch can take an hour)
+            log.info("Dukascopy %s: %d/%d days fetched, %d failed", inst, done[0], len(days_list), len(failed))
+        return _roll(decode_day(raw or b"", d, divisor), 5) if raw else []
 
     with ThreadPoolExecutor(max_workers=workers) as pool:
         chunks = list(pool.map(one, days_list))
