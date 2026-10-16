@@ -27,8 +27,25 @@ final class ScreenTour: XCTestCase {
     /// that screen: as it is, without the map, and without the swipe-back helper. Findings are assertion
     /// messages (in the run log) and picture names.
     func testTravelArea() { travelExperiment("travel", extra: []) }
-    func testTravelAreaNoMap() { travelExperiment("nomap", extra: ["-hdNoMap", "YES"]) }
-    func testTravelAreaNoSwipeHelper() { travelExperiment("noswipe", extra: ["-hdNoSwipeEnabler", "YES"]) }
+
+    /// With the app's debug probe on: after each tap, what the km box's action count, the travel
+    /// control's radius and the edit screen's draft say, and whether the screen was rebuilt.
+    /// Reported as assertion messages so they land in the run log.
+    func testTravelProbe() {
+        let app = openProfileEdit(viaTravelRow: true, extra: ["-hdProbe", "YES"])
+        let travel = app.staticTexts["probe-travel"], screen = app.staticTexts["probe-edit"]
+        guard travel.waitForExistence(timeout: 10) else { XCTFail("PROBE: no travel probe"); return }
+        sleep(2)
+        func report(_ step: String) {
+            XCTFail("PROBE \(step): \(travel.label) | \(screen.exists ? screen.label : "edit probe off screen")")
+        }
+        report("open")
+        app.buttons["15 km"].tap(); sleep(1); report("after 15 km")
+        app.buttons["25 km"].tap(); sleep(1); report("after 25 km")
+        let instant = app.switches.firstMatch
+        if instant.exists { instant.tap(); sleep(1); report("after Instant book") }
+        shoot("probe-\(tag(travel.label))")
+    }
 
     private func travelExperiment(_ name: String, extra: [String]) {
         let app = openProfileEdit(viaTravelRow: true, extra: extra)

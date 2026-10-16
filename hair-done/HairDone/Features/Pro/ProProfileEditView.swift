@@ -32,6 +32,8 @@ struct ProProfileEditView: View {
     @Environment(\.dynamicTypeSize) private var typeSize
 
     private let unsavedID = "profile.edit"
+    /// Debug probe (`-hdProbe YES`): changes if this screen is rebuilt from scratch.
+    @State private var probeID = String(UUID().uuidString.prefix(4))
 
     private var isDirty: Bool {
         guard let draft, let saved = app.proSelf else { return false }
@@ -152,6 +154,10 @@ struct ProProfileEditView: View {
                         specialtySection(pro)
                         servicesSection(pro).id(ProEditSection.services)
                         travelSection(pro).id(ProEditSection.travel)
+                        if DebugSwitch.on("hdProbe") {
+                            Text("probe screen=\(probeID) draft=\(Int(pro.wrappedValue.travelRadiusKm)) instant=\(pro.wrappedValue.instantBook) dirty=\(isDirty)")
+                                .font(.caption2).accessibilityIdentifier("probe-edit")
+                        }
                         section("Instant book") {
                             HDSwitch(title: "Instant book", subtitle: "On, and clients book your open slots without asking. Off, and you accept each one.", isOn: pro.instantBook)
                         }

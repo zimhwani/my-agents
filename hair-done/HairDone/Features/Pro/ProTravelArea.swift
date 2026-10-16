@@ -21,6 +21,8 @@ struct ProTravelArea: View {
     @State private var position: MapCameraPosition = .automatic
     /// The suburb the pin belongs to. Set on the first look; a lookup only runs once `base` differs.
     @State private var pinnedBase: String? = nil
+    /// Debug probe (`-hdProbe YES`): how many times a km box's action ran.
+    @State private var probeTaps = 0
 
     private var hasPin: Bool { latitude != 0 || longitude != 0 }
     private var typed: String { base.trimmingCharacters(in: .whitespacesAndNewlines) }
@@ -48,12 +50,17 @@ struct ProTravelArea: View {
                 ProFlowLayout {
                     ForEach([5, 10, 15, 25], id: \.self) { km in
                         OptionBox(title: "\(km) km", isSelected: Int(radiusKm) == km) {
+                            probeTaps += 1
                             withAnimation(Motion.spring) { radiusKm = Double(km) }
                         }
                     }
                 }
                 Text("Clients inside the circle can book you.")
                     .font(HDFont.caption).foregroundStyle(Palette.inkSoft)
+                if DebugSwitch.on("hdProbe") {
+                    Text("probe taps=\(probeTaps) radius=\(Int(radiusKm))")
+                        .font(.caption2).accessibilityIdentifier("probe-travel")
+                }
             }
         }
         .onAppear { frame(animated: false) }
