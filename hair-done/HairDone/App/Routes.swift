@@ -32,17 +32,52 @@ enum Route: Hashable {
     }
 }
 
+/// Also makes room for the tab bar under the tab's root and every screen pushed onto it (`tabBarRoom`).
 struct RouteDestinations: ViewModifier {
     func body(content: Content) -> some View {
-        content.navigationDestination(for: Route.self) { route in
-            switch route {
-            case .pro(let pro): ProProfileView(pro: pro)
-            case .booking(let id): BookingDetailView(bookingID: id)
-            case .proBooking(let id): ProBookingDetailView(bookingID: id)
-            case .thread(let id): ThreadView(threadID: id)
-            case .proProfileEdit: ProProfileEditView()
-            case .proWork: ProWorkView()
+        content
+            .tabBarRoom()
+            .navigationDestination(for: Route.self) { route in
+                Group {
+                    switch route {
+                    case .pro(let pro): ProProfileView(pro: pro)
+                    case .booking(let id): BookingDetailView(bookingID: id)
+                    case .proBooking(let id): ProBookingDetailView(bookingID: id)
+                    case .thread(let id): ThreadView(threadID: id)
+                    case .proProfileEdit: ProProfileEditView()
+                    case .proWork: ProWorkView()
+                    }
+                }
+                .tabBarRoom()
             }
+    }
+}
+
+// MARK: - Room for the tab bar
+
+/// How much of the bottom the tab bar covers, above the home indicator: the bar's height while it's
+/// showing, 0 while it steps aside (a thread, the keyboard). Set by the tab shells in RootView.
+private struct TabBarRoomKey: EnvironmentKey {
+    static let defaultValue: CGFloat = 0
+}
+
+extension EnvironmentValues {
+    var tabBarRoom: CGFloat {
+        get { self[TabBarRoomKey.self] }
+        set { self[TabBarRoomKey.self] = newValue }
+    }
+}
+
+/// Keeps a screen's content, and any bar of its own (Save, Book, the message field), clear of the tab
+/// bar. On iOS 26 a bottom inset on the shell doesn't reach the screens inside a tab's NavigationStack,
+/// so the last row scrolled under the bar; each screen in the stack makes the room itself instead.
+/// Put it outside the screen's own bottom bar so that bar sits on top of the tab bar.
+private struct TabBarRoom: ViewModifier {
+    @Environment(\.tabBarRoom) private var room
+
+    func body(content: Content) -> some View {
+        content.safeAreaInset(edge: .bottom, spacing: 0) {
+            Color.clear.frame(height: room).allowsHitTesting(false).accessibilityHidden(true)
         }
     }
 }
@@ -84,6 +119,9 @@ struct PushRouteHold: ViewModifier {
 
 extension View {
     func hdDestinations() -> some View { modifier(RouteDestinations()) }
+
+    /// See `TabBarRoom`. `hdDestinations()` already does this for a tab's root and its routes.
+    func tabBarRoom() -> some View { modifier(TabBarRoom()) }
 
     /// For the booking flow, pro onboarding, payout setup and sheets with unsaved input. See `PushRouteHold`.
     func holdsPushRoutes() -> some View { modifier(PushRouteHold()) }

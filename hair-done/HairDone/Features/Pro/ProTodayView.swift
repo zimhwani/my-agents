@@ -120,7 +120,7 @@ struct ProTodayView: View {
             .hdDestinations()
             .navigationDestination(for: Destination.self) { d in
                 switch d {
-                case .hours: ProHoursScreen()
+                case .hours: ProHoursScreen().tabBarRoom()
                 }
             }
             .sheet(item: $declining) { b in

@@ -41,9 +41,9 @@ final class ScreenTour: XCTestCase {
         app.launch()
         _ = app.buttons[title].waitForExistence(timeout: 20)
         // Sample data loads with short pauses; let it settle before the first picture.
+        // No tap to clear alerts: a tap lands on the screen and opens things. Location and photos are
+        // granted by the workflow, and the push pre-prompts are marked as asked above.
         sleep(4)
-        app.tap() // lets the interruption monitor clear a permission alert if one is up
-        sleep(1)
         shoot("\(side)-\(tab)-1-top")
         for _ in 0..<10 { app.swipeUp(velocity: .fast) }
         sleep(2)

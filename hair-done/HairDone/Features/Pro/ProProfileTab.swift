@@ -73,8 +73,8 @@ struct ProProfileTab: View {
             .hdDestinations()
             .navigationDestination(for: Destination.self) { d in
                 switch d {
-                case .edit(let section): ProProfileEditView(focus: section)
-                case .hours: ProHoursScreen()
+                case .edit(let section): ProProfileEditView(focus: section).tabBarRoom()
+                case .hours: ProHoursScreen().tabBarRoom()
                 }
             }
             .proSideBanner()

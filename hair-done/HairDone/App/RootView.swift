@@ -126,7 +126,7 @@ struct ClientShell: View {
             case .you: AccountView()
             }
         }
-        .safeAreaInset(edge: .bottom, spacing: 0) {
+        .overlay(alignment: .bottom) {
             if showsBar {
                 HDTabBar(items: [
                     .init(id: ClientTab.home.rawValue, title: "Home", symbol: "house"),
@@ -140,6 +140,7 @@ struct ClientShell: View {
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
+        .environment(\.tabBarRoom, showsBar ? HDTabBar.height(for: typeSize) : 0)
         .animation(Motion.spring, value: showsBar)
         .trackKeyboard($keyboardUp)
         // Normally already loading (launch, sign-in, a switch); this joins that rather than repeating it.
@@ -147,6 +148,7 @@ struct ClientShell: View {
     }
 
     @State private var keyboardUp = false
+    @Environment(\.dynamicTypeSize) private var typeSize
     private var showsBar: Bool { !app.hidesTabBar && !keyboardUp }
 }
 
@@ -158,7 +160,7 @@ struct ProShell: View {
         TabStack(tabs: ProTab.allCases, selected: app.selectedProTab) { tab in
             root(for: tab)
         }
-        .safeAreaInset(edge: .bottom, spacing: 0) {
+        .overlay(alignment: .bottom) {
             if showsBar {
                 HDTabBar(style: .pro, items: ProTab.allCases.map(item(for:)), selected: app.selectedProTab.rawValue) { id in
                     if let tab = ProTab(rawValue: id) { app.selectedProTab = tab }
@@ -166,6 +168,7 @@ struct ProShell: View {
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
+        .environment(\.tabBarRoom, showsBar ? HDTabBar.height(for: typeSize) : 0)
         .animation(Motion.spring, value: showsBar)
         .trackKeyboard($keyboardUp)
         // Opening straight into Pro mode (remembered from last time) loads here too.
@@ -201,15 +204,16 @@ struct ProShell: View {
     }
 
     @State private var keyboardUp = false
+    @Environment(\.dynamicTypeSize) private var typeSize
     private var showsBar: Bool { !app.hidesTabBar && !keyboardUp }
 }
 
 // MARK: - Tabs
 
-/// The tabs, without a system TabView. A TabView doesn't pass the custom bar's inset down to its
-/// tabs, so the bottom of every screen (the last row, a chat's message field) ended up under the bar.
-/// Here the bar is an ordinary bottom inset on a plain stack, and each tab's screens make room for it
-/// like they would for anything else.
+/// The tabs, without a system TabView. The bar is laid over the bottom of the shell, and every screen
+/// in a tab's NavigationStack makes room for it itself (`tabBarRoom`, via `hdDestinations()`): on
+/// iOS 26 neither a TabView nor a bottom inset on the shell reaches the screens inside the stacks, so
+/// the last row of every screen ended up under the bar.
 ///
 /// Like a TabView, a tab is built the first time it's opened and then kept, so switching back
 /// finds it where she left it (scroll position, a half-typed message, unsaved hours).

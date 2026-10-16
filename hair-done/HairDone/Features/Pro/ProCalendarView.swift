@@ -83,9 +83,9 @@ struct ProCalendarView: View {
             .paperBackground()
             .refreshable { await app.loadProSide() }
             .toolbar(.hidden, for: .navigationBar)
-            .hdDestinations()
             .overlay(alignment: .bottom) { undoBar }
             .safeAreaInset(edge: .bottom, spacing: 0) { hoursSaveBar }
+            .hdDestinations()
             .animation(Motion.spring, value: hoursDirty)
             .proSideBanner()
         }
