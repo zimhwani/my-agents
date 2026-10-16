@@ -118,12 +118,13 @@ struct ClientShell: View {
     @Environment(AppState.self) private var app
 
     var body: some View {
-        @Bindable var app = app
-        TabView(selection: $app.selectedTab) {
-            HomeView().hdTab(showsBar).tag(ClientTab.home)
-            BookingsView().hdTab(showsBar).tag(ClientTab.bookings)
-            InboxView(side: .client).hdTab(showsBar).tag(ClientTab.inbox)
-            AccountView().hdTab(showsBar).tag(ClientTab.you)
+        TabStack(tabs: ClientTab.allCases, selected: app.selectedTab) { tab in
+            switch tab {
+            case .home: HomeView()
+            case .bookings: BookingsView()
+            case .inbox: InboxView(side: .client)
+            case .you: AccountView()
+            }
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if showsBar {
@@ -154,11 +155,8 @@ struct ProShell: View {
     @Environment(AppState.self) private var app
 
     var body: some View {
-        @Bindable var app = app
-        TabView(selection: $app.selectedProTab) {
-            ForEach(ProTab.allCases, id: \.self) { tab in
-                root(for: tab).hdTab(showsBar).tag(tab)
-            }
+        TabStack(tabs: ProTab.allCases, selected: app.selectedProTab) { tab in
+            root(for: tab)
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if showsBar {
@@ -206,17 +204,41 @@ struct ProShell: View {
     private var showsBar: Bool { !app.hidesTabBar && !keyboardUp }
 }
 
-// MARK: - Room for the tab bar
+// MARK: - Tabs
+
+/// The tabs, without a system TabView. A TabView doesn't pass the custom bar's inset down to its
+/// tabs, so the bottom of every screen (the last row, a chat's message field) ended up under the bar.
+/// Here the bar is an ordinary bottom inset on a plain stack, and each tab's screens make room for it
+/// like they would for anything else.
+///
+/// Like a TabView, a tab is built the first time it's opened and then kept, so switching back
+/// finds it where she left it (scroll position, a half-typed message, unsaved hours).
+struct TabStack<Tab: Hashable, Content: View>: View {
+    var tabs: [Tab]
+    var selected: Tab
+    @ViewBuilder var content: (Tab) -> Content
+
+    @State private var opened: Set<Tab> = []
+
+    var body: some View {
+        ZStack {
+            ForEach(tabs, id: \.self) { tab in
+                if tab == selected || opened.contains(tab) {
+                    let isOn = tab == selected
+                    content(tab)
+                        .opacity(isOn ? 1 : 0)
+                        .allowsHitTesting(isOn)
+                        .accessibilityHidden(!isOn)
+                        .zIndex(isOn ? 1 : 0)
+                }
+            }
+        }
+        .onAppear { opened.insert(selected) }
+        .onChange(of: selected) { _, new in opened.insert(new) }
+    }
+}
 
 extension View {
-    /// Hides the system tab bar and keeps room for `HDTabBar` at the bottom of the tab.
-    /// The bar sits in an inset on the TabView, but a TabView doesn't pass that inset down to its
-    /// tabs, so without this anything pinned to the bottom of a tab (a chat's message field, the
-    /// last row of a list) ends up underneath the bar.
-    func hdTab(_ showsBar: Bool) -> some View {
-        modifier(TabBarReserve(showsBar: showsBar))
-    }
-
     /// Keeps `isUp` true while the keyboard is on screen, so the tab bar can step aside for it
     /// the way the system tab bar does.
     func trackKeyboard(_ isUp: Binding<Bool>) -> some View {
@@ -226,22 +248,6 @@ extension View {
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
             isUp.wrappedValue = false
         }
-    }
-}
-
-/// The reserve under each tab. Its height follows the bar's, which grows with the label size.
-private struct TabBarReserve: ViewModifier {
-    var showsBar: Bool
-    @Environment(\.dynamicTypeSize) private var typeSize
-
-    func body(content: Content) -> some View {
-        content
-            .toolbar(.hidden, for: .tabBar)
-            .safeAreaInset(edge: .bottom, spacing: 0) {
-                if showsBar {
-                    Color.clear.frame(height: HDTabBar.height(for: typeSize)).allowsHitTesting(false)
-                }
-            }
     }
 }
 
@@ -269,7 +275,7 @@ struct HDTabBar: View {
     /// The bar's height above the home indicator at the default text size: 6 top padding plus 49.
     static let height: CGFloat = 55
 
-    /// The bar's height at a text size. Tabs reserve exactly this much (see `hdTab`).
+    /// The bar's height at a text size.
     static func height(for typeSize: DynamicTypeSize) -> CGFloat {
         6 + rowHeight(labelSize: labelSize(for: typeSize))
     }
