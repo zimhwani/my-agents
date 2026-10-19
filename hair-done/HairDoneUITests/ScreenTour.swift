@@ -96,22 +96,38 @@ final class ScreenTour: XCTestCase {
         _ = app.buttons["Home"].waitForExistence(timeout: 20)
         sleep(3)
         let thread = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] 'Kiara' OR label CONTAINS[c] 'Mei' OR label CONTAINS[c] 'Priya'")).firstMatch
-        guard thread.waitForExistence(timeout: 10) else { XCTFail("CHAT: no thread to open"); return }
-        thread.tap()
-        sleep(2)
-        let field = app.textFields.firstMatch.exists ? app.textFields.firstMatch : app.textViews.firstMatch
-        if field.waitForExistence(timeout: 5) {
-            field.tap()
-            field.typeText("See you then")
-            sleep(1)
+        func openAndType() -> Bool {
+            guard thread.waitForExistence(timeout: 10) else { return false }
+            thread.tap()
+            sleep(2)
+            let field = app.textFields.firstMatch.exists ? app.textFields.firstMatch : app.textViews.firstMatch
+            if field.waitForExistence(timeout: 5) {
+                field.tap()
+                field.typeText("See you then")
+                sleep(1)
+            }
+            return true
         }
+        let homeBack = { app.buttons["Home"].waitForExistence(timeout: 5) && app.buttons["Home"].isHittable }
+
+        // 1. Leave by the Back button, keyboard up.
+        guard openAndType() else { XCTFail("CHAT: no thread to open"); return }
         XCTAssertFalse(app.buttons["Home"].isHittable, "CHAT: tab bar should step aside in a chat")
-        let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.01, dy: 0.5))
-        start.press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.85, dy: 0.5)))
+        app.buttons["Back"].firstMatch.tap()
         sleep(3)
-        let back = app.buttons["Home"].waitForExistence(timeout: 5) && app.buttons["Home"].isHittable
-        shoot("chat-back-tabbar-\(back ? "shown" : "missing")")
-        XCTAssertTrue(back, "CHAT: tab bar didn't come back after leaving a chat")
+        let byButton = homeBack()
+        shoot("chat-back-button-tabbar-\(byButton ? "shown" : "missing")")
+        XCTAssertTrue(byButton, "CHAT: tab bar didn't come back after Back from a chat")
+
+        // 2. Leave by an edge swipe, keyboard up. Recorded either way: a swipe that doesn't leave is its own problem.
+        guard openAndType() else { return }
+        let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.01, dy: 0.3))
+        start.press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.85, dy: 0.3)))
+        sleep(3)
+        let left = !app.buttons["Back"].exists
+        let bySwipe = left && homeBack()
+        shoot("chat-swipe-\(left ? "left" : "stayed")-tabbar-\(bySwipe ? "shown" : "missing")")
+        if left { XCTAssertTrue(bySwipe, "CHAT: tab bar didn't come back after swiping out of a chat") }
     }
 
     /// With the system bar hidden, a swipe from the left edge still goes back.
