@@ -132,8 +132,12 @@ Ten sample pros (Amara, Lucia, Priya, Jess, Mei, Zara, Hannah, Nia, Sofia, Grace
 database for TestFlight, flagged `pros.is_sample` (migration 0015, function `seed-samples`). They
 have real photos, services and hours across Melbourne, and travel 40 km.
 
-- A job runs every minute: it accepts any request to a sample pro once the card's in, and answers
-  a tester's message with a line saying it's a sample.
+- A job runs every minute (migrations 0015 and 0016). It accepts any request to a sample pro once
+  the card's in, then runs the job straight away, whatever time was booked: On my way two minutes
+  later, then Here, Started and Done about two minutes apart, so a tester can pay, tip and review
+  about ten minutes after booking. It answers a tester's message with a line saying it's a sample.
+- To pay at Done, book within the next six days: further out, the card is only saved, and the hold
+  that Pay captures isn't placed until six days before the booked time.
 - Bookings with them are charged to your Stripe account alone (no payout, no fee), and only in test
   mode. In live mode they can't be charged at all.
 - Testers pay with Stripe's test card: 4242 4242 4242 4242, any future expiry, any CVC. A real card
