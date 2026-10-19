@@ -53,7 +53,7 @@
           <div class="field"><label for="f-date">Event date</label><input id="f-date" name="event_date" type="text" placeholder="e.g. 24 Oct 2026, or not sure yet"></div>
           <div class="field"><label for="f-loc">Where</label><input id="f-loc" name="location" type="text" placeholder="City, venue, or online"></div>
         </div>
-        <fieldset class="field" style="border:0;padding:0;margin:0"><legend style="font-size:var(--text-sm);font-weight:600;letter-spacing:.04em;text-transform:uppercase;padding:0;margin-bottom:.5rem">Format</legend>
+        <fieldset class="field" style="border:0;padding:0;margin:0"><legend class="field__legend">Format</legend>
           <div class="btn-row" style="gap:1.25rem">
             <label class="radio"><input type="radio" name="format" value="In person" checked> In person</label>
             <label class="radio"><input type="radio" name="format" value="Online"> Online</label>
@@ -69,7 +69,7 @@
         <div class="field"><label for="f-msg">Tell me more <span class="req" aria-hidden="true">*</span></label><textarea id="f-msg" name="message" required minlength="20" placeholder="What's the event, who's coming, and what do you want it to feel like?"></textarea></div>
         <div class="field"><label for="f-src">How did you hear about me?</label>
           <select id="f-src" name="source"><option value="">Choose one</option><option>Saw you host an event</option><option>The podcast</option><option>FreekÀ Runway</option><option>Someone recommended you</option><option>Social media</option><option>Google</option><option>Other</option></select></div>
-        <div class="field" style="flex-direction:row;align-items:flex-start;gap:.75rem"><input id="f-consent" name="consent" type="checkbox" required style="width:auto;margin-top:.3rem"><label for="f-consent" style="text-transform:none;letter-spacing:0;font-weight:400">It's fine for Mati to contact me about this.</label></div>
+        <div class="field field--check"><input id="f-consent" name="consent" type="checkbox" required><label for="f-consent">It's fine for Mati to contact me about this.</label></div>
         <div class="btn-row"><button class="btn btn--gold btn--lg" type="submit">Send {{icon:arrow}}</button></div>
         </div>
         <p class="form-status" role="status" aria-live="polite"></p>

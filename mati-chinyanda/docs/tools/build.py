@@ -26,7 +26,7 @@ def head(p):
 <html lang="en-AU" class="no-js">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>{p["title"]}</title>
 <meta name="description" content="{p["description"]}">
 <link rel="canonical" href="{url}">
@@ -42,7 +42,7 @@ def head(p):
 <link rel="preload" href="/assets/fonts/fraunces-latin-full-normal.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="/assets/fonts/figtree-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="/assets/css/fonts.css?v=1">
-<link rel="stylesheet" href="/assets/css/style.css?v=4">
+<link rel="stylesheet" href="/assets/css/style.css?v=5">
 <script>document.documentElement.classList.replace('no-js','js')</script>
 {ld}
 </head>

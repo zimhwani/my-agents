@@ -185,7 +185,7 @@ h1 em, h2 em, h3 em, .display em{font-variation-settings:"SOFT" 60;color:var(--a
 .grain>*{position:relative;z-index:1}
 
 /* ---------- Hero ---------- */
-.hero{min-height:100svh;display:grid;align-items:end;padding-top:var(--header-h);overflow:hidden;background:var(--ink-950);color:var(--ivory-50)}
+.hero{min-height:100vh;min-height:100svh;display:grid;align-items:end;padding-top:var(--header-h);overflow:hidden;background:var(--ink-950);color:var(--ivory-50)}
 .hero__media{position:absolute;inset:0;z-index:0}
 .hero__media img{width:100%;height:100%;object-fit:cover;object-position:62% 20%;border-radius:0;
   animation:heroIn 1.4s var(--ease) both}
@@ -208,14 +208,16 @@ h1 em, h2 em, h3 em, .display em{font-variation-settings:"SOFT" 60;color:var(--a
 .hero__cta{margin-top:var(--space-7)}
 .hero__foot{position:relative;z-index:1;display:flex;justify-content:space-between;align-items:center;gap:var(--space-4);padding:var(--space-5) 0;border-top:1px solid rgb(245 239 230 / .18);font-size:var(--text-sm);color:var(--ink-300);letter-spacing:.03em}
 .hero__foot span{display:flex;align-items:center;gap:.6rem}
+.hero__foot .hero__foot-where{gap:0}
+.hero__foot .hero__foot-where>span{display:inline}
+.hero__foot-where>span+span::before{content:"·";margin:0 .3rem}
 @media (min-width:1024px){
   .hero__media img{object-position:70% 15%}
   .hero__media::after{background:
     linear-gradient(180deg,rgb(11 10 10 / .35) 0%,rgb(11 10 10 / 0) 35%,rgb(11 10 10 / .45) 75%,rgb(11 10 10 / .9) 100%),
     linear-gradient(90deg,rgb(11 10 10 / .82) 0%,rgb(11 10 10 / .35) 40%,rgb(11 10 10 / 0) 70%)}
 }
-@media (max-width:640px){.hero__media img{object-position:55% 8%}.hero__foot{flex-direction:column;align-items:flex-start;gap:var(--space-2)}
-  .hero__roles{gap:.4rem .9rem;font-size:.75rem}.hero__roles li{gap:.9rem}.hero__roles li+li::before{display:none}.hero__roles li:not(:first-child){padding-left:.9rem;position:relative}.hero__roles li:not(:first-child)::before{content:"";position:absolute;left:0;top:50%;width:4px;height:4px;border-radius:50%;background:var(--gold-500);transform:translateY(-50%)}}
+/* Phone hero treatment lives in the "Phone experience" section at the end of this file. */
 
 /* ---------- Marquee ---------- */
 .marquee{overflow:hidden;display:flex;gap:0;white-space:nowrap;border-block:1px solid var(--line);padding-block:1.1rem;-webkit-mask-image:linear-gradient(90deg,transparent,#000 8%,#000 92%,transparent);mask-image:linear-gradient(90deg,transparent,#000 8%,#000 92%,transparent)}
@@ -356,6 +358,8 @@ h1 em, h2 em, h3 em, .display em{font-variation-settings:"SOFT" 60;color:var(--a
 .field label{font-size:var(--text-sm);font-weight:600;letter-spacing:.04em;text-transform:uppercase}
 .field .radio{text-transform:none;letter-spacing:0;font-weight:400;display:inline-flex;gap:.5rem;align-items:center;white-space:nowrap;font-size:var(--text-base)}
 .field label .req{color:var(--accent-text)}
+.field__legend{font-size:var(--text-sm);font-weight:600;letter-spacing:.04em;text-transform:uppercase;padding:0;margin-bottom:.5rem}
+.field .radio input{accent-color:var(--gold-700);width:1.1rem;height:1.1rem;margin:0;padding:0;min-height:0}
 .field input,.field select,.field textarea{font:inherit;color:var(--text);background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-sm);padding:.95rem 1rem;width:100%;transition:border-color .3s}
 .field input:focus,.field select:focus,.field textarea:focus{outline:none;border-color:var(--gold-600);box-shadow:0 0 0 3px rgb(195 154 62 / .18)}
 .field textarea{min-height:9rem;resize:vertical}
@@ -364,6 +368,9 @@ h1 em, h2 em, h3 em, .display em{font-variation-settings:"SOFT" 60;color:var(--a
 .field.is-invalid input,.field.is-invalid select,.field.is-invalid textarea, input.is-invalid,select.is-invalid,textarea.is-invalid{border-color:var(--error)}
 .form-status{min-height:1.5em;font-size:var(--text-sm)}
 .form-status.is-error{color:var(--error)}.form-status.is-ok{color:var(--success)}
+.field--check{flex-direction:row;align-items:flex-start;gap:.75rem}
+.field--check input{width:1.125rem;height:1.125rem;margin:.2rem 0 0;padding:0;flex:none;accent-color:var(--gold-700);border-radius:var(--radius-sm)}
+.field--check label{text-transform:none;letter-spacing:0;font-weight:400;font-size:var(--text-base);line-height:1.5}
 .form .hp{position:absolute;left:-9999px}
 .form.is-sent .form__fields{display:none}
 
@@ -423,3 +430,237 @@ h1 em, h2 em, h3 em, .display em{font-variation-settings:"SOFT" 60;color:var(--a
 .mt-6{margin-top:var(--space-6)} .mt-7{margin-top:var(--space-7)} .mt-8{margin-top:var(--space-8)}
 .divider-word{display:flex;align-items:center;gap:var(--space-5);color:var(--text-muted);font-size:var(--text-xs);letter-spacing:.16em;text-transform:uppercase}
 .divider-word::before,.divider-word::after{content:"";flex:1;height:1px;background:var(--line)}
+
+/* ==========================================================================
+   Phone experience (≤ 640px, plus ≤ 900px for the menu)
+   Desktop is approved; nothing here changes layout above 640px except the
+   full-screen menu (≤ 900px). Goal: a designed phone edition — editorial
+   cover hero, calm proportions, hairlines instead of boxes, safe-area aware.
+   ========================================================================== */
+
+/* ---- Safe areas (iOS toolbars / home indicator / notch in landscape) ---- */
+:root{--safe-t:env(safe-area-inset-top,0px);--safe-b:env(safe-area-inset-bottom,0px);--safe-l:env(safe-area-inset-left,0px);--safe-r:env(safe-area-inset-right,0px)}
+.container,.container--narrow{padding-left:var(--safe-l);padding-right:var(--safe-r)}
+.site-footer{padding-bottom:calc(var(--space-6) + var(--safe-b))}
+.lightbox__close{top:calc(var(--space-4) + var(--safe-t))}
+
+/* ---- Cover hero (≤ 900px: phones in both orientations, tablets in portrait) ----
+   Portrait on top (fills what the copy leaves, never under 56svh), copy over deep
+   ink below. The name overlaps the gradient seam so photo and type read as one
+   composition, while nothing sits over her face. */
+@media (max-width:900px){
+  .hero{grid-template-rows:minmax(56svh,1fr) auto auto;align-items:stretch;padding-top:0;padding-bottom:var(--safe-b)}
+  .hero__media{position:relative;inset:auto;min-height:0;z-index:0}
+  .hero__media picture{position:absolute;inset:0;display:block}
+  .hero__media img{position:absolute;inset:0;width:100%;height:100%;object-position:50% 12%}
+  .hero__media::after{background:
+    linear-gradient(180deg,rgb(11 10 10 / .5) 0%,rgb(11 10 10 / 0) 24%,rgb(11 10 10 / 0) 52%,rgb(11 10 10 / .5) 74%,rgb(11 10 10 / .9) 90%,var(--ink-950) 100%)}
+  .hero__body{margin-top:-4.25rem;padding-block:0 var(--space-6)}
+  .hero__roles{display:grid;grid-template-columns:auto auto;justify-content:start;column-gap:.9rem;row-gap:.45rem;padding:0;margin:0 0 var(--space-4);
+    font-size:.6875rem;letter-spacing:.2em;font-weight:600;color:var(--gold-300)}
+  .hero__roles li{gap:.9rem;white-space:nowrap}
+  .hero__roles li+li::before{width:3px;height:3px;background:var(--gold-400)}
+  .hero__roles li:nth-child(3)::before{display:none}
+  .hero .hero__name{line-height:.9;letter-spacing:-.035em;font-variation-settings:"opsz" 144,"SOFT" 50}
+  .hero__tag{line-height:1.5;margin-top:var(--space-4);max-width:34ch;color:var(--ink-300);text-wrap:pretty}
+  .hero__cta{margin-top:var(--space-6)}
+  .hero__foot{justify-content:center;text-align:center;padding:1rem 0 1.1rem;gap:0;font-size:.6875rem;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-400);border-top-color:rgb(245 239 230 / .12)}
+  .hero__foot>span:first-child{display:none}   /* the credit repeats in the marquee directly below */
+  .hero__foot span{justify-content:center}
+  .hero__foot-where{flex-direction:column;gap:.35rem}
+  .hero__foot-where>span+span::before{content:none}
+  .hero__foot-where>span:first-child{color:var(--ivory-100)}
+}
+
+/* Landscape phones: a short viewport, so the portrait takes the whole first screen
+   and the focal point drops to her face; the copy follows on scroll. */
+@media (max-width:900px) and (max-height:520px){
+  .hero{grid-template-rows:minmax(100svh,1fr) auto auto}
+  .hero__media img{object-position:50% 34%}
+  .hero__body{margin-top:-1.25rem;padding-top:var(--space-2)}
+}
+
+@media (max-width:640px){
+  /* ---- Tokens: phone type scale and rhythm ---- */
+  :root{
+    --header-h:64px;
+    --gutter:1.25rem;                 /* 20px side gutter: generous, editorial */
+    --section-y:4.5rem;               /* one consistent vertical beat between sections */
+    --text-base:1rem;                 /* 16  body (never smaller: iOS zoom + legibility) */
+    --text-lg:1.0625rem;              /* 17  lead */
+    --text-xl:1.25rem;                /* 20  h4 / card titles */
+    --text-2xl:1.5rem;                /* 24  h3 / pull-quotes */
+    --text-3xl:2.25rem;               /* 36  h2 */
+    --text-4xl:2.75rem;               /* 44  h1 on sub-pages */
+    --text-hero:4.75rem;              /* 76  the name */
+  }
+  body{line-height:1.55}
+  .lead{line-height:1.55}
+  .section-head{margin-bottom:var(--space-7)}
+  .section-head .lead{margin-top:var(--space-4)}
+  .stack>*+*{margin-top:var(--space-4)}
+  .section--tight{padding-block:var(--space-7)}
+  .eyebrow{margin-bottom:var(--space-3);font-size:.6875rem;letter-spacing:.18em}
+  .eyebrow::before{width:1.25rem}
+  .caption,.meta{font-size:.8125rem}
+  .divider-word{font-size:.6875rem;letter-spacing:.18em}
+  .mt-8{margin-top:var(--space-7)}
+  .prose{line-height:1.65}
+
+  /* ---- Buttons: calm pills, full-width when they sit in a row ---- */
+  .btn{--h:3rem;padding:0 1.4rem;font-size:.875rem}
+  .btn--lg{--h:3.25rem;padding:0 1.6rem;font-size:.9375rem}
+  .btn--sm{--h:2.6rem}
+  .btn-row{gap:var(--space-3)}
+  .btn-row>.btn{width:100%}
+  .btn-row>.link-arrow{margin-top:var(--space-2);padding:.4rem 0}
+  .btn:hover{transform:none}
+
+  /* ---- Header ---- */
+  .brand{font-size:1.25rem}
+  .nav-toggle{font-size:.75rem;letter-spacing:.14em;gap:.7rem}
+  .nav-toggle__bars{width:20px}
+
+  /* ---- Hero, phone-only refinements (see the ≤900px cover hero above) ---- */
+  .hero .hero__name{font-size:var(--text-hero)}
+  .hero__tag{font-size:1.0625rem;max-width:32ch}
+  .hero__cta{flex-direction:column;align-items:stretch;gap:.7rem}
+  .hero__cta .btn{width:100%;--h:3.25rem;font-size:.875rem;letter-spacing:.1em}
+
+  /* ---- Marquee ---- */
+  .marquee{padding-block:.9rem;-webkit-mask-image:linear-gradient(90deg,transparent,#000 12%,#000 88%,transparent);mask-image:linear-gradient(90deg,transparent,#000 12%,#000 88%,transparent)}
+  .marquee__track li{font-size:1.125rem;gap:1.6rem;padding-right:1.6rem}
+  .marquee__track li::after{font-size:.6em}
+
+  /* ---- Pillars: a hairline list, not three boxes ---- */
+  .pillar{padding:var(--space-6) 0;gap:var(--space-3)}
+  .pillar:hover{background:var(--bg)}
+  .pillar::after{display:none}
+  .pillar h3{font-size:var(--text-2xl)}
+  .pillar .link-arrow{margin-top:var(--space-2)}
+
+  /* ---- Intro figure frame: keep the gold frame inside the gutter ---- */
+  .figure--frame .figure__img::before{inset:10px -10px -10px 10px}
+
+  /* ---- Cards (talks / values): one editorial rail you swipe, instead of a 1,500px stack ---- */
+  .cards--3{display:flex;gap:.75rem;overflow-x:auto;scroll-snap-type:x mandatory;overscroll-behavior-x:contain;
+    margin-inline:calc(-1 * var(--gutter));padding-inline:var(--gutter);padding-bottom:.5rem;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+  .cards--3::-webkit-scrollbar{display:none}
+  .cards--3>.card{flex:0 0 min(78vw,19.5rem);scroll-snap-align:start;scroll-margin-inline:var(--gutter);padding:var(--space-5);gap:var(--space-3)}
+  .cards--3>.card:hover{transform:none}
+  .cards:not(.cards--3)>.card{padding:var(--space-5)}
+  .card__tag{font-size:.6875rem;letter-spacing:.16em}
+  .tag{font-size:.6875rem;padding:.3rem .6rem}
+
+  /* ---- Numbered feature list: hanging numeral, text aligned in one column ---- */
+  .feature-list li{grid-template-columns:2.75rem 1fr;gap:var(--space-2) var(--space-4);padding:var(--space-5) 0}
+  .feature-list li>div{grid-column:2}
+  .feature-list li>p{grid-column:2}
+  .feature-list .num{font-size:1rem;padding-top:.25rem}
+  .feature-list h3{font-size:var(--text-xl)}
+
+  /* ---- Stats: 2 × 2, tabular ---- */
+  .stats{grid-template-columns:repeat(2,1fr);gap:var(--space-6) var(--space-5);padding-top:var(--space-6)}
+  .stat__num{font-size:2.25rem}
+  .stat__label{font-size:.8125rem;margin-top:var(--space-2);line-height:1.4}
+
+  /* ---- Podcast episodes: date drops under the title as meta ---- */
+  .episodes li{grid-template-columns:2.25rem 1fr;row-gap:.2rem;column-gap:var(--space-3);align-items:start;padding:var(--space-4) 0}
+  .episodes .num{min-width:0;font-size:1rem;padding-top:.15rem}
+  .episodes .ttl{line-height:1.4}
+  .episodes .date{grid-column:2;font-size:.6875rem;letter-spacing:.14em;text-transform:uppercase}
+  .platforms{gap:.5rem}
+  .platforms a{padding:.6rem .9rem;font-size:.8125rem}
+
+  /* ---- Timeline: slim hanging year ---- */
+  .timeline li{grid-template-columns:3.5rem 1fr;gap:var(--space-4);padding:var(--space-5) 0}
+  .timeline .yr{font-size:1rem;padding-top:.2rem}
+  .timeline h3{font-size:var(--text-xl)}
+
+  /* ---- Accordion ---- */
+  .accordion summary{font-size:1.1875rem;padding:var(--space-4) 0;gap:var(--space-3)}
+  .accordion .body{padding-bottom:var(--space-4)}
+
+  /* ---- Quote ---- */
+  .quote{padding-left:var(--space-5)}
+
+  /* ---- Galleries ----
+     Photo tiles: clean 2-up grid, 4:5 portraits and 8:5 wides, tight 8px gutter.
+     Typographic tiles: on phones they would become empty coloured slabs, so all
+     but the gold "Express : Your : Self" tile become slim hairline label bands
+     (label left, statement right), and the photos lead. */
+  .gallery{gap:.5rem}
+  .gallery .tile--type{padding:var(--space-4);font-size:1.125rem}
+  .gallery .tile--type small{font-size:.625rem;letter-spacing:.16em}
+  .gallery:not([data-lightbox]) a.tile--wide{order:1}
+  .gallery:not([data-lightbox]) .tile--gold:first-child{order:2}
+  .gallery:not([data-lightbox]) a:not(.tile--wide){order:3}
+  .gallery:not([data-lightbox]) .tile--type:not(:first-child){order:4;grid-column:1/-1;aspect-ratio:auto;
+    display:grid;grid-template-columns:5.5rem 1fr;align-items:baseline;column-gap:var(--space-4);
+    padding:.85rem 0 .4rem;background:transparent;color:var(--text);border:0;border-top:1px solid var(--line);font-size:1.0625rem;line-height:1.3;letter-spacing:-.01em}
+  .gallery:not([data-lightbox]) .tile--type:not(:first-child) small{margin:0;color:var(--accent-text)}
+  .gallery:not([data-lightbox]) .tile--type:not(:first-child) br{display:none}
+  .gallery:not([data-lightbox]) .tile--type:last-child{border-bottom:1px solid var(--line);padding-bottom:.85rem}
+  .gallery--video{gap:.5rem .5rem}
+
+  /* ---- Press logos: a quiet flowing list ---- */
+  .logo-row{justify-content:flex-start;gap:.5rem 1.4rem;padding-block:var(--space-5)}
+  .logo-row span{font-size:1.0625rem}
+
+  /* ---- Page hero (sub-pages) ---- */
+  .page-hero{padding-top:calc(var(--header-h) + var(--space-8));padding-bottom:var(--space-7)}
+  .page-hero h1{max-width:12ch}
+  .page-hero .lead{margin-top:var(--space-4)}
+  .page-hero--split{gap:var(--space-7)}
+  .page-hero .figure img{width:100%}
+  .page-hero .btn-row.mt-7{margin-top:var(--space-6)}
+
+  /* ---- Form: 16px inputs (no iOS zoom), 48px hit areas, quiet labels ---- */
+  .form{gap:var(--space-5)}
+  .form__row{gap:var(--space-5)}
+  .field{gap:.4rem}
+  .field label{font-size:.6875rem;letter-spacing:.14em;font-weight:600;color:var(--text-2)}
+  .field input:not([type=checkbox]):not([type=radio]),.field select,.field textarea{font-size:max(1rem,16px);min-height:3rem;padding:.7rem .95rem;border-radius:var(--radius-sm)}
+  .field textarea{min-height:8rem}
+  .field .hint{font-size:.8125rem;margin-top:.1rem}
+  .field .radio{font-size:1rem}
+  .field--check{margin-top:var(--space-2)}
+  .field--check label{font-size:.9375rem;color:var(--text);letter-spacing:0;font-weight:400;text-transform:none}
+  .field--check input{width:1.125rem;height:1.125rem;min-height:0;padding:0;margin-top:.2rem}
+  .field__legend{font-size:.6875rem;letter-spacing:.14em;color:var(--text-2)}
+  .field .hint{margin-bottom:.25rem}
+  .form .btn-row{margin-top:var(--space-2)}
+  .form .btn-row .btn{width:100%}
+  .contact-aside{gap:var(--space-5)}
+
+  /* ---- CTA band ---- */
+  .cta-band h2{font-size:clamp(2.75rem,13vw,3.5rem);max-width:none}
+  .cta-band .btn-row{margin-top:var(--space-6);flex-direction:column;align-items:stretch}
+
+  /* ---- Footer: one calm stack, pages and ventures side by side ---- */
+  .site-footer{padding-top:var(--space-7)}
+  .site-footer .container{gap:var(--space-6)}
+  .site-footer .cols{display:grid;grid-template-columns:1fr 1fr;gap:var(--space-6) var(--space-5)}
+  .site-footer .cols>div:first-child,.site-footer .cols>div:last-child{grid-column:1/-1}
+  .site-footer .cols>div:first-child{padding-bottom:var(--space-5);border-bottom:1px solid var(--ink-800)}
+  .site-footer h4{margin-bottom:var(--space-3);font-size:.6875rem;letter-spacing:.18em}
+  .site-footer ul{gap:.55rem}
+  .site-footer .brand{font-size:1.5rem}
+  .site-footer .legal{flex-direction:column;gap:.4rem;font-size:.75rem;letter-spacing:.02em}
+}
+
+/* ---- Full-screen menu (≤ 900px): hairline list, Fraunces at a size that never wraps ---- */
+@media (max-width:900px){
+  .site-nav{justify-content:flex-start;padding:calc(var(--header-h) + var(--space-5) + var(--safe-t)) max(var(--gutter),var(--safe-l)) calc(var(--space-6) + var(--safe-b)) max(var(--gutter),var(--safe-r))}
+  .site-nav::before{content:"";position:absolute;inset:0;pointer-events:none;opacity:.045;mix-blend-mode:overlay;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")}
+  .site-nav ul{width:100%;gap:0;counter-reset:nav;border-top:1px solid rgb(245 239 230 / .14)}
+  .site-nav li{border-bottom:1px solid rgb(245 239 230 / .14)}
+  .site-nav ul a{display:flex;align-items:baseline;gap:1rem;width:100%;padding:1.05rem 0;
+    font-family:var(--font-display);font-size:clamp(2rem,9.5vw,2.75rem);line-height:1;letter-spacing:-.025em;font-weight:400;font-variation-settings:"opsz" 72,"SOFT" 30}
+  .site-nav ul a::before{counter-increment:nav;content:"0" counter(nav);font-family:var(--font-body);font-size:.6875rem;letter-spacing:.16em;font-weight:600;color:var(--gold-400);min-width:1.5rem}
+  .site-nav ul a::after{display:none}
+  .site-nav ul a[aria-current="page"]{color:var(--gold-300)}
+  .site-nav .btn{width:100%;margin-top:var(--space-6);--h:3.25rem;font-size:.9375rem;letter-spacing:.1em}
+  .site-nav__meta{margin-top:auto;padding-top:var(--space-6);color:var(--ink-400);font-size:.6875rem;letter-spacing:.14em;text-transform:uppercase;line-height:1.6;max-width:none}
+}
