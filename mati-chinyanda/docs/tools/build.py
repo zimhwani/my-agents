@@ -3,8 +3,8 @@ Usage: python3 docs/tools/build.py   (run from mati-chinyanda/)
 Each fragment starts with a JSON front-matter block on the first line: {"path": "/speaking", "title": ..., "description": ..., "nav": "speaking", "og": "..."}"""
 import json, os, re, glob
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-SITE = "https://mati.com.au"
-EMAIL = "hello@mati.com.au"
+SITE = "https://www.matimc.com"
+EMAIL = "hello@matimc.com"
 
 NAV = [("speaking", "/speaking", "Speaking"), ("podcast", "/podcast", "Podcast"),
        ("freeka", "/freeka-runway", "FreekÀ Runway"), ("about", "/about", "About")]
@@ -104,7 +104,7 @@ def footer(p):
     </div>
   </div>
 </footer>
-<script src="/assets/js/main.js?v=3" defer></script>
+<script src="/assets/js/main.js?v=5" defer></script>
 </body>
 </html>
 '''

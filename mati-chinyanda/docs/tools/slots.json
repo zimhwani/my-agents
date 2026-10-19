@@ -132,11 +132,6 @@
     "width": 1280,
     "q": 80
   },
-  "freeka-01": {
-    "src": "freeka-01.jpg",
-    "width": 1400,
-    "q": 82
-  },
   "freeka-02": {
     "src": "freeka-02.jpg",
     "width": 1400,
@@ -169,6 +164,31 @@
   },
   "freeka-08": {
     "src": "freeka-08.jpg",
+    "width": 1400,
+    "q": 84
+  },
+  "freeka-09": {
+    "src": "freeka-09.jpg",
+    "width": 1400,
+    "q": 84
+  },
+  "freeka-10": {
+    "src": "freeka-10.jpg",
+    "width": 1400,
+    "q": 84
+  },
+  "freeka-11": {
+    "src": "freeka-11.jpg",
+    "width": 1400,
+    "q": 84
+  },
+  "freeka-12": {
+    "src": "freeka-12.jpg",
+    "width": 1400,
+    "q": 84
+  },
+  "freeka-13": {
+    "src": "freeka-13.jpg",
     "width": 1400,
     "q": 84
   }

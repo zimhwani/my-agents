@@ -95,23 +95,24 @@
       const data = new FormData(form);
       // Honeypot
       if (data.get('_gotcha')) return;
-      if (!endpoint || endpoint.includes('YOUR_FORM_ID')) {
+      const useMail = () => {
         // No backend configured yet: fall back to a pre-filled email.
         const subject = encodeURIComponent('Booking enquiry: ' + (data.get('event_type') || 'Event') + ' — ' + data.get('name'));
         const body = encodeURIComponent([...data.entries()].filter(([k]) => !k.startsWith('_')).map(([k, v]) => k.replace(/_/g, ' ') + ': ' + v).join('\n'));
-        window.location.href = 'mailto:' + (form.dataset.mailto || 'hello@mati.com.au') + '?subject=' + subject + '&body=' + body;
+        window.location.href = 'mailto:' + (form.dataset.mailto || 'hello@matimc.com') + '?subject=' + subject + '&body=' + body;
         setStatus('Opening your email app with the details filled in.', 'ok');
-        return;
-      }
+      };
+      if (!endpoint) { useMail(); return; }
       btn.disabled = true; btn.classList.add('is-loading'); setStatus('Sending…', 'pending');
       try {
         const res = await fetch(endpoint, { method: 'POST', body: data, headers: { Accept: 'application/json' } });
+        if (res.status === 503) { useMail(); return; }   // email sending not configured yet
         if (!res.ok) throw new Error('Request failed');
         form.reset();
         form.classList.add('is-sent');
         setStatus('Thanks, got it. I will be in touch within two business days.', 'ok');
       } catch (err) {
-        setStatus('Something went wrong. Please email hello@mati.com.au directly.', 'error');
+        setStatus('Something went wrong. Please email hello@matimc.com directly.', 'error');
       } finally { btn.disabled = false; btn.classList.remove('is-loading'); }
     });
     // Pre-select event type from ?type=
@@ -121,20 +122,20 @@
   }
 
   /* Lightbox for gallery */
-  const gallery = d.querySelector('[data-lightbox]');
-  if (gallery) {
+  const galleries = d.querySelectorAll('[data-lightbox]');
+  if (galleries.length) {
     const lb = d.createElement('div'); lb.className = 'lightbox'; lb.setAttribute('role', 'dialog'); lb.setAttribute('aria-modal', 'true'); lb.hidden = true;
     lb.innerHTML = '<button class="lightbox__close" aria-label="Close">&times;</button><figure><img alt=""><figcaption></figcaption></figure>';
     d.body.appendChild(lb);
     const img = lb.querySelector('img'), cap = lb.querySelector('figcaption');
     let last = null;
     const close = () => { lb.hidden = true; root.classList.remove('nav-open'); last && last.focus(); };
-    gallery.addEventListener('click', e => {
+    galleries.forEach(gallery => gallery.addEventListener('click', e => {
       const a = e.target.closest('a[data-full]'); if (!a) return;
       e.preventDefault(); last = a;
       img.src = a.dataset.full; img.alt = a.querySelector('img')?.alt || ''; cap.textContent = a.dataset.caption || '';
       lb.hidden = false; root.classList.add('nav-open'); lb.querySelector('button').focus();
-    });
+    }));
     lb.addEventListener('click', e => { if (e.target === lb || e.target.closest('.lightbox__close')) close(); });
     d.addEventListener('keydown', e => { if (e.key === 'Escape' && !lb.hidden) close(); });
   }

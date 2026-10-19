@@ -1,8 +1,8 @@
-# Mati — website (mati.com.au)
+# Mati — website (matimc.com)
 
 Premium, static personal-brand site (HTML + CSS + vanilla JS, no build step at deploy time) for
 Mati: speaker, MC & event host, co-host of *What Left The Group Chat*, founder of FreekÀ Runway.
-Branded simply as "Mati" for the mati.com.au domain; the surname appears only in the copyable bios and
+Branded simply as "Mati" for the matimc.com domain; the surname appears only in the copyable bios and
 search metadata. Written in Mati's first-person voice. Primary conversion: **book Mati**.
 
 ```
@@ -70,15 +70,15 @@ cd my-agents/mati-chinyanda && vercel link && vercel git connect && vercel --pro
 **Path B — GitHub Actions** (`.github/workflows/mati-deploy.yml`): add repo secrets `VERCEL_TOKEN`,
 `VERCEL_ORG_ID` (and after first deploy `VERCEL_PROJECT_ID_MATI`). Until then the workflow no-ops.
 
-The site is already configured for `https://mati.com.au` (canonical + OG URLs, robots, sitemap). After the
+The site is already configured for `https://matimc.com` (canonical + OG URLs, robots, sitemap). After the
 first deploy, add the domain in Vercel → Project → Domains and point DNS at Vercel.
 
 ## Before going public — things only Mati can supply
 
 | Item | Where it plugs in |
 |---|---|
-| Booking email (site uses `hello@mati.com.au` until the domain's mail is set up) | `EMAIL` in `docs/tools/build.py` |
-| Form backend: create a Formspree form and replace `YOUR_FORM_ID` in `01-home.html` and `06-book.html`. Until then the form opens a pre-filled email. | page fragments |
+| Booking email (site uses `hello@matimc.com` until the domain's mail is set up) | `EMAIL` in `docs/tools/build.py` |
+| Email sending: the form posts to `/api/enquiry` (Vercel function using Resend). Add `RESEND_API_KEY` and `ENQUIRY_TO` in Vercel → Settings → Environment Variables and verify `matimc.com` in Resend. Until then the form falls back to a pre-filled email. | `api/enquiry.js` |
 | Confirm **FashionOne** wording (no public record found; included per client brief) | `05-about.html`, marquee on home, footer |
 | Testimonials from organisers/designers (none published online; section intentionally omitted rather than invented) | add a `.quote` block on home + speaking |
 | Client / venue logos for the marquee (currently ventures & recognitions) | `01-home.html` marquee |
