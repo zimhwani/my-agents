@@ -46,9 +46,9 @@ python3 docs/tools/images.py         # resizes into assets/img/*.webp
 python3 docs/tools/build.py          # pages pick the photos up automatically ({{ifimg}} slots)
 ```
 
-For FreekÀ Runway, run `python3 docs/tools/fetch-freeka.py` first: it pulls the show photos from the
-Salt Magazine article on FreekÀ Runway 2016 for MSFW into `assets/img/raw/freeka-01.jpg` … `freeka-08.jpg`
-(confirm permission with Salt Magazine / the photographer before launch). Or drop your own photos in under
+For FreekÀ Runway, run `python3 docs/tools/fetch-freeka.py [article-url]`: it pulls the show photos from a
+press article (default: The Age, 29 Aug 2016; Salt Magazine also works) into `assets/img/raw/freeka-NN.jpg`,
+numbering after any already there (confirm permission with the publisher / photographer before launch). Or drop your own photos in under
 those names. Until then those slots show typographic tiles.
 
 ## Deploy to Vercel
