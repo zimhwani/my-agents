@@ -35,9 +35,12 @@ enum Route: Hashable {
 /// Also makes room for the tab bar under the tab's root and every screen pushed onto it (`tabBarRoom`),
 /// and puts paper behind the status bar on the root, which has no header of its own.
 struct RouteDestinations: ViewModifier {
+    @Environment(AppState.self) private var app
+
     func body(content: Content) -> some View {
         content
             .tabBarRoom()
+            .onAppear { app.tabRootAppeared() }
             .safeAreaInset(edge: .top, spacing: 0) {
                 // With the system bar hidden, a scrolled root ran its text into the clock. A zero-height
                 // inset sits just under the status bar; its paper reaches up behind it. (An overlay

@@ -164,12 +164,17 @@ final class AppState {
     var selectedProTab: ProTab = .today
     /// A day another pro tab asked Calendar to open on (a cell in Today's strip). Calendar takes it and clears it.
     var calendarDay: Date? = nil
-    /// Screens that want the tab bar out of the way (a pro's profile, a chat). A count, not a flag,
-    /// so a chat pushed on top of a profile can't bring the bar back when either one leaves.
-    private(set) var tabBarHiders = 0
-    var hidesTabBar: Bool { tabBarHiders > 0 }
-    func hideTabBar() { tabBarHiders += 1 }
-    func showTabBar() { tabBarHiders = max(0, tabBarHiders - 1) }
+    /// Screens that want the tab bar out of the way (a pro's profile, a chat), by name, so a chat
+    /// pushed on top of a profile can't bring the bar back when either one leaves. A set, not a
+    /// count: iOS 26 can call a screen's onAppear twice for one visit, which left a count above
+    /// zero and the bar gone for good (no way out of Inbox).
+    private(set) var tabBarHiders: Set<String> = []
+    var hidesTabBar: Bool { !tabBarHiders.isEmpty }
+    func hideTabBar(_ who: String) { tabBarHiders.insert(who) }
+    func showTabBar(_ who: String) { tabBarHiders.remove(who) }
+    /// A tab's own screen is showing, so nothing is pushed over it: the bar comes back whatever
+    /// happened on the way (a missed onDisappear included).
+    func tabRootAppeared() { if !tabBarHiders.isEmpty { tabBarHiders = [] } }
 
     /// Where each tab's stack is, kept here rather than in the tab, so switching sides and back
     /// lands her on the screen she left (the shells are rebuilt on every switch).

@@ -252,6 +252,10 @@ extension View {
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
             isUp.wrappedValue = false
         }
+        // Belt and braces: a missed will-hide (a swipe back mid-type) mustn't leave the bar gone.
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardDidHideNotification)) { _ in
+            isUp.wrappedValue = false
+        }
     }
 }
 

@@ -147,11 +147,11 @@ struct ThreadView: View {
         .animation(Motion.gentle, value: app.isOffline)
         .onAppear {
             app.markRead(thread)
-            app.hideTabBar()
+            app.hideTabBar("thread")
             app.openThreadID = thread.id
         }
         .onDisappear {
-            app.showTabBar()
+            app.showTabBar("thread")
             if app.openThreadID == thread.id { app.openThreadID = nil }
         }
         .onChange(of: thread.messages.count) { _, _ in app.markRead(thread) }

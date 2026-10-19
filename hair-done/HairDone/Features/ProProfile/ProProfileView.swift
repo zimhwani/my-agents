@@ -93,8 +93,8 @@ struct ProProfileView: View {
         .paperBackground()
         .safeAreaInset(edge: .bottom, spacing: 0) { bottomBar }
         .toolbar(.hidden, for: .navigationBar)
-        .onAppear { app.hideTabBar() }
-        .onDisappear { app.showTabBar() }
+        .onAppear { app.hideTabBar("pro-profile") }
+        .onDisappear { app.showTabBar("pro-profile") }
         // A card from a list has no reviews; her full profile comes in when it's opened.
         .task { if app.isLive { await app.loadProDetail(pro.id) } }
         .fullScreenCover(item: $viewing) { item in

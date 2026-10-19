@@ -88,6 +88,32 @@ final class ScreenTour: XCTestCase {
         XCTAssertTrue(flipped || asked, "ROOT: Taking bookings didn't respond")
     }
 
+    /// Inbox > a chat > type a message > back: the tab bar comes back, so she can leave Inbox.
+    func testTabBarAfterChat() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-hdDemo", "client", "-hdTab", "inbox", "-push.asked.client", "YES", "-push.asked.pro", "YES"]
+        app.launch()
+        _ = app.buttons["Home"].waitForExistence(timeout: 20)
+        sleep(3)
+        let thread = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] 'Kiara' OR label CONTAINS[c] 'Mei' OR label CONTAINS[c] 'Priya'")).firstMatch
+        guard thread.waitForExistence(timeout: 10) else { XCTFail("CHAT: no thread to open"); return }
+        thread.tap()
+        sleep(2)
+        let field = app.textFields.firstMatch.exists ? app.textFields.firstMatch : app.textViews.firstMatch
+        if field.waitForExistence(timeout: 5) {
+            field.tap()
+            field.typeText("See you then")
+            sleep(1)
+        }
+        XCTAssertFalse(app.buttons["Home"].isHittable, "CHAT: tab bar should step aside in a chat")
+        let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.01, dy: 0.5))
+        start.press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.85, dy: 0.5)))
+        sleep(3)
+        let back = app.buttons["Home"].waitForExistence(timeout: 5) && app.buttons["Home"].isHittable
+        shoot("chat-back-tabbar-\(back ? "shown" : "missing")")
+        XCTAssertTrue(back, "CHAT: tab bar didn't come back after leaving a chat")
+    }
+
     /// With the system bar hidden, a swipe from the left edge still goes back.
     func testSwipeBack() {
         let app = openProfileEdit(viaTravelRow: false, extra: [])
