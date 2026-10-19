@@ -126,8 +126,31 @@ mode, Stripe's onboarding accepts its test data: phone `000 000 0000`, code `000
 
 Then repeat with a late cancel and a request left unanswered, to see the timers work.
 
+## 6b. Sample pros for testers
+
+Ten sample pros (Amara, Lucia, Priya, Jess, Mei, Zara, Hannah, Nia, Sofia, Grace) are in the live
+database for TestFlight, flagged `pros.is_sample` (migration 0015, function `seed-samples`). They
+have real photos, services and hours across Melbourne, and travel 40 km.
+
+- A job runs every minute: it accepts any request to a sample pro once the card's in, and answers
+  a tester's message with a line saying it's a sample.
+- Bookings with them are charged to your Stripe account alone (no payout, no fee), and only in test
+  mode. In live mode they can't be charged at all.
+- Testers pay with Stripe's test card: 4242 4242 4242 4242, any future expiry, any CVC. A real card
+  is declined in test mode.
+- To add them back after removing (harmless if they're there), run in the SQL editor:
+  ```sql
+  select net.http_post(url := 'https://yohqeunmgrxyakviofua.supabase.co/functions/v1/seed-samples',
+    headers := jsonb_build_object('content-type', 'application/json',
+      'x-cron-secret', (select value from private.settings where key = 'cron_secret')),
+    body := '{}'::jsonb, timeout_milliseconds := 120000);
+  ```
+  With `body := '{"action":"remove"}'::jsonb` it removes them all: accounts, profiles, services,
+  hours and photos. Bookings already made keep their history.
+
 ## 7. Before real money
 
+- Remove the sample pros (6b), and stop their job: `select cron.unschedule('hairdone-sample-autopilot');`
 - Switch Stripe to live mode. Repeat steps 1.2 and 1.3 with the live keys and live webhook secrets.
 - Email codes through Resend on your own domain (step 3), so they reach everyone.
 - Twilio live sender approved for Australia, if you keep phone sign-in.

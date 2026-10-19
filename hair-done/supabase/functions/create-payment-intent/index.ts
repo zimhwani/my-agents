@@ -7,7 +7,7 @@
 // Further out: a SetupIntent (card saved, no hold); the settle function places the hold 6 days before.
 import {
   stripe, stripeKey, admin, userClient, json, notConfigured, applicationFee, bookingTotal,
-  customerFor, rememberCard, HOLD_LEAD_MS, type Booking,
+  customerFor, rememberCard, HOLD_LEAD_MS, payeeFor, routing, type Booking,
 } from "../_shared/stripe.ts";
 
 Deno.serve(async (req) => {
@@ -23,8 +23,8 @@ Deno.serve(async (req) => {
   if (action === "confirm") return confirm(b, user.id);
 
   if (b.status !== "requested" || b.hold_state !== "none") return json({ error: "already_paid" }, 409);
-  const { data: pro } = await admin.from("pros").select("stripe_account_id, payouts_connected").eq("id", b.pro_id).single();
-  if (!pro?.stripe_account_id || !pro.payouts_connected) return json({ error: "pro_payouts_not_set_up" }, 409);
+  const payee = await payeeFor(b.pro_id);
+  if (!payee.ok) return json({ error: "pro_payouts_not_set_up" }, 409);
 
   const customer = await customerFor(user.id);
   const ephemeralKey = await stripe.ephemeralKeys.create({ customer }, { apiVersion: "2024-06-20" });
@@ -45,8 +45,7 @@ Deno.serve(async (req) => {
     capture_method: "manual",
     setup_future_usage: "off_session",          // so a tip, or a charge after a late cancel, needs no second tap
     automatic_payment_methods: { enabled: true },
-    application_fee_amount: applicationFee(b, amount),
-    transfer_data: { destination: pro.stripe_account_id },
+    ...routing(payee.account, applicationFee(b, amount)),
     description: `Hair Done ${b.reference}`,
     statement_descriptor_suffix: "HAIR DONE",
     metadata,

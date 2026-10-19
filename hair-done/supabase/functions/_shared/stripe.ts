@@ -56,6 +56,27 @@ export function applicationFee(b: Booking, charged: number) {
   return Math.round(charged * PLATFORM_RATE);
 }
 
+/** Test keys only. Sample pros (seeded for TestFlight, `pros.is_sample`) can be booked only then. */
+export const isTestMode = /^(sk|rk)_test_/.test(stripeKey);
+
+/** Where a booking's money goes. A real pro: her connected account, once payouts are on. A sample
+ *  pro has no Stripe account; in test mode her bookings are charged to us alone (no transfer, no
+ *  fee), and in live mode they can't be charged at all. */
+export async function payeeFor(proId: string | null): Promise<{ account: string | null; ok: boolean }> {
+  const { data: pro } = await admin.from("pros").select("stripe_account_id, payouts_connected, is_sample")
+    .eq("id", proId ?? "").maybeSingle();
+  if (pro?.is_sample) return { account: null, ok: isTestMode };
+  return { account: pro?.stripe_account_id ?? null, ok: !!pro?.stripe_account_id && !!pro?.payouts_connected };
+}
+
+/** A PaymentIntent's routing: our fee and the pro's account, or nothing when there's no account. */
+export const routing = (account: string | null, fee: number) =>
+  account ? { application_fee_amount: fee, transfer_data: { destination: account } } : {};
+
+/** A capture's fee: only a charge routed to a pro takes one. */
+export const captureFee = (account: string | null, fee: number) =>
+  account ? { application_fee_amount: fee } : {};
+
 export async function customerFor(profileId: string): Promise<string> {
   const { data: contact } = await admin.from("profile_contacts")
     .select("stripe_customer_id, email, phone").eq("profile_id", profileId).maybeSingle();

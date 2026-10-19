@@ -6,7 +6,7 @@
 //   4. Auto-capture 12 hours after done, unless paused.
 // Every step is idempotent, so a missed or doubled run is harmless.
 import {
-  stripe, stripeKey, admin, json, notConfigured, applicationFee, bookingTotal, systemLine, HOLD_LEAD_MS, type Booking,
+  stripe, stripeKey, admin, json, notConfigured, applicationFee, bookingTotal, systemLine, HOLD_LEAD_MS, type Booking, payeeFor, routing, captureFee,
 } from "../_shared/stripe.ts";
 
 Deno.serve(async (req) => {
@@ -23,14 +23,14 @@ Deno.serve(async (req) => {
     .in("status", ["requested", "confirmed"]).eq("hold_state", "saved").lte("starts_at", iso(now + HOLD_LEAD_MS));
   for (const b of (due ?? []) as Booking[]) {
     try {
-      const { data: pro } = await admin.from("pros").select("stripe_account_id").eq("id", b.pro_id).single();
+      const payee = await payeeFor(b.pro_id);
+      if (!payee.ok) throw new Error("pro_payouts_not_set_up");
       const { data: contact } = await admin.from("profile_contacts").select("stripe_customer_id").eq("profile_id", b.client_id).single();
       const amount = bookingTotal(b);
       const pi = await stripe.paymentIntents.create({
         amount, currency: "aud", customer: contact!.stripe_customer_id!, payment_method: b.stripe_payment_method!,
         capture_method: "manual", off_session: true, confirm: true,
-        application_fee_amount: applicationFee(b, amount),
-        transfer_data: { destination: pro!.stripe_account_id! },
+        ...routing(payee.account, applicationFee(b, amount)),
         description: `Hair Done ${b.reference}`, statement_descriptor_suffix: "HAIR DONE",
         metadata: { booking_id: b.id, reference: b.reference, kind: "booking" },
       }, { idempotencyKey: `hold-${b.id}` });
@@ -68,18 +68,18 @@ Deno.serve(async (req) => {
   for (const b of (toCharge ?? []) as Booking[]) {
     const charge = b.cancellation_charge_cents;
     try {
+      const payee = await payeeFor(b.pro_id);
       if (b.hold_state === "held" && b.stripe_payment_intent_id) {
         await stripe.paymentIntents.capture(b.stripe_payment_intent_id,
-          { amount_to_capture: charge, application_fee_amount: applicationFee(b, charge) },
+          { amount_to_capture: charge, ...captureFee(payee.account, applicationFee(b, charge)) },
           { idempotencyKey: `charge-${b.id}` });
       } else {
         // Card saved but no hold yet (booked more than 6 days out): charge it now.
-        const { data: pro } = await admin.from("pros").select("stripe_account_id").eq("id", b.pro_id).single();
+        if (!payee.ok) throw new Error("pro_payouts_not_set_up");
         const { data: contact } = await admin.from("profile_contacts").select("stripe_customer_id").eq("profile_id", b.client_id).single();
         await stripe.paymentIntents.create({
           amount: charge, currency: "aud", customer: contact!.stripe_customer_id!, payment_method: b.stripe_payment_method!,
-          off_session: true, confirm: true, application_fee_amount: applicationFee(b, charge),
-          transfer_data: { destination: pro!.stripe_account_id! },
+          off_session: true, confirm: true, ...routing(payee.account, applicationFee(b, charge)),
           description: `Hair Done ${b.reference} cancellation`,
           metadata: { booking_id: b.id, kind: "cancellation" },
         }, { idempotencyKey: `charge-${b.id}` });
@@ -99,9 +99,10 @@ Deno.serve(async (req) => {
   for (const b of (toCapture ?? []) as Booking[]) {
     try {
       const amount = bookingTotal(b);
+      const payee = await payeeFor(b.pro_id);
       const pi = await stripe.paymentIntents.retrieve(b.stripe_payment_intent_id!);
       if (pi.status === "requires_capture") {
-        await stripe.paymentIntents.capture(pi.id, { amount_to_capture: amount, application_fee_amount: applicationFee(b, amount) },
+        await stripe.paymentIntents.capture(pi.id, { amount_to_capture: amount, ...captureFee(payee.account, applicationFee(b, amount)) },
                                             { idempotencyKey: `capture-${b.id}` });
       }
       await admin.from("bookings").update({ hold_state: "captured", captured_at: iso(now), settle_error: null }).eq("id", b.id);

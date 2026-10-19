@@ -2,7 +2,7 @@
 // Captures the hold for the booking total, charges any tip as its own payment (100% to the pro,
 // no fee), then marks the booking paid. Idempotent: a second tap does nothing new.
 import {
-  stripe, stripeKey, admin, userClient, json, notConfigured, applicationFee, bookingTotal, systemLine, type Booking,
+  stripe, stripeKey, admin, userClient, json, notConfigured, applicationFee, bookingTotal, systemLine, type Booking, payeeFor, captureFee,
 } from "../_shared/stripe.ts";
 
 Deno.serve(async (req) => {
@@ -19,9 +19,10 @@ Deno.serve(async (req) => {
   if (b.status !== "done" || b.hold_state !== "held" || !b.stripe_payment_intent_id) return json({ error: "not_ready" }, 409);
 
   const amount = bookingTotal(b);
+  const payee = await payeeFor(b.pro_id);
   const pi = await stripe.paymentIntents.retrieve(b.stripe_payment_intent_id);
   if (pi.status === "requires_capture") {
-    await stripe.paymentIntents.capture(pi.id, { amount_to_capture: amount, application_fee_amount: applicationFee(b, amount) },
+    await stripe.paymentIntents.capture(pi.id, { amount_to_capture: amount, ...captureFee(payee.account, applicationFee(b, amount)) },
                                         { idempotencyKey: `capture-${b.id}` });
   } else if (pi.status !== "succeeded") {
     return json({ error: "hold_lapsed", stripe_status: pi.status }, 409);
@@ -30,12 +31,11 @@ Deno.serve(async (req) => {
 
   let tipIntent: string | null = null;
   if (tip > 0 && b.stripe_payment_method && typeof pi.customer === "string") {
-    const { data: pro } = await admin.from("pros").select("stripe_account_id").eq("id", b.pro_id).single();
     try {
       const t = await stripe.paymentIntents.create({
         amount: tip, currency: "aud", customer: pi.customer, payment_method: b.stripe_payment_method,
         off_session: true, confirm: true,
-        transfer_data: pro?.stripe_account_id ? { destination: pro.stripe_account_id } : undefined,
+        transfer_data: payee.account ? { destination: payee.account } : undefined,
         description: `Hair Done ${b.reference} tip`,
         metadata: { booking_id: b.id, kind: "tip" },
       }, { idempotencyKey: `tip-${b.id}-${tip}` });
