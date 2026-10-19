@@ -24,15 +24,19 @@
     d.addEventListener('keydown', e => { if (e.key === 'Escape') setOpen(false); });
   }
 
-  /* Reveal on scroll */
-  const revealEls = d.querySelectorAll('[data-reveal]');
+  /* Reveal on scroll (both single blocks and staggered groups) */
+  const revealEls = d.querySelectorAll('[data-reveal], [data-reveal-stagger]');
+  const showAll = () => revealEls.forEach(el => el.classList.add('is-visible'));
   if (reduce || !('IntersectionObserver' in window)) {
-    revealEls.forEach(el => el.classList.add('is-visible'));
+    showAll();
   } else {
     const io = new IntersectionObserver((entries) => {
       entries.forEach(en => { if (en.isIntersecting) { en.target.classList.add('is-visible'); io.unobserve(en.target); } });
-    }, { rootMargin: '0px 0px -10% 0px', threshold: 0.12 });
+    }, { rootMargin: '0px 0px -8% 0px', threshold: 0 });
     revealEls.forEach(el => io.observe(el));
+    // Safety net: nothing stays hidden if the observer never fires (print, odd browsers, anchors).
+    setTimeout(showAll, 4000);
+    window.addEventListener('beforeprint', showAll);
   }
 
   /* Marquee: duplicate track for seamless loop */
