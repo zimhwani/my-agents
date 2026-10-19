@@ -4,6 +4,7 @@
 import {
   stripe, stripeKey, admin, userClient, json, notConfigured, applicationFee, bookingTotal, systemLine, type Booking, payeeFor, captureFee,
 } from "../_shared/stripe.ts";
+import { receiptAfterPaid } from "../_shared/receipt.ts";
 
 Deno.serve(async (req) => {
   if (req.method !== "POST") return json({ error: "method" }, 405);
@@ -50,5 +51,6 @@ Deno.serve(async (req) => {
 
   const { error } = await admin.rpc("move_booking", { b_id: b.id, new_status: "paid" });
   if (error && !/bad_transition/.test(error.message)) return json({ error: error.message }, 500);
+  await receiptAfterPaid(b.id);
   return json({ paid: true, tip_cents: tipIntent ? tip : 0 });
 });

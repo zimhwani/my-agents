@@ -72,20 +72,18 @@ extension Booking {
         return doneAt.adding(hours: Fees.autoCaptureHours)
     }
 
-    /// A plain-text receipt for sharing.
-    func receiptText(proName: String) -> String {
-        var lines: [String] = []
-        lines.append("Hair Done receipt \(reference)")
-        lines.append("\(proName), \(start.longDate) at \(start.clock)")
-        lines.append(address.full)
-        lines.append("")
-        for s in services { lines.append("\(s.name) (\(s.durationLabel))  \(Money.format(s.priceCents))") }
-        lines.append("Travel fee  \(Money.format(price.travelFeeCents))")
-        lines.append("Booking fee  \(Money.format(price.bookingFeeCents))")
-        if price.tipCents > 0 { lines.append("Tip  \(Money.format(price.tipCents))") }
-        lines.append("Total  \(Money.format(price.clientTotalCents))")
-        lines.append("")
-        lines.append("Paid in the app. Questions? Message us from Help.")
+    /// The plain-text receipt for Share: the same lines as the sheet and the email.
+    func receiptText(proName: String, proFirst: String, details: ReceiptDetails?) -> String {
+        let row = { (l: ReceiptLine) in "\(l.name)\(l.note.isEmpty ? "" : " (\(l.note))")  \(l.amount)" }
+        var lines = ["Hair Done receipt \(reference)", receiptTitle(proName: proName),
+                     "\(start.shortDay), \(start.clock)", address.full, ""]
+        lines.append("From \(proName)" + (details?.proABN.map { " · ABN \($0)" } ?? ""))
+        lines += receiptProLines(proFirst: proFirst).map(row)
+        lines += ["", "From Hair Done · ABN \(HairDoneBusiness.abn)"]
+        lines += receiptHairDoneLines.map(row)
+        lines += ["", "Total paid  \(Money.format(price.clientTotalCents, alwaysCents: true))"]
+        if let paid = details?.paidLine { lines.append(paid) }
+        lines += ["", Booking.receiptFooter(proFirst: proFirst)]
         return lines.joined(separator: "\n")
     }
 

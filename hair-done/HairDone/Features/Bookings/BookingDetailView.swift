@@ -14,6 +14,7 @@ struct BookingDetailView: View {
     @State private var showCancel = false
     @State private var showReview = false
     @State private var showPay = false
+    @State private var showReceipt = false
     @State private var cancelling = false
     @State private var cancelProblem: String? = nil
     @State private var confirmFlag = false
@@ -89,6 +90,9 @@ struct BookingDetailView: View {
         }
         .sheet(isPresented: $showPay) {
             PaySheet(booking: booking)
+        }
+        .sheet(isPresented: $showReceipt) {
+            ReceiptSheet(booking: booking)
         }
         .sheet(isPresented: $showCancel) {
             cancelSheet(booking, proName: proName)
@@ -472,12 +476,14 @@ struct BookingDetailView: View {
                         .simultaneousGesture(TapGesture().onEnded { Haptics.light() })
                 }
                 if booking.status == .paid {
-                    ShareLink(item: booking.receiptText(proName: proName), subject: Text("Hair Done receipt \(booking.reference)")) {
+                    Button {
+                        Haptics.light()
+                        showReceipt = true
+                    } label: {
                         Text("Get receipt").font(HDFont.subMedium).foregroundStyle(Palette.ink)
                             .frame(minHeight: 44)
                             .frame(maxWidth: .infinity)
                     }
-                    .simultaneousGesture(TapGesture().onEnded { Haptics.light() })
                 }
             }
         }

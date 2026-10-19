@@ -859,6 +859,12 @@ final class AppState {
 
     /// "Something wrong?" on a done booking. Holds off the charge while a person looks.
     @discardableResult
+    /// The server's half of a receipt (her ABN, the card, when). Nil if it can't be had right now;
+    /// the receipt shows the rest.
+    func receiptDetails(_ booking: Booking) async -> ReceiptDetails? {
+        try? await data.receiptDetails(bookingID: booking.id)
+    }
+
     func flag(_ booking: Booking, detail: String) async -> Bool {
         do {
             replace(try await data.flagBooking(bookingID: booking.id, detail: detail))

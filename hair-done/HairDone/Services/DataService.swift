@@ -55,6 +55,10 @@ protocol DataService: AnyObject {
     func pay(bookingID: String, tipCents: Int) async throws -> Booking
     /// "Something wrong?" on a done booking: holds off the charge while a person looks.
     func flagBooking(bookingID: String, detail: String) async throws -> Booking
+    /// The server's half of a paid booking's receipt: her ABN, the card, when it was paid.
+    func receiptDetails(bookingID: String) async throws -> ReceiptDetails
+    /// Emails the receipt to the client. Returns the address it went to.
+    func emailReceipt(bookingID: String) async throws -> String
 
     // Messaging
     func threads(userID: String) async throws -> [MessageThread]
@@ -142,6 +146,8 @@ enum DataError: LocalizedError {
     case idDocsMissing
     case uploadFailed
     case offline
+    case receiptNotSent
+    case receiptNoEmail
 
     var errorDescription: String? {
         switch self {
@@ -168,6 +174,8 @@ enum DataError: LocalizedError {
         case .idDocsMissing: return "Add your photo ID and a selfie first."
         case .uploadFailed: return "Didn't upload. Tap to try again."
         case .offline: return "You're offline. Try again when you're back."
+        case .receiptNotSent: return "We couldn't email it just now. Use Share instead, or try again later."
+        case .receiptNoEmail: return "Add your email in You, then try again."
         }
     }
 }

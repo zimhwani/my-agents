@@ -73,6 +73,12 @@ Never paste a secret key into a chat, an issue or the repo. They go straight int
   records it lists), and run the script again with the Resend key and an address on that domain. It
   sets a 6-digit code that lasts an hour, and the "Your Hair Done code" email.
 - An email account and a phone account are separate people for now. Sign in the same way each time.
+- **Receipts by email.** Once your domain is verified in Resend, add two secrets in Supabase → Edge
+  Functions → Secrets: `RESEND_API_KEY` (a Resend key) and `RECEIPT_FROM` (an address on that domain,
+  e.g. `receipts@hairdonenailsdone.app`). Clients then get a receipt email when a booking's paid, and the
+  receipt screen shows "Email it to me". Until then the receipt is in the app with Share only. Receipts say
+  "No GST included" and never "tax invoice"; if you register for GST, that copy changes (`_shared/receipt.ts`,
+  `Models/Receipt.swift`).
 
 ## 3b. Push notifications
 

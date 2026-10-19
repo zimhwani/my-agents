@@ -8,6 +8,7 @@
 import {
   stripe, stripeKey, admin, json, notConfigured, applicationFee, bookingTotal, systemLine, HOLD_LEAD_MS, type Booking, payeeFor, routing, captureFee,
 } from "../_shared/stripe.ts";
+import { receiptAfterPaid } from "../_shared/receipt.ts";
 
 Deno.serve(async (req) => {
   const { data: ok } = await admin.rpc("check_cron_secret", { s: req.headers.get("x-cron-secret") ?? "" });
@@ -107,6 +108,7 @@ Deno.serve(async (req) => {
       }
       await admin.from("bookings").update({ hold_state: "captured", captured_at: iso(now), settle_error: null }).eq("id", b.id);
       await admin.rpc("move_booking", { b_id: b.id, new_status: "paid" });
+      await receiptAfterPaid(b.id);
       done.captured++;
     } catch (e) {
       await admin.from("bookings").update({ settle_error: (e as Error).message }).eq("id", b.id);

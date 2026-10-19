@@ -268,6 +268,19 @@ final class MockDataService: DataService {
         return bookings[i]
     }
 
+    func receiptDetails(bookingID: String) async throws -> ReceiptDetails {
+        await pause(0.3)
+        guard let b = bookings.first(where: { $0.id == bookingID }) else { throw DataError.notFound }
+        let abn = pros.first(where: { $0.id == b.proID })?.abn
+        return ReceiptDetails(proABN: abn?.isEmpty == false ? abn : nil, card: "Visa •••• 4242",
+                              paidAt: b.events.last(where: { $0.status == .paid })?.at ?? b.end, canEmail: true)
+    }
+
+    func emailReceipt(bookingID: String) async throws -> String {
+        await pause(0.8)
+        return "you@example.com"
+    }
+
     func flagBooking(bookingID: String, detail: String) async throws -> Booking {
         await pause(0.5)
         guard let b = bookings.first(where: { $0.id == bookingID }) else { throw DataError.notFound }

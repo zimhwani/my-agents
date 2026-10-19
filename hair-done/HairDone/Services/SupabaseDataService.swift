@@ -804,6 +804,37 @@ final class SupabaseDataService: DataService {
         return paid
     }
 
+    private struct DBReceipt: Decodable {
+        let proAbn: String?
+        let card: String?
+        let paidAt: String?
+        let canEmail: Bool?
+        let sentTo: String?
+    }
+
+    private func receipt(_ bookingID: String, send: Bool) async throws -> DBReceipt {
+        do {
+            let data = try await callFunction("receipt", body: ["booking_id": bookingID, "send": send])
+            return try SupabaseJSON.decoder.decode(DBReceipt.self, from: data)
+        } catch let f as SupabaseFailure {
+            if f.status == 401 { throw DataError.notSignedIn }
+            if f.says("no_email") { throw DataError.receiptNoEmail }
+            if f.says("not_found") || f.says("not_paid") { throw DataError.notFound }
+            throw send ? DataError.receiptNotSent : DataError.server
+        }
+    }
+
+    func receiptDetails(bookingID: String) async throws -> ReceiptDetails {
+        let r = try await receipt(bookingID, send: false)
+        return ReceiptDetails(proABN: r.proAbn, card: r.card, paidAt: r.paidAt.flatMap(SupabaseJSON.date(from:)),
+                              canEmail: r.canEmail ?? false)
+    }
+
+    func emailReceipt(bookingID: String) async throws -> String {
+        guard let to = try await receipt(bookingID, send: true).sentTo else { throw DataError.receiptNotSent }
+        return to
+    }
+
     func submitReview(bookingID: String, rating: Int, text: String, tipCents: Int) async throws -> Booking {
         let id = try await me()
         guard var current = try await booking(id: bookingID) else { throw DataError.notFound }
