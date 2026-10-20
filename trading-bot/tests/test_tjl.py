@@ -297,3 +297,45 @@ def test_events_ring_keeps_scan_and_errors_not_gate_lines():
     finally:
         lg.removeHandler(ring)
     assert len(ring.lines) == 2 and "Gap scan" in ring.lines[0] and "rejected" in ring.lines[1]
+
+
+def test_gap_scan_drops_names_that_could_never_trade_and_screens_wider(settings):
+    from tradebot.marketdata import Gapper
+
+    def history():
+        return [Bar(clock.at(DAY - timedelta(days=220 - i), clock.MARKET_CLOSE), 0, 0, 0, 100 + i * 0.1, 1e6)
+                for i in range(220)]
+
+    asked = []
+
+    class Data:
+        def gappers(self, min_gap_pct, min_price, min_market_cap, limit=100):
+            asked.append(min_gap_pct)
+            return [Gapper("PRICY", 1386.0, 9.0, 5e9), Gapper("NODATA", 130.0, 8.0, 5e9),
+                    Gapper("FADED", 124.0, 2.0, 5e9), Gapper("OK", 130.0, 6.0, 5e9)]
+
+    class Broker:
+        data = Data()
+
+        def is_tradable(self, symbol):
+            return True
+
+        def net_liquidation(self):
+            return 3380.0
+
+        def daily_bars(self, symbol, days):
+            return history()
+
+        def intraday_bars(self, symbol, bar_minutes=5, days=5, include_premarket=False):
+            if symbol == "NODATA":
+                return []  # e.g. AGCC on Oct 19: nothing on the IEX feed
+            today = clock.now_et().date()
+            o = {"FADED": 126.5, "PRICY": 1386.0}.get(symbol, 130.0)  # FADED opened +3.8%, +2% by the scan
+            return [Bar(clock.at(today, clock.parse_hhmm("09:30")), o, o + 1, o - 1, o, 1e5)]
+
+    settings.max_watchlist = 8
+    settings.max_position_pct = 20.0
+    sc = GapScanner(Broker(), settings, 3.0, 3.0, 1e9, day_check=TrendJoinLong().day_check)
+    assert [c.symbol for c in sc.scan()] == ["OK", "FADED"]
+    assert asked == [1.5]  # screened at half the gap; the open-gap check decides
+    assert "1 too_expensive" in sc.summary and "1 no_bars" in sc.summary

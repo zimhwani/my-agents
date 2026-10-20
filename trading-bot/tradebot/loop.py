@@ -359,8 +359,9 @@ class TradingLoop:
                     self.day.trades_opened += 1
                     held.add(t.symbol)
             self._log_gates(now, gates)
-        elif blockers and self._last_status is None:
-            log.info("Entries blocked: %s", "; ".join(blockers))
+        if blockers and blockers != getattr(self, "_blockers_logged", None):
+            log.info("Entries blocked: %s", "; ".join(blockers))  # every change, not only before the first status
+        self._blockers_logged = list(blockers)
 
         # 4. periodic status
         if self._last_status is None or now - self._last_status >= timedelta(minutes=self.s.telegram_status_minutes):

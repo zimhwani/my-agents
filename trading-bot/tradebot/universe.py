@@ -112,7 +112,10 @@ class GapScanner:
         if fn is None:
             return []
         out = []
-        for g in fn(self.min_gap_pct, self.min_price, self.min_market_cap, limit=150):
+        # Yahoo screens on % change at scan time; a stock that opened +3.8% and faded to +2.5% by 09:36 is still
+        # a 3% open gap (what the strategy and the backtest use), so screen wider and let the prefilter decide
+        screen_pct = self.min_gap_pct / 2 if self.day_check is not None else self.min_gap_pct
+        for g in fn(screen_pct, self.min_price, self.min_market_cap, limit=150):
             if not self._tradable(g.symbol):
                 continue
             out.append(Candidate(symbol=g.symbol, price=g.price, avg_volume=0.0, avg_dollar_volume=0.0,
@@ -159,28 +162,56 @@ class GapScanner:
             return self._prefilter(found)
         return found[: self.s.max_watchlist]
 
+    NO_BARS = -1.0  # _today_open: the feed answered but has no regular-session bar today
+
     def _today_open(self, symbol: str, today) -> float | None:
         """Open of today's first regular-session bar: the strategy measures the gap from the open, not
-        from the price at scan time (a flat open that runs 3% by 09:36 is not a gap)."""
+        from the price at scan time (a flat open that runs 3% by 09:36 is not a gap). None if the bars
+        couldn't be fetched; NO_BARS if the feed has none (the live loop could never evaluate the name)."""
         try:
             bars = self.b.intraday_bars(symbol, 5, 2, include_premarket=True)
         except Exception as exc:
             log.debug("%s: no intraday bars at scan (%s)", symbol, exc)
             return None
         rth = [b for b in bars or [] if b.time.date() == today and clock.MARKET_OPEN <= b.time.time() < clock.MARKET_CLOSE]
-        return rth[0].open if rth else None
+        return rth[0].open if rth else self.NO_BARS
+
+    def _max_price(self) -> float | None:
+        """Most a single share may cost: sizing rounds to whole shares under the max-position cap, so a
+        name above this gets 0 shares and would only take a watchlist slot."""
+        try:
+            equity = float(self.b.net_liquidation())
+        except Exception:
+            return None
+        cap = float(getattr(self.s, "equity_cap_usd", 0) or 0)
+        if cap > 0:
+            equity = min(equity, cap)
+        pct = float(getattr(self.s, "max_position_pct", 0) or 0)
+        return equity * pct / 100.0 if equity > 0 and pct > 0 else None
 
     def _prefilter(self, found: list[Candidate]) -> list[Candidate]:
         """Keep gappers that pass the daily filter, biggest gap first, until the watchlist is full."""
         today = clock.now_et().date()
         kept: list[Candidate] = []
         why_not: Counter = Counter()
+        max_price = self._max_price()
         for c in found[: self.max_checked]:
             if len(kept) >= self.s.max_watchlist:
                 break
+            if max_price is not None and c.price > max_price:
+                c.rejected = "too_expensive"
+                why_not["too_expensive"] += 1
+                log.info("GAP %-6s dropped: too_expensive ($%.2f > $%.0f max position)", c.symbol, c.price, max_price)
+                continue
             try:
+                opened = self._today_open(c.symbol, today)
+                if opened == self.NO_BARS:
+                    c.rejected = "no_bars"
+                    why_not["no_bars"] += 1
+                    log.info("GAP %-6s dropped: no_bars (no regular-session bar on the data feed)", c.symbol)
+                    continue
                 prior = [d for d in self.b.daily_bars(c.symbol, 260) if d.time.date() < today]
-                why, detail = self.day_check(self._today_open(c.symbol, today) or c.price, prior)
+                why, detail = self.day_check(opened or c.price, prior)
             except Exception as exc:  # data hiccup: let the live loop decide on the symbol
                 log.warning("%s: daily filter check failed at scan (%s); keeping it", c.symbol, exc)
                 kept.append(c)
