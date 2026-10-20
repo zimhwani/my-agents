@@ -1,11 +1,11 @@
 {
-  "id": "2026-10-16d-tjl10-gold2y",
-  "env": ".env.gold",
-  "timeout_minutes": 300,
+  "id": "2026-10-20-tjl-live-vs-replay",
+  "env": ".env",
+  "timeout_minutes": 120,
   "steps": [
-    {"env": ".env", "args": ["backtest", "--data", "data/gappers90", "--equity", "3350", "--fee-bps", "5"]},
-    ["research", "--strategies", "strategies_cfd/gold_day_*.json", "strategies_cfd/gold_trend_4h.json",
-     "--fetch-days", "730", "--refetch", "--out", "data-gold/research_2y.md"]
+    ["fetch-gappers", "--days", "25", "--out", "data/gappers25", "--workers", "2"],
+    ["backtest", "--data", "data/gappers25", "--equity", "3380", "--fee-bps", "5", "--start", "2026-09-28"],
+    ["analyze"]
   ],
-  "publish": ["data-gold/research_2y.md", "data-gold/research_2y.json"]
+  "publish": ["data/backtest_trades.jsonl"]
 }
