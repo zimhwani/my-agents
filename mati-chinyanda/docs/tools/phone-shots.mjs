@@ -7,7 +7,7 @@ mkdirSync(out, { recursive: true });
 const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' }).catch(() => chromium.launch());
 const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
 const page = await ctx.newPage();
-for (const p of ['/', '/speaking', '/podcast', '/freeka-runway', '/about', '/book']) {
+for (const p of ['/', '/speaking', '/podcast', '/about', '/book']) {
   await page.goto(base + p, { waitUntil: 'networkidle' });
   await page.waitForTimeout(1800);
   const name = (p === '/' ? 'home' : p.slice(1)) + '-phone-fold.png';

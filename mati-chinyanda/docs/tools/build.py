@@ -7,7 +7,7 @@ SITE = "https://www.matimc.com"
 EMAIL = "hello@matimc.com"
 
 NAV = [("speaking", "/speaking", "Speaking"), ("podcast", "/podcast", "Podcast"),
-       ("freeka", "/freeka-runway", "FreekÀ Runway"), ("about", "/about", "About")]
+       ("about", "/about", "About")]
 
 ICONS = {
  "arrow": '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>',
@@ -87,15 +87,15 @@ def footer(p):
     <div class="cols">
       <div>
         <a class="brand" href="/">Mati<span class="brand__mark">.</span></a>
-        <p style="margin-top:1rem;max-width:36ch">Speaker, MC and event host. Co-host of <em>What Left The Group Chat</em>. Founder of FreekÀ Runway.</p>
+        <p style="margin-top:1rem;max-width:36ch">Speaker, MC and event host. Co-host of <em>What Left The Group Chat</em>.</p>
         <div class="social" style="margin-top:1.25rem">
           <a href="https://www.youtube.com/@Whatleftthegroupchat" aria-label="What Left The Group Chat on YouTube" rel="noopener" target="_blank">{ICONS["youtube"]}</a>
           <a href="https://www.tiktok.com/@what.left.the.gro" aria-label="What Left The Group Chat on TikTok" rel="noopener" target="_blank">{ICONS["tiktok"]}</a>
           <a href="https://podcasts.apple.com/au/podcast/what-left-the-group-chat/id1847614435" aria-label="What Left The Group Chat on Apple Podcasts" rel="noopener" target="_blank">{ICONS["apple"]}</a>
         </div>
       </div>
-      <div><h4>Pages</h4><ul><li><a href="/speaking">Speaking &amp; MC</a></li><li><a href="/podcast">Podcast</a></li><li><a href="/freeka-runway">FreekÀ Runway</a></li><li><a href="/about">About</a></li><li><a href="/book">Book Mati</a></li></ul></div>
-      <div><h4>Ventures</h4><ul><li><a href="/podcast">What Left The Group Chat</a></li><li><a href="/freeka-runway">FreekÀ Runway</a></li><li><a href="/about#story">FashionOne</a></li><li><a href="/about#story">L'entendre</a></li></ul></div>
+      <div><h4>Pages</h4><ul><li><a href="/speaking">Speaking &amp; MC</a></li><li><a href="/podcast">Podcast</a></li><li><a href="/about">About</a></li><li><a href="/book">Book Mati</a></li></ul></div>
+      <div><h4>Listen</h4><ul><li><a href="/podcast">What Left The Group Chat</a></li><li><a href="https://podcasts.apple.com/au/podcast/what-left-the-group-chat/id1847614435" rel="noopener" target="_blank">Apple Podcasts</a></li><li><a href="https://www.youtube.com/@Whatleftthegroupchat" rel="noopener" target="_blank">YouTube</a></li></ul></div>
       <div><h4>Connect</h4><ul><li><a href="mailto:{EMAIL}">{EMAIL}</a></li><li>Melbourne / Naarm, Australia</li><li>Available Australia-wide &amp; internationally</li></ul></div>
     </div>
     <div class="legal">
@@ -113,7 +113,7 @@ def relativise(html):
     """Rewrite root-absolute links to relative ones with .html extensions (artifact/file preview)."""
     html = re.sub(r'(href|src|srcset)="/assets/', r'\1="assets/', html)
     html = html.replace('href="/favicon.svg"', 'href="favicon.svg"')
-    html = re.sub(r'href="/(speaking|podcast|freeka-runway|about|book)(\?[^"]*)?(#[^"]*)?"', lambda m: f'href="{m.group(1)}.html{m.group(2) or ""}{m.group(3) or ""}"', html)
+    html = re.sub(r'href="/(speaking|podcast|about|book)(\?[^"]*)?(#[^"]*)?"', lambda m: f'href="{m.group(1)}.html{m.group(2) or ""}{m.group(3) or ""}"', html)
     html = re.sub(r'href="/(#[^"]*)?"', lambda m: f'href="index.html{m.group(1) or ""}"', html)
     return html
 

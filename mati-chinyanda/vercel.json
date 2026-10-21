@@ -34,5 +34,12 @@
         }
       ]
     }
+  ],
+  "redirects": [
+    {
+      "source": "/freeka-runway",
+      "destination": "/speaking",
+      "permanent": true
+    }
   ]
 }

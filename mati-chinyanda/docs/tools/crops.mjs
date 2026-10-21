@@ -8,7 +8,6 @@ const shots = [
   ['/', 'section', 'home-m', { width: 390, height: 844 }],
   ['/speaking', 'section', 'speaking', { width: 1440, height: 900 }],
   ['/podcast', 'section', 'podcast', { width: 1440, height: 900 }],
-  ['/freeka-runway', 'section', 'freeka', { width: 1440, height: 900 }],
   ['/about', 'section', 'about', { width: 1440, height: 900 }],
   ['/book', 'section', 'book', { width: 1440, height: 900 }],
 ];

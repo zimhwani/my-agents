@@ -4,7 +4,7 @@ import { chromium } from '/opt/node22/lib/node_modules/playwright/index.mjs';
 import { mkdirSync } from 'node:fs';
 const [base = 'http://localhost:8787', out = 'docs/qa'] = process.argv.slice(2);
 mkdirSync(out, { recursive: true });
-const pages = ['/', '/speaking', '/podcast', '/freeka-runway', '/about', '/book'];
+const pages = ['/', '/speaking', '/podcast', '/about', '/book'];
 const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' }).catch(() => chromium.launch());
 for (const [label, vp] of [['desktop', { width: 1440, height: 900 }], ['mobile', { width: 390, height: 844 }]]) {
   const ctx = await browser.newContext({ viewport: vp, deviceScaleFactor: 1 });

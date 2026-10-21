@@ -1,16 +1,13 @@
 # Mati — website (matimc.com)
 
 Premium, static personal-brand site (HTML + CSS + vanilla JS, no build step at deploy time) for
-Mati: speaker, MC & event host, co-host of *What Left The Group Chat*, founder of FreekÀ Runway.
-Branded simply as "Mati" for the matimc.com domain; the surname appears only in the copyable bios and
-search metadata. Written in Mati's first-person voice. Primary conversion: **book Mati**.
+Mati: speaker, MC & event host, co-host of *What Left The Group Chat*, founder of Branded simply as "Mati" for the matimc.com domain; the surname appears only in the copyable bios and
+search metadata. Written in Mati's first-person voice. Focus: speaking and MC work. Primary conversion: **book Mati**.
 
 ```
 mati-chinyanda/
-├── index.html            Home — hero, marquee, intro, pillars, talks, stats, podcast, FreekÀ, press, enquiry form
-├── speaking.html         Formats, signature talks (accordion), stages timeline, planner logistics
+├── index.html            Home — hero, marquee, intro, pillars, talks, stats, podcast, ├── speaking.html         Formats, signature talks (accordion), stages timeline, planner logistics
 ├── podcast.html          What Left The Group Chat — about, season-one episodes, platforms, guest enquiries
-├── freeka-runway.html    FreekÀ Runway story, values, gallery, event-production services
 ├── about.html            Story, values, timeline, bios in three lengths (copy buttons)
 ├── book.html             Enquiry form + FAQ
 ├── 404.html
@@ -35,7 +32,7 @@ python3 docs/tools/images.py           # (only if raw images changed; slots in d
 http-server -p 8787 . & node docs/tools/screenshot.mjs http://localhost:8787 docs/qa   # QA shots
 ```
 
-## Adding the podcast and runway photos (one command)
+## Adding the podcast photos (one command)
 
 This environment could not reach image hosts, so the photo slots are wired but empty. From any normal
 machine, inside `mati-chinyanda/`:
@@ -46,10 +43,6 @@ python3 docs/tools/images.py         # resizes into assets/img/*.webp
 python3 docs/tools/build.py          # pages pick the photos up automatically ({{ifimg}} slots)
 ```
 
-For FreekÀ Runway, run `python3 docs/tools/fetch-freeka.py [article-url]`: it pulls the show photos from a
-press article (default: The Age, 29 Aug 2016; Salt Magazine also works) into `assets/img/raw/freeka-NN.jpg`,
-numbering after any already there (confirm permission with the publisher / photographer before launch). Or drop your own photos in under
-those names. Until then those slots show typographic tiles.
 
 ## Deploy to Vercel
 
@@ -83,8 +76,7 @@ first deploy, add the domain in Vercel → Project → Domains and point DNS at 
 | Testimonials from organisers/designers (none published online; section intentionally omitted rather than invented) | add a `.quote` block on home + speaking |
 | Client / venue logos for the marquee (currently ventures & recognitions) | `01-home.html` marquee |
 | Showreel link (YouTube/Vimeo) | hero secondary CTA + speaking page |
-| FreekÀ Runway show photography (typographic tiles stand in for now) | `assets/img/raw/freeka-0N.jpg` → gallery |
-| Personal Instagram / LinkedIn URLs (only the podcast's channels were verifiable) | footer `.social` + JSON-LD `sameAs` |
+| | Personal Instagram / LinkedIn URLs (only the podcast's channels were verifiable) | footer `.social` + JSON-LD `sameAs` |
 | Confirm co-host surnames, episode 4 title, and heritage wording on the podcast page | `03-podcast.html` |
 | Speaker kit PDF | link from about + book pages |
 
