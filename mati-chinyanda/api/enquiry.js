@@ -2,7 +2,9 @@
 // Env vars (Vercel → Settings → Environment Variables):
 //   RESEND_API_KEY  from resend.com (verify the matimc.com domain there first)
 //   ENQUIRY_TO      where enquiries go, e.g. hello@matimc.com
-//   ENQUIRY_FROM    optional, default "Mati website <enquiries@matimc.com>"
+//   ENQUIRY_FROM    optional. Default "Mati website <onboarding@resend.dev>", which works before the
+//                   matimc.com domain is verified in Resend but can only deliver to the Resend account's
+//                   own email. Once matimc.com is verified, set it to "Mati website <enquiries@matimc.com>".
 export const config = { api: { bodyParser: false } };
 
 async function readForm(req) {
@@ -36,6 +38,8 @@ export default async function handler(req, res) {
   if (f._gotcha) return res.status(200).json({ ok: true });                      // honeypot: pretend success
   if (!f.name || !f.email || !f.message) return res.status(422).json({ ok: false, error: 'Name, email and message are required' });
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(f.email)) return res.status(422).json({ ok: false, error: 'Invalid email' });
+  if (f.date_tbc && !f.event_date) f.event_date = 'Not sure yet';
+  if (f.event_date && /^\d{4}-\d{2}-\d{2}$/.test(f.event_date)) { const [y, m, d] = f.event_date.split('-'); f.event_date = `${d}/${m}/${y}`; }
   const rows = Object.entries(LABELS).filter(([k]) => f[k]).map(([k, l]) => `<tr><td style="padding:6px 12px 6px 0;color:#666;vertical-align:top;white-space:nowrap">${l}</td><td style="padding:6px 0;white-space:pre-wrap">${esc(f[k])}</td></tr>`).join('');
   const text = Object.entries(LABELS).filter(([k]) => f[k]).map(([k, l]) => `${l}: ${f[k]}`).join('\n');
   const subject = `Booking enquiry: ${f.event_type || 'event'} from ${f.name}${f.organisation ? ' (' + f.organisation + ')' : ''}`;
@@ -43,12 +47,18 @@ export default async function handler(req, res) {
     method: 'POST',
     headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      from: process.env.ENQUIRY_FROM || 'Mati website <enquiries@matimc.com>',
+      from: process.env.ENQUIRY_FROM || 'Mati website <onboarding@resend.dev>',
       to: [to], reply_to: f.email, subject,
       html: `<div style="font:15px/1.5 -apple-system,Segoe UI,Helvetica,Arial,sans-serif;color:#111"><p>New enquiry from the website.</p><table>${rows}</table></div>`,
       text,
     }),
   });
-  if (!r.ok) { console.error('Resend error', r.status, await r.text()); return res.status(502).json({ ok: false, error: 'Could not send' }); }
+  if (!r.ok) {
+    const detail = await r.text();
+    console.error('Resend error', r.status, detail);
+    let reason = 'Could not send';
+    try { reason = JSON.parse(detail).message || reason; } catch {}
+    return res.status(502).json({ ok: false, error: reason });
+  }
   return res.status(200).json({ ok: true });
 }

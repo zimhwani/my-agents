@@ -107,14 +107,22 @@
       try {
         const res = await fetch(endpoint, { method: 'POST', body: data, headers: { Accept: 'application/json' } });
         if (res.status === 503) { useMail(); return; }   // email sending not configured yet
-        if (!res.ok) throw new Error('Request failed');
+        if (!res.ok) { let msg = ''; try { msg = (await res.json()).error || ''; } catch {} throw new Error(msg || 'Request failed'); }
         form.reset();
         form.classList.add('is-sent');
         setStatus('Thanks, got it. I will be in touch within two business days.', 'ok');
       } catch (err) {
-        setStatus('Something went wrong. Please email hello@matimc.com directly.', 'error');
+        console.error('Enquiry failed:', err.message);
+        setStatus('Something went wrong sending that. Please email hello@matimc.com directly, or try again in a minute.', 'error');
       } finally { btn.disabled = false; btn.classList.remove('is-loading'); }
     });
+    // Event date: "not sure yet" disables the picker
+    const tbc = form.querySelector('[name="date_tbc"]'), dateIn = form.querySelector('[name="event_date"]');
+    if (tbc && dateIn) {
+      const sync = () => { dateIn.disabled = tbc.checked; if (tbc.checked) dateIn.value = ''; };
+      tbc.addEventListener('change', sync); sync();
+      dateIn.min = new Date().toISOString().slice(0, 10);
+    }
     // Pre-select event type from ?type=
     const type = new URLSearchParams(location.search).get('type');
     const sel = form.querySelector('[name="event_type"]');

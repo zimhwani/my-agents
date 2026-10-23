@@ -360,6 +360,8 @@ h1 em, h2 em, h3 em, .display em{font-variation-settings:"SOFT" 60;color:var(--a
 .field label .req{color:var(--accent-text)}
 .field__legend{font-size:var(--text-sm);font-weight:600;letter-spacing:.04em;text-transform:uppercase;padding:0;margin-bottom:.5rem}
 .field .radio input{accent-color:var(--gold-700);width:1.1rem;height:1.1rem;margin:0;padding:0;min-height:0}
+.field input[type="date"]{appearance:none;-webkit-appearance:none;min-height:3rem;color-scheme:light}
+.field input[type="date"]:disabled{opacity:.45}
 .field input,.field select,.field textarea{font:inherit;color:var(--text);background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-sm);padding:.95rem 1rem;width:100%;transition:border-color .3s}
 .field input:focus,.field select:focus,.field textarea:focus{outline:none;border-color:var(--gold-600);box-shadow:0 0 0 3px rgb(195 154 62 / .18)}
 .field textarea{min-height:9rem;resize:vertical}
