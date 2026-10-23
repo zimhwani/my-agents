@@ -69,5 +69,24 @@ export default async function handler(req, res) {
     try { reason = JSON.parse(detail).message || reason; } catch {}
     return res.status(502).json({ ok: false, error: reason });
   }
+
+  // Confirmation to the person enquiring. Best effort: a failure here never fails the enquiry.
+  const first = String(f.name).trim().split(/\s+/)[0];
+  const what = f.event_name ? ` about ${f.event_name}` : '';
+  const confirmText = `Hi ${first},\n\nThanks for getting in touch${what}. I've got your enquiry and I'll come back to you within two business days, usually with a couple of questions so I can put the right proposal together.\n\nIf anything changes in the meantime, just reply to this email.\n\nMati\nmatimc.com\n\n---\nWhat you sent:\n${text}`;
+  const confirmHtml = `<div style="font:15px/1.6 -apple-system,Segoe UI,Helvetica,Arial,sans-serif;color:#111;max-width:560px"><p>Hi ${esc(first)},</p><p>Thanks for getting in touch${esc(what)}. I've got your enquiry and I'll come back to you within two business days, usually with a couple of questions so I can put the right proposal together.</p><p>If anything changes in the meantime, just reply to this email.</p><p>Mati<br><a href="https://www.matimc.com" style="color:#7A5D1C">matimc.com</a></p><hr style="border:0;border-top:1px solid #ddd;margin:24px 0"><p style="color:#666;font-size:13px;margin:0 0 8px">What you sent:</p><table style="font-size:13px">${rows}</table></div>`;
+  try {
+    const c = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        from: process.env.ENQUIRY_FROM || 'Mati website <onboarding@resend.dev>',
+        to: [f.email], reply_to: to,
+        subject: `Got your enquiry${what ? ' about ' + f.event_name : ''}`,
+        html: confirmHtml, text: confirmText,
+      }),
+    });
+    if (!c.ok) console.error('Confirmation not sent', c.status, await c.text());
+  } catch (e) { console.error('Confirmation error', e); }
   return res.status(200).json({ ok: true });
 }
