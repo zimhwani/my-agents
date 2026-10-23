@@ -36,7 +36,48 @@ function parseMultipart(text, ct) {
   return out;
 }
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const TYPE_LABELS = { speaking: 'Talk or keynote', mc: 'MC / event host', panel: 'Panel or fireside host', podcast: 'Podcast guest or partnership', other: 'Something else' };
 const LABELS = { name: 'Name', email: 'Email', organisation: 'Organisation', phone: 'Phone', event_type: 'Enquiry type', event_name: 'Event', event_date: 'Date', location: 'Where', format: 'Format', audience_size: 'Audience size', budget: 'Budget (AUD)', message: 'Message', source: 'Heard about Mati via' };
+
+
+// ---- Branded email shell (table layout, inline styles: works in Gmail, Outlook, Apple Mail) ----
+const SITE = 'https://www.matimc.com';
+const F_SERIF = "Georgia,'Times New Roman',serif";
+const F_SANS = "-apple-system,'Segoe UI',Helvetica,Arial,sans-serif";
+function shell({ eyebrow, title, bodyHtml, cta, footerNote }) {
+  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>${esc(title)}</title></head>
+<body style="margin:0;padding:0;background:#F5EFE6;">
+<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#F5EFE6;">
+<tr><td align="center" style="padding:32px 16px;">
+<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:600px;">
+  <tr><td style="background:#0B0A0A;padding:28px 36px;border-radius:4px 4px 0 0;">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tr>
+      <td style="font-family:${F_SERIF};font-size:26px;color:#F5EFE6;letter-spacing:-.01em;">Mati<span style="color:#D4AE5A;">.</span></td>
+      <td align="right" style="font-family:${F_SANS};font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:#D4AE5A;">Speaker &amp; MC</td>
+    </tr></table>
+  </td></tr>
+  <tr><td style="background:#0B0A0A;padding:0 36px 40px;">
+    <p style="margin:0 0 14px;font-family:${F_SANS};font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:#D4AE5A;">${esc(eyebrow)}</p>
+    <h1 style="margin:0;font-family:${F_SERIF};font-weight:400;font-size:34px;line-height:1.1;letter-spacing:-.02em;color:#F5EFE6;">${title}</h1>
+  </td></tr>
+  <tr><td style="background:#FBF8F3;padding:36px;border-left:1px solid #DDD5CC;border-right:1px solid #DDD5CC;font-family:${F_SANS};font-size:16px;line-height:1.65;color:#141212;">
+    ${bodyHtml}
+    ${cta ? `<table role="presentation" cellspacing="0" cellpadding="0" style="margin:28px 0 4px;"><tr><td style="background:#C39A3E;border-radius:999px;"><a href="${cta.href}" style="display:inline-block;padding:14px 26px;font-family:${F_SANS};font-size:13px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#0B0A0A;text-decoration:none;">${esc(cta.label)}</a></td></tr></table>` : ''}
+  </td></tr>
+  <tr><td style="background:#0B0A0A;padding:22px 36px;border-radius:0 0 4px 4px;font-family:${F_SANS};font-size:12px;line-height:1.6;color:#9B938E;">
+    <span style="color:#BDB5AE;">Mati</span> · Speaker, MC &amp; event host · Melbourne / Naarm<br>
+    <a href="${SITE}" style="color:#D4AE5A;text-decoration:none;">matimc.com</a> &nbsp;·&nbsp; <a href="mailto:${esc(process.env.ENQUIRY_TO || 'hello@matimc.com')}" style="color:#D4AE5A;text-decoration:none;">${esc(process.env.ENQUIRY_TO || 'hello@matimc.com')}</a>
+    ${footerNote ? `<br><span style="color:#5A5451;">${esc(footerNote)}</span>` : ''}
+  </td></tr>
+</table>
+</td></tr></table></body></html>`;
+}
+function detailsTable(f) {
+  return `<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-top:1px solid #DDD5CC;margin-top:8px;">` +
+    Object.entries(LABELS).filter(([k]) => f[k]).map(([k, l]) =>
+      `<tr><td style="padding:11px 16px 11px 0;border-bottom:1px solid #DDD5CC;font-family:${F_SANS};font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#7A5D1C;vertical-align:top;white-space:nowrap;width:120px;">${esc(l)}</td><td style="padding:11px 0;border-bottom:1px solid #DDD5CC;font-family:${F_SANS};font-size:15px;line-height:1.5;color:#141212;white-space:pre-wrap;">${esc(f[k])}</td></tr>`
+    ).join('') + `</table>`;
+}
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'POST only' });
@@ -48,17 +89,24 @@ export default async function handler(req, res) {
   if (!f.name || !f.email || !f.message) { console.error('Missing fields; keys received:', Object.keys(f)); return res.status(422).json({ ok: false, error: 'Name, email and message are required (form data not received)' }); }
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(f.email)) return res.status(422).json({ ok: false, error: 'Invalid email' });
   if (f.date_tbc && !f.event_date) f.event_date = 'Not sure yet';
+  if (f.event_type && TYPE_LABELS[f.event_type]) f.event_type = TYPE_LABELS[f.event_type];
   if (f.event_date && /^\d{4}-\d{2}-\d{2}$/.test(f.event_date)) { const [y, m, d] = f.event_date.split('-'); f.event_date = `${d}/${m}/${y}`; }
-  const rows = Object.entries(LABELS).filter(([k]) => f[k]).map(([k, l]) => `<tr><td style="padding:6px 12px 6px 0;color:#666;vertical-align:top;white-space:nowrap">${l}</td><td style="padding:6px 0;white-space:pre-wrap">${esc(f[k])}</td></tr>`).join('');
   const text = Object.entries(LABELS).filter(([k]) => f[k]).map(([k, l]) => `${l}: ${f[k]}`).join('\n');
-  const subject = `Booking enquiry: ${f.event_type || 'event'} from ${f.name}${f.organisation ? ' (' + f.organisation + ')' : ''}`;
+  const first = String(f.name).trim().split(/\s+/)[0];
+  const subject = `Enquiry: ${f.event_type || 'event'} · ${f.name}${f.organisation ? ' (' + f.organisation + ')' : ''}`;
   const r = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
       from: process.env.ENQUIRY_FROM || 'Mati website <onboarding@resend.dev>',
       to: [to], reply_to: f.email, subject,
-      html: `<div style="font:15px/1.5 -apple-system,Segoe UI,Helvetica,Arial,sans-serif;color:#111"><p>New enquiry from the website.</p><table>${rows}</table></div>`,
+      html: shell({
+        eyebrow: 'New enquiry · matimc.com',
+        title: `${esc(f.name)}${f.organisation ? ', ' + esc(f.organisation) : ''}`,
+        bodyHtml: `<p style="margin:0 0 18px;">${esc(f.event_type || 'Enquiry')}${f.event_name ? ' · ' + esc(f.event_name) : ''}${f.event_date ? ' · ' + esc(f.event_date) : ''}</p>${detailsTable(f)}`,
+        cta: { href: `mailto:${f.email}?subject=${encodeURIComponent('Re: your enquiry' + (f.event_name ? ' about ' + f.event_name : ''))}`, label: 'Reply to ' + first },
+        footerNote: 'Sent by the enquiry form on matimc.com. Reply goes straight to the enquirer.',
+      }),
       text,
     }),
   });
@@ -71,10 +119,15 @@ export default async function handler(req, res) {
   }
 
   // Confirmation to the person enquiring. Best effort: a failure here never fails the enquiry.
-  const first = String(f.name).trim().split(/\s+/)[0];
   const what = f.event_name ? ` about ${f.event_name}` : '';
   const confirmText = `Hi ${first},\n\nThanks for getting in touch${what}. I've got your enquiry and I'll come back to you within two business days, usually with a couple of questions so I can put the right proposal together.\n\nIf anything changes in the meantime, just reply to this email.\n\nMati\nmatimc.com\n\n---\nWhat you sent:\n${text}`;
-  const confirmHtml = `<div style="font:15px/1.6 -apple-system,Segoe UI,Helvetica,Arial,sans-serif;color:#111;max-width:560px"><p>Hi ${esc(first)},</p><p>Thanks for getting in touch${esc(what)}. I've got your enquiry and I'll come back to you within two business days, usually with a couple of questions so I can put the right proposal together.</p><p>If anything changes in the meantime, just reply to this email.</p><p>Mati<br><a href="https://www.matimc.com" style="color:#7A5D1C">matimc.com</a></p><hr style="border:0;border-top:1px solid #ddd;margin:24px 0"><p style="color:#666;font-size:13px;margin:0 0 8px">What you sent:</p><table style="font-size:13px">${rows}</table></div>`;
+  const confirmHtml = shell({
+    eyebrow: 'Thanks, ' + esc(first),
+    title: `Got your enquiry<span style="color:#D4AE5A;">.</span>`,
+    bodyHtml: `<p style="margin:0 0 16px;">Hi ${esc(first)},</p><p style="margin:0 0 16px;">Thanks for getting in touch${esc(what)}. I've got your enquiry and I'll come back to you within two business days, usually with a couple of questions so I can put the right proposal together.</p><p style="margin:0 0 16px;">If anything changes in the meantime, just reply to this email.</p><p style="margin:0 0 28px;font-family:${F_SERIF};font-size:22px;color:#141212;">Mati</p><p style="margin:0 0 6px;font-family:${F_SANS};font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:#7A5D1C;">What you sent</p>${detailsTable(f)}`,
+    cta: { href: SITE + '/speaking', label: 'See how I work' },
+    footerNote: "You're receiving this because you sent an enquiry through matimc.com.",
+  });
   try {
     const c = await fetch('https://api.resend.com/emails', {
       method: 'POST',
