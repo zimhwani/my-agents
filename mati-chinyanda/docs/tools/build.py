@@ -104,7 +104,7 @@ def footer(p):
     </div>
   </div>
 </footer>
-<script src="/assets/js/main.js?v=6" defer></script>
+<script src="/assets/js/main.js?v=7" defer></script>
 </body>
 </html>
 '''
