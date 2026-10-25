@@ -2,8 +2,10 @@
 
 Run: python3 build_appstore.py   (writes appstore-1..6 .html and .png, and 00-overview-appstore.png)
 
-Screens are the CI screen tour's (../../qa/screens) where the tour visits them, and the approved
-design mockups where it doesn't yet; the final set is shot from the real app. Same type stand-ins
+Screens are the real app's, shot by CI (HairDoneUITests/AppStoreShots.swift, workflow hairdone-appstore)
+into ../../app-store/raw/appstore-N-*.png. When all six are there, the framed pictures are also copied to
+../../app-store/screenshots/, ready for App Store Connect. Until then it falls back to the screen tour's
+pictures and the design mockups. Same type stand-ins
 as the other mockups (Newsreader for New York, Inter for SF).
 """
 import os, subprocess
@@ -13,6 +15,8 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 TOUR = os.path.join(HERE, "..", "..", "qa", "screens")
 CHROME = "/opt/pw-browsers/chromium_headless_shell-1243/chrome-headless-shell-linux64/chrome-headless-shell"
 OUT = os.path.join(HERE, "appstore")
+RAW = os.path.join(HERE, "..", "..", "app-store", "raw")
+FINAL = os.path.join(HERE, "..", "..", "app-store", "screenshots")
 
 # (file, from, headline with one italic phrase, line under it, ink ground)
 SHOTS = [
@@ -48,8 +52,16 @@ body.ink .phone{background:#000;box-shadow:0 0 0 1.5px rgba(248,243,236,.18)}
 """
 
 
+def real(n):
+    """The real app's screen for picture n, if CI has shot it."""
+    hits = sorted(f for f in os.listdir(RAW) if f.startswith(f"appstore-{n}-") and f.endswith(".png")) if os.path.isdir(RAW) else []
+    return os.path.join(RAW, hits[0]) if hits else None
+
+
 def screen(name, source):
-    """The bare screen: tour shots already are; mockups lose their drawn bezel (20 pt each side)."""
+    """The bare screen: real and tour shots already are; mockups lose their drawn bezel (20 pt each side)."""
+    if source == "real":
+        return os.path.relpath(name, OUT)
     if source == "tour":
         return os.path.relpath(os.path.join(TOUR, name), OUT)
     im = Image.open(os.path.join(HERE, name)).convert("RGB")
@@ -75,7 +87,10 @@ def render(html, png):
 if __name__ == "__main__":
     os.makedirs(OUT, exist_ok=True)
     pngs = []
+    reals = [real(n) for n in range(1, len(SHOTS) + 1)]
     for n, (name, source, head, sub, ink) in enumerate(SHOTS, 1):
+        if reals[n - 1]:
+            name, source = reals[n - 1], "real"
         html = os.path.join(OUT, f"appstore-{n}.html")
         open(html, "w").write(page(screen(name, source), head, sub, ink))
         png = os.path.join(OUT, f"appstore-{n}.png")
@@ -89,4 +104,10 @@ if __name__ == "__main__":
     for i, im in enumerate(ims):
         sheet.paste(im, (gap + i * (w + gap), gap))
     sheet.resize((sheet.width // 4, sheet.height // 4), Image.LANCZOS).save(os.path.join(HERE, "00-overview-appstore.png"))
-    print("ok")
+    if all(reals):
+        os.makedirs(FINAL, exist_ok=True)
+        for n, p in enumerate(pngs, 1):
+            # App Store Connect takes RGB PNGs without transparency.
+            Image.open(p).convert("RGB").save(os.path.join(FINAL, f"{n}.png"))
+        print("final set in", os.path.normpath(FINAL))
+    print("ok", sum(1 for r in reals if r), "of", len(SHOTS), "from the real app")
