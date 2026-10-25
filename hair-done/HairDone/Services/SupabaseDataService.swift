@@ -168,7 +168,15 @@ final class SupabaseDataService: DataService {
 
     func verifyEmailCode(email: String, code: String) async throws -> Client {
         let session: SupabaseSession
-        do { session = try await api.verifyEmailCode(email: email, code: code) } catch { throw Self.translate(error) }
+        do {
+            session = try await api.verifyEmailCode(email: email, code: code)
+        } catch {
+            // Apple's reviewer can't get our emails: for the one review address, the server swaps its
+            // fixed code for a real one (functions/review-sign-in). Anyone else, or a wrong code, gets no.
+            guard let real = await reviewCode(email: email, code: code),
+                  let reviewed = try? await api.verifyEmailCode(email: email, code: real) else { throw Self.translate(error) }
+            session = reviewed
+        }
         let client = try await loadClient(session)
         // A brand-new account saves its email with the profile, after the name step. An account that
         // already has a profile but no email on file gets this one now.
@@ -180,6 +188,13 @@ final class SupabaseDataService: DataService {
             }
         }
         return client
+    }
+
+    private struct ReviewCode: Decodable { let code: String }
+
+    private func reviewCode(email: String, code: String) async -> String? {
+        guard let data = try? await callFunction("review-sign-in", body: ["email": email, "code": code]) else { return nil }
+        return (try? SupabaseJSON.decoder.decode(ReviewCode.self, from: data))?.code
     }
 
     func signInWithApple(_ credential: AppleCredential) async throws -> Client {
