@@ -12,6 +12,8 @@ struct ReceiptSheet: View {
     @State private var details: ReceiptDetails? = nil
     @State private var emailing = false
     @State private var problem: String? = nil
+    /// Where the last email went. Said here, in the sheet: a toast would land behind it.
+    @State private var sentTo: String? = nil
 
     private var pro: Pro? { app.pro(booking.proID) }
     private var proFirst: String { pro?.firstName ?? "Your pro" }
@@ -74,10 +76,17 @@ struct ReceiptSheet: View {
             VStack(spacing: Space.xs) {
                 if let problem {
                     FieldMessage(text: problem).frame(maxWidth: .infinity, alignment: .leading)
+                } else if let sentTo {
+                    Label("Sent to \(sentTo). It can take a minute; check junk if it's not there.",
+                          systemImage: "checkmark")
+                        .font(HDFont.caption)
+                        .foregroundStyle(Palette.ink)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .transition(.opacity)
                 }
                 HStack(spacing: Space.s) {
                     if details?.canEmail ?? false {
-                        InkButton(title: "Email it to me", isLoading: emailing, isEnabled: !app.isOffline) { email() }
+                        InkButton(title: sentTo == nil ? "Email it to me" : "Send again", isLoading: emailing, isEnabled: !app.isOffline) { email() }
                     }
                     ShareLink(item: booking.receiptText(proName: proName, proFirst: proFirst, details: details),
                               subject: Text("Hair Done receipt \(booking.reference)")) {
@@ -131,13 +140,15 @@ struct ReceiptSheet: View {
 
     private func email() {
         problem = nil
+        sentTo = nil
         emailing = true
         Task {
             defer { emailing = false }
             do {
                 let to = try await app.data.emailReceipt(bookingID: booking.id)
                 Haptics.success()
-                app.show("Sent to \(to).")
+                withAnimation(Motion.gentle) { sentTo = to }
+                UIAccessibility.post(notification: .announcement, argument: "Sent to \(to)")
             } catch {
                 problem = error.localizedDescription
             }

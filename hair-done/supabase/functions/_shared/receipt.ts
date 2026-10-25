@@ -8,7 +8,7 @@ import { admin, stripe } from "./stripe.ts";
 export const HAIR_DONE = {
   name: "Hair Done",
   abn: "45 281 131 814",
-  operator: "Keith Chinyanda",
+  operator: "hd.nd labs",
   place: "Melbourne VIC",
   email: "hello@hairdonenailsdone.app",
   terms: "hairdonenailsdone.app/terms",

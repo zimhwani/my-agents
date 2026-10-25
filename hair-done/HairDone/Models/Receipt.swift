@@ -1,11 +1,11 @@
 import Foundation
 
 /// Hair Done's own details for receipts. It isn't registered for GST, so a receipt never says
-/// "tax invoice" and every one says "No GST included". Matches the site's terms.
+/// "tax invoice" and every one says "No GST included".
 enum HairDoneBusiness {
     static let name = "Hair Done"
     static let abn = "45 281 131 814"
-    static let operatorName = "Keith Chinyanda"
+    static let operatorName = "hd.nd labs"
     static let place = "Melbourne VIC"
     static let email = "hello@hairdonenailsdone.app"
     static let terms = "hairdonenailsdone.app/terms"
