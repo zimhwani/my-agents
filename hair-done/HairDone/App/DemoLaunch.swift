@@ -30,7 +30,8 @@ extension AppState {
         isRestoring = false
         stage = .ready
         await refreshAll()
-        if DemoLaunch.value("-hdShow") == "pro", let kiara = pro("pro_kiara") { pendingRoute = .pro(kiara) }
+        // Not Kiara: in the sample data she is also this client's own pro profile ("This is you").
+        if DemoLaunch.value("-hdShow") == "pro", let ivy = pro("pro_ivy") { pendingRoute = .pro(ivy) }
     }
 }
 

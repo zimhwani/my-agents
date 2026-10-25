@@ -17,7 +17,7 @@ final class AppStoreShots: XCTestCase {
 
     func test2Profile() {
         let app = open(side: "client", tab: "home", show: "pro")
-        _ = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'Kiara'")).firstMatch.waitForExistence(timeout: 20)
+        _ = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'Ivy'")).firstMatch.waitForExistence(timeout: 20)
         settle()
         shoot("appstore-2-profile")
     }

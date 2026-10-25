@@ -59,7 +59,7 @@ jobs:
           xcrun simctl bootstatus "$UDID" -b
           xcrun simctl ui "$UDID" appearance light
           xcrun simctl status_bar "$UDID" override --time "9:41" --dataNetwork wifi --wifiMode active --wifiBars 3 \
-            --cellularMode active --cellularBars 4 --batteryState charged --batteryLevel 100 \
+            --cellularMode active --cellularBars 4 --batteryState discharging --batteryLevel 100 \
             || echo "status bar override didn't take"
           xcrun simctl privacy "$UDID" grant location com.keithchinyanda.hairdone || true
           xcrun simctl privacy "$UDID" grant photos com.keithchinyanda.hairdone || true
