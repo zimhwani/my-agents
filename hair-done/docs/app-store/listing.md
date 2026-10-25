@@ -37,19 +37,19 @@ hair done, nails done, everything done.
 Hair Done brings a vetted beauty pro to you. Blow-dries, braids, gel nails, lashes, brows, makeup for the big night: booked in a minute, done at home.
 
 KNOW IT ALL BEFORE YOU BOOK
-Every pro shows her prices, her travel fee and photos of her own work. You see the full total, the time and who's coming before you tap Book. No quotes, no back-and-forth in the DMs.
+Every pro shows their prices, their travel fee and photos of their own work. You see the full total, the time and who's coming before you tap Book. No quotes, no back-and-forth in the DMs.
 
 PROS WE'VE CHECKED
-Every pro sends photo ID and a selfie, and we check her details before she's listed. Reviews come only from people who've actually booked her.
+Every pro sends photo ID and a selfie, and we check their details before they're listed. Reviews come only from people who've actually booked them.
 
 PAY WHEN IT'S DONE
-We hold the total on your card when you book, and nothing's charged until she's finished. Pay in the app with a tip if you like (tips go to her in full), or we'll charge your card 12 hours later. Something not right? Tap "Something wrong?" and we hold off while a person looks.
+We hold the total on your card when you book, and nothing's charged until they've finished. Pay in the app with a tip if you like (tips go to them in full), or we'll charge your card 12 hours later. Something not right? Tap "Something wrong?" and we hold off while a person looks.
 
 ON THE DAY
-See when she's on her way, when she's at the door and when she's started. Message her in the app. Your receipt is on the booking and in your inbox.
+See when they're on their way, when they're at the door and when they've started. Message them in the app. Your receipt is on the booking and in your inbox.
 
 FAIR CANCELLING
-Cancel 24 hours or more before and it's free. If she cancels, every dollar comes back.
+Cancel 24 hours or more before and it's free. If they cancel, every dollar comes back.
 
 FOR PROS
 Set up Pro mode in the same app: your services and prices, your travel area, your hours. Take requests or turn on instant book. Get paid to your bank through Stripe. Our fee is 12% of a booking, and tips are yours.
