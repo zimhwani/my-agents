@@ -62,7 +62,7 @@ def screen(name, source):
 def page(img, head, sub, ink):
     return (f'<!doctype html><html lang="en-AU"><head><meta charset="utf-8"><title>App Store</title>'
             f'<link rel="stylesheet" href="../common.css"><style>{CSS}</style></head>'
-            f'<body class="{"ink" if ink else ""}"><div class="cap"><div class="mark">hd<span>.</span></div>'
+            f'<body class="{"ink" if ink else ""}"><div class="cap"><div class="mark">hd<span>.</span> nd<span>.</span></div>'
             f'<h1>{head}</h1><p>{sub}</p></div><div class="phone"><img src="{img}"></div></body></html>')
 
 
