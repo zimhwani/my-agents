@@ -16,6 +16,8 @@ REF=yohqeunmgrxyakviofua
 read -rsp "Supabase personal access token (sbp_..., hidden): " SBP; echo
 SBP=$(printf '%s' "$SBP" | tr -d '[:space:]')
 [[ "$SBP" == sbp_* ]] || { echo "That isn't a Supabase personal access token (they start with sbp_)."; exit 1; }
+CODE=$(curl -sS -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $SBP" "https://api.supabase.com/v1/projects/$REF")
+[[ "$CODE" == 200 ]] || { echo "Supabase didn't accept that token (HTTP $CODE). Make a new one at supabase.com/dashboard/account/tokens. Nothing was changed."; exit 1; }
 API="https://api.supabase.com/v1/projects/$REF/secrets"
 
 if [[ "${1:-}" == "off" ]]; then
