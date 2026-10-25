@@ -16,7 +16,7 @@ struct ReviewSheet: View {
     @State private var problem: String? = nil
 
     private var pro: Pro? { app.pro(booking.proID) }
-    private var proName: String { pro?.firstName ?? "her" }
+    private var proName: String { pro?.firstName ?? "your pro" }
 
     /// Copy deck `rate.stars.{n}`.
     private var reaction: String {
@@ -31,7 +31,7 @@ struct ReviewSheet: View {
     }
 
     private var placeholder: String {
-        rating > 0 && rating < 3 ? "What went wrong? We read these too." : "What was she like? The next woman deciding will read this."
+        rating > 0 && rating < 3 ? "What went wrong? We read these too." : "What were they like? The next person deciding will read this."
     }
 
     private var thanksLine: String {

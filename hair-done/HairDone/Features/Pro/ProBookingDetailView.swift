@@ -142,7 +142,7 @@ struct ProBookingDetailView: View {
 
                 // Notes and inspo
                 if !b.notes.isEmpty || !b.inspoSeeds.isEmpty || !b.inspoURLs.isEmpty {
-                    section("Her notes") {
+                    section("Their notes") {
                         if !b.notes.isEmpty {
                             Text("“\(b.notes)”").font(HDFont.quote).italic().foregroundStyle(Palette.ink)
                                 .fixedSize(horizontal: false, vertical: true)

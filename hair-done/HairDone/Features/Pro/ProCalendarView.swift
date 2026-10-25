@@ -288,7 +288,7 @@ struct ProCalendarView: View {
                         let name = app.clientName(clash.clientID)
                         WarnDotLine(text: name.isEmpty
                                     ? "You've got a booking at \(clash.start.clock). Blocking won't cancel it."
-                                    : "You've got \(name) at \(clash.start.clock). Blocking won't cancel her.", font: HDFont.caption)
+                                    : "You've got \(name) at \(clash.start.clock). Blocking won't cancel them.", font: HDFont.caption)
                     } else {
                         Text("Nobody can book you that day. Bookings you've got still stand.")
                             .font(HDFont.caption).foregroundStyle(Palette.inkSoft)

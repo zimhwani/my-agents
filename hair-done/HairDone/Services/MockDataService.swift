@@ -139,7 +139,7 @@ final class MockDataService: DataService {
                     available = false; reason = Self.noticeReason(pro.noticeMinutes)
                 } else if let clash = taken.first(where: { $0.start.adding(minutes: -buffer) < end && $0.end.adding(minutes: buffer) > start }) {
                     available = false
-                    reason = clash.start <= start && clash.end >= end ? "She's booked" : "Too close to another job"
+                    reason = clash.start <= start && clash.end >= end ? "They're booked" : "Too close to another job"
                 }
                 slots.append(TimeSlot(start: start, isAvailable: available, reason: reason))
                 m += step
@@ -150,10 +150,10 @@ final class MockDataService: DataService {
 
     /// "Too soon, she needs 2 hours' notice"
     private static func noticeReason(_ minutes: Int) -> String {
-        if minutes >= 1440 { return "Too soon, she needs a day's notice" }
-        if minutes == 60 { return "Too soon, she needs an hour's notice" }
-        if minutes % 60 == 0 { return "Too soon, she needs \(minutes / 60) hours' notice" }
-        return "Too soon, she needs \(minutes) minutes' notice"
+        if minutes >= 1440 { return "Too soon, they need a day's notice" }
+        if minutes == 60 { return "Too soon, they need an hour's notice" }
+        if minutes % 60 == 0 { return "Too soon, they need \(minutes / 60) hours' notice" }
+        return "Too soon, they need \(minutes) minutes' notice"
     }
 
     // MARK: Bookings

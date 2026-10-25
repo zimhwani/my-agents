@@ -180,7 +180,7 @@ struct ReviewStep: View {
                     lineItem(service.name, amount: Money.format(service.priceCents))
                 }
                 if price.travelFeeCents > 0 {
-                    lineItem("Travel fee", amount: Money.format(price.travelFeeCents), note: "Set by \(pro.firstName). Flat, wherever you are in her area.")
+                    lineItem("Travel fee", amount: Money.format(price.travelFeeCents), note: "Set by \(pro.firstName). Flat, wherever you are in their area.")
                 } else {
                     lineItem("Travel fee", amount: "Free", note: "\(pro.firstName) doesn't charge one.")
                 }
@@ -203,7 +203,7 @@ struct ReviewStep: View {
                             totalAmount
                         }
                     }
-                    Text(isPaying ? "Sorting it." : "Held now, charged when she's done.")
+                    Text(isPaying ? "Sorting it." : "Held now, charged when they're done.")
                         .font(HDFont.caption)
                         .foregroundStyle(Palette.onInkSoft)
                 }
@@ -407,10 +407,10 @@ struct ReviewStep: View {
 
     // MARK: Derived
 
-    private static let policy = "Cancel with more than 24 hours' notice and it's free. Less than that and she keeps half. She's already turned down other work for you. Not there when she arrives and it's the full amount."
+    private static let policy = "Cancel with more than 24 hours' notice and it's free. Less than that and they keep half. They've already turned down other work for you. Not there when they arrive and it's the full amount."
 
     private var holdLine: String {
-        "We hold \(Money.format(price.clientTotalCents)) on your card now. It's charged when \(pro.firstName) marks you done, or 12 hours after that if she forgets. Cancel in time and the hold just drops off."
+        "We hold \(Money.format(price.clientTotalCents)) on your card now. It's charged when \(pro.firstName) marks you done, or 12 hours after that if they forget. Cancel in time and the hold just drops off."
     }
 
     private var notesLine: String? {
@@ -609,7 +609,7 @@ struct BookedStep: View {
 
     private var sub: String {
         if isRequest {
-            return "\(pro.firstName) usually replies within \(pro.replyWindow). We'll ping you. Nothing's charged until she says yes."
+            return "\(pro.firstName) usually replies within \(pro.replyWindow). We'll ping you. Nothing's charged until they say yes."
         }
         if booking.isToday { return "Sit tight. \(pro.firstName)'s coming at \(booking.start.clock)." }
         return "\(pro.firstName), \(booking.start.friendlyDayInSentence) at \(booking.start.clock). We'll remind you the day before."

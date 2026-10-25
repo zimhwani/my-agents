@@ -26,7 +26,7 @@ enum PaymentError: LocalizedError {
         case .declined: return "That card didn't go through. Nothing's been charged. Try another, or Apple Pay."
         case .cancelled: return "No worries, nothing was charged."
         case .unavailable: return "Couldn't place the hold. Nothing's been charged. Try again in a minute."
-        case .proNotReady: return "She can't take bookings through the app just yet. Nothing's been charged. Try someone else for now."
+        case .proNotReady: return "They can't take bookings through the app just yet. Nothing's been charged. Try someone else for now."
         }
     }
 }

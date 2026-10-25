@@ -618,7 +618,7 @@ struct StatusActionButton: View {
         }
         .confirmSheet(isPresented: $confirmDone,
                       title: "Mark it done?",
-                      message: "\(whoLead)'s asked to pay \(Money.format(booking.price.clientTotalCents)) now. If she doesn't, we charge her card in 12 hours. \(Money.format(booking.price.proPayoutCents)) comes to you.",
+                      message: "\(whoLead)'s asked to pay \(Money.format(booking.price.clientTotalCents)) now. If they don't, we charge their card in 12 hours. \(Money.format(booking.price.proPayoutCents)) comes to you.",
                       confirmTitle: "Yes, done",
                       cancelTitle: "Not yet") {
             Task { await move(to: .done) }
@@ -678,7 +678,7 @@ struct StatusActionButton: View {
         case 2: times = " and messaged twice"
         default: times = " and messaged \(messagesSent) times"
         }
-        return "You've been here \(since)\(times). \(whoLead)'s charged the full \(Money.format(ProMoney.noShowCharge(booking))) and you're paid \(Money.format(ProMoney.noShowPayout(booking))). She can question it for 12 hours."
+        return "You've been here \(since)\(times). \(whoLead)'s charged the full \(Money.format(ProMoney.noShowCharge(booking))) and you're paid \(Money.format(ProMoney.noShowPayout(booking))). They can question it for 12 hours."
     }
 
     private var noShow: some View {
@@ -752,7 +752,7 @@ struct DeclineSheet: View {
                         }
                     }
                     if isOther {
-                        HDTextField(label: "", placeholder: "One line. She'll read it.", text: $other, axis: .vertical)
+                        HDTextField(label: "", placeholder: "One line. They'll read it.", text: $other, axis: .vertical)
                             .padding(.top, Space.m)
                             .transition(.opacity)
                     }
@@ -782,7 +782,7 @@ struct DeclineSheet: View {
         let reason = isOther ? other.trimmingCharacters(in: .whitespacesAndNewlines) : ProFlow.declineReasons[picked]
         // A failure shows as a toast on this sheet (holdsPushRoutes carries it) and the sheet stays.
         if await app.update(booking, to: .declined, reason: reason) != nil {
-            app.show("Declined. \(ProFlow.whoLead(clientName))'s been told and her hold's released.")
+            app.show("Declined. \(ProFlow.whoLead(clientName))'s been told and their hold's released.")
             dismiss()
         }
     }
@@ -939,7 +939,7 @@ struct ServiceEditorSheet: View {
                         }
                     }
                     HDTextField(label: "Price", placeholder: "95", text: $priceText, keyboard: .decimalPad,
-                                caption: priceCents > 0 ? "You get \(Money.format(ProMoney.afterFee(priceCents)))" : "What she pays for this. Hair Done's 12% comes out of your side.")
+                                caption: priceCents > 0 ? "You get \(Money.format(ProMoney.afterFee(priceCents)))" : "What clients pay for this. Hair Done's 12% comes out of your side.")
                     HDStepper(title: "How long", value: $minutes, in: 15...300, step: 15) { $0.minutesLabel }
                     HDTextField(label: "What's included", placeholder: "Optional", text: $detail, axis: .vertical)
                     HDSwitch(title: "Mark as popular", subtitle: "Shows POPULAR beside it on your profile.", isOn: $isPopular)

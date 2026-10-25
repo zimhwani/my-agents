@@ -38,7 +38,7 @@ struct AddressEditor: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            SheetHeader(title: address == nil ? "Add an address" : "Edit address", subtitle: "She'll only see it once you're confirmed.", onClose: { dismiss() })
+            SheetHeader(title: address == nil ? "Add an address" : "Edit address", subtitle: "Your pro only sees it once you're confirmed.", onClose: { dismiss() })
 
             ScrollView {
                 VStack(alignment: .leading, spacing: Space.xl) {
@@ -66,7 +66,7 @@ struct AddressEditor: View {
                                     .frame(maxWidth: 120)
                             }
                         }
-                        HDTextField(label: "Getting in", placeholder: "Parking, buzzer, dogs. Anything she should know getting in.", text: $instructions, axis: .vertical)
+                        HDTextField(label: "Getting in", placeholder: "Parking, buzzer, dogs. Anything they should know getting in.", text: $instructions, axis: .vertical)
                             .lineLimit(2...4)
                     }
 

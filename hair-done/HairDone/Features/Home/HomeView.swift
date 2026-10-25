@@ -640,7 +640,7 @@ private struct HomeMap: View {
                     }
                     .buttonStyle(PressLift(scale: 0.92))
                     .accessibilityLabel("\(pro.displayName), from \(Money.format(pro.cheapestServiceCents))")
-                    .accessibilityHint("Opens her profile")
+                    .accessibilityHint("Opens their profile")
                 }
                 .annotationTitles(.hidden)
             }

@@ -142,7 +142,7 @@ struct ThreadRow: View {
         isPro && !app.isClientNameKnown(thread.clientID)
     }
     private var name: String {
-        isPro ? app.clientName(thread.clientID) : (app.pro(thread.proID)?.firstName ?? "Her")
+        isPro ? app.clientName(thread.clientID) : (app.pro(thread.proID)?.firstName ?? "Your pro")
     }
     private var otherPro: Pro? { isPro ? nil : app.pro(thread.proID) }
     private var unread: Int { isPro ? thread.unreadForPro : thread.unreadForClient }

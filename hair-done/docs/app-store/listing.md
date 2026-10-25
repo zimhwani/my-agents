@@ -92,7 +92,7 @@ Sign in: tap "Continue with email", enter [REVIEW EMAIL], tap Send code, then en
 
 To see a booking: choose any pro on Home, pick a service and a time, and book. [While sample pros are live: they accept and run the job by themselves, a step every couple of minutes. Payments are in Stripe test mode, so use card 4242 4242 4242 4242, any future date, any CVC.]
 
-Pro mode: You > Set up Pro mode shows the pro side (identity check, ABN, payouts through Stripe Connect).
+Pro mode: You > Set up Pro mode shows the pro side (identity check, optional ABN, payouts through Stripe Connect).
 
 Payments are for services performed in person at the client's home, so they're processed by Stripe rather than in-app purchase (App Review Guideline 3.1.3(e)).
 

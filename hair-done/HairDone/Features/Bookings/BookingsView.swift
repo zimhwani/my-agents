@@ -167,7 +167,7 @@ struct BookingsView: View {
     /// A done booking waiting on payment ("Pay Kiara") or a paid one waiting on stars ("How'd Kiara go?").
     @ViewBuilder
     private func nudge(_ booking: Booking) -> some View {
-        let name = app.pro(booking.proID)?.firstName ?? "her"
+        let name = app.pro(booking.proID)?.firstName ?? "your pro"
         if booking.status == .done {
             Button {
                 Haptics.light()
@@ -257,7 +257,7 @@ struct BookingRow: View {
     var isPast = false
     var onBookAgain: (() -> Void)? = nil
 
-    private var proName: String { pro?.firstName ?? "her" }
+    private var proName: String { pro?.firstName ?? "your pro" }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -305,7 +305,7 @@ struct BookingRow: View {
             if let onBookAgain {
                 TertiaryButton(title: "Book again", tint: Palette.ink, action: onBookAgain)
                     .padding(.leading, -8)
-                    .accessibilityHint("Opens her profile")
+                    .accessibilityHint("Opens their profile")
             }
             Spacer(minLength: 0)
             if let priceLine {

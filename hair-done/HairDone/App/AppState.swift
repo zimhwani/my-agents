@@ -1137,7 +1137,7 @@ final class AppState {
     func shareText(for pro: Pro) -> String {
         // "does nails", "does the lot"
         [
-            "\(pro.displayName) does \(pro.primaryCategory.label.lowercased()) in \(pro.suburb). Book her on Hair Done.",
+            "\(pro.displayName) does \(pro.primaryCategory.label.lowercased()) in \(pro.suburb). Book them on Hair Done.",
             "Get Hair Done on the App Store.",
             "Got the app? \(shareURL(for: pro).absoluteString)"
         ].joined(separator: "\n")
@@ -1165,7 +1165,7 @@ final class AppState {
     private func routeToPro(_ id: String) async {
         await loadProDetail(id)
         guard let found = pro(id) else {
-            show("We couldn't find her. The link might be old.")
+            show("We couldn't find them. The link might be old.")
             return
         }
         guard enter(.client) else {

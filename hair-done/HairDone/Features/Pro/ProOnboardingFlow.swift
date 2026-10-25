@@ -312,7 +312,7 @@ struct ProOnboardingFlow: View {
                 Text("Pick up where you left off. Step \(resumeStep) of \(totalSteps).")
                     .font(HDFont.quote).foregroundStyle(Palette.ink)
             }
-            Text("Seven short steps, about ten minutes. You'll need your ABN, a photo of your ID and three photos of your work.")
+            Text("Seven short steps, about ten minutes. You'll need a photo of your ID and three photos of your work, and your ABN if you have one.")
                 .font(HDFont.body).foregroundStyle(Palette.inkSoft)
                 .fixedSize(horizontal: false, vertical: true)
             Text("Leave whenever you like. What you've done is kept, and clients can't see you until it's finished.")
@@ -379,7 +379,7 @@ struct ProOnboardingFlow: View {
 
     private var servicesStep: some View {
         VStack(alignment: .leading, spacing: Space.l) {
-            title("Services and prices", "Your price is what she sees. Hair Done's 12% comes out of your side, and she pays a $3 booking fee on top.")
+            title("Services and prices", "Your price is what clients see. Hair Done's 12% comes out of your side, and they pay a $3 booking fee on top.")
             VStack(spacing: 0) {
                 if services.isEmpty {
                     Text("Nothing yet. Your top three is enough to start.").font(HDFont.sub).foregroundStyle(Palette.inkSoft)
@@ -455,8 +455,8 @@ struct ProOnboardingFlow: View {
         VStack(alignment: .leading, spacing: Space.xl) {
             title("Who you are", "Clients only book pros a person has checked. Someone from Hair Done does it by hand; nothing's automatic.")
             ProIDCheckView(prepare: { await saveDraftNow() })
-            HDTextField(label: "ABN", placeholder: "11 digits", text: $abn, keyboard: .numberPad,
-                        caption: "Sole trader is fine.",
+            HDTextField(label: "ABN (optional)", placeholder: "11 digits", text: $abn, keyboard: .numberPad,
+                        caption: "If you have one, it goes on your clients' receipts.",
                         error: abnOK ? nil : "An ABN is 11 digits. Have another look.")
         }
     }

@@ -164,7 +164,7 @@ async function onStatus(bookingId: string, status: string) {
       }
       return toClient(`${pro} can't do ${dayWord(b.starts_at)}. Here's who else is free.`);
     case "onHerWay":
-      return toClient(`${pro}'s on her way.`, true);
+      return toClient(`${pro}'s on their way.`, true);
     case "arrived":
       return toClient(`${pro}'s at your door.`, true);
     case "done":

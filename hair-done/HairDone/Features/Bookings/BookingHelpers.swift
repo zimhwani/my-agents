@@ -41,14 +41,14 @@ extension Booking {
         let charge = cancelChargeCents
         switch status {
         case .requested:
-            return "She hasn't confirmed yet, so nothing's charged."
+            return "They haven't confirmed yet, so nothing's charged."
         case .onHerWay:
-            return "\(proName)'s already on her way, so she keeps half, \(Money.format(charge)). The rest drops off your card."
+            return "\(proName)'s already on their way, so they keep half, \(Money.format(charge)). The rest drops off your card."
         case .arrived, .inProgress:
             return "\(proName)'s at your door, so it's the full price and the \(Money.format(price.bookingFeeCents)) booking fee."
         default:
             if charge == 0 { return "More than 24 hours out, so it's free. The hold drops off your card in a few days." }
-            return "Under 24 hours. \(proName) keeps half, \(Money.format(charge)). She's already turned down other work for you."
+            return "Under 24 hours. \(proName) keeps half, \(Money.format(charge)). They've already turned down other work for you."
         }
     }
 
@@ -123,13 +123,13 @@ extension BookingStatus {
         switch self {
         case .requested: return "Requested"
         case .confirmed: return "Confirmed"
-        case .onHerWay: return "On her way"
+        case .onHerWay: return "On their way"
         case .arrived: return "Here"
         case .done: return "Done"
         case .paid: return "Paid"
         case .inProgress: return "In progress"
         case .cancelledByClient: return "You cancelled"
-        case .cancelledByPro: return "She cancelled"
+        case .cancelledByPro: return "Pro cancelled"
         case .declined: return "Declined"
         case .noShow: return "Missed"
         }

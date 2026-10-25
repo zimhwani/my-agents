@@ -39,7 +39,7 @@ struct PaySheet: View {
 
     private var current: Booking { app.bookings.first { $0.id == booking.id } ?? booking }
     private var pro: Pro? { app.pro(booking.proID) }
-    private var proName: String { pro?.firstName ?? "her" }
+    private var proName: String { pro?.firstName ?? "your pro" }
 
     private var tipCents: Int {
         switch tip {
@@ -160,7 +160,7 @@ struct PaySheet: View {
     private var tipSection: some View {
         VStack(alignment: .leading, spacing: Space.s) {
             Text("Tip \(proName)").font(HDFont.name).foregroundStyle(Palette.ink)
-            Text("Optional. All of it goes to her.").font(HDFont.sub).foregroundStyle(Palette.inkSoft)
+            Text("Optional. All of it goes to them.").font(HDFont.sub).foregroundStyle(Palette.inkSoft)
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: Space.s) {
                     ForEach(tipChoices, id: \.self) { choice in
@@ -260,7 +260,7 @@ struct PaySheet: View {
     private var stars: some View {
         VStack(alignment: .leading, spacing: Space.m) {
             Hairline(strong: true).padding(.vertical, Space.s)
-            Text("How was she? Two taps.").font(HDFont.name).foregroundStyle(Palette.ink)
+            Text("How was \(proName)? Two taps.").font(HDFont.name).foregroundStyle(Palette.ink)
             StarPicker(rating: $rating, size: 36)
             if rating > 0 {
                 Text(reaction)
@@ -268,7 +268,7 @@ struct PaySheet: View {
                     .foregroundStyle(Palette.ink)
                     .accessibilityLabel("\(rating) stars. \(reaction)")
                 HDTextField(label: "A line, if you want",
-                            placeholder: rating < 3 ? "What went wrong? We read these too." : "What was she like? The next woman deciding will read this.",
+                            placeholder: rating < 3 ? "What went wrong? We read these too." : "What were they like? The next person deciding will read this.",
                             text: $reviewText, axis: .vertical, caption: "Optional")
                     .transition(.opacity)
             }

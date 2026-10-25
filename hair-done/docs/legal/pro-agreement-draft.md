@@ -20,7 +20,7 @@ and version recorded? The app doesn't record that yet.]
   Fair Work Act's independent contractor tests, and the 2024 "employee-like" platform worker rules.]
 - You decide whether to take a booking, how you do the work, what you charge, your hours and where
   you travel.
-- You need an active ABN, and you're responsible for your own tax, GST if you're registered,
+- An ABN is optional; if you have one, it goes on your clients' receipts. You're responsible for your own tax, GST if you're registered,
   super, licences, permits, insurance and the products and tools you use.
 - You won't say you work for Hair Done or are endorsed by us.
 
@@ -29,10 +29,9 @@ and version recorded? The app doesn't record that yet.]
 Clients see you once you've:
 - finished your profile (services and prices, travel area and fee, hours, photos of your work);
 - sent your photo ID and a selfie, and we've checked them;
-- given your ABN;
 - set up payouts with Stripe.
 
-We can ask for more, take longer to check, or decide not to list you. [Police check, working with
+We can ask for more, take longer to check, or decide not to list you. [An ABN isn't required: confirm that's fine for sole traders below the GST threshold, and what the Sharing Economy Reporting Regime needs us to report to the ATO for pros without one (it applies to platforms like this from 1 July 2024). Police check, working with
 children check, or proof of insurance: required, optional, or not asked for?]
 
 ## 4. Bookings

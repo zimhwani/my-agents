@@ -120,7 +120,7 @@ struct ProProfileView: View {
             }
         }
         .sheet(isPresented: $showVerified) {
-            ProfileExplainerSheet(title: "ID checked", text: "Hair Done has seen her ID and ABN. Reviews only come from completed bookings.")
+            ProfileExplainerSheet(title: "ID checked", text: "Hair Done has seen their ID. Reviews only come from completed bookings.")
         }
         .sheet(isPresented: $showInstant) {
             ProfileExplainerSheet(title: "Instant book", text: "Book a free slot and it's confirmed straight away. No waiting on a reply.")
@@ -128,7 +128,7 @@ struct ProProfileView: View {
         .confirmSheet(
             isPresented: $confirmBlock,
             title: "Block \(live.firstName)?",
-            message: "She won't show up for you and can't message you. She won't be told.",
+            message: "They won't show up for you and can't message you. They won't be told.",
             confirmTitle: "Block",
             cancelTitle: "Leave it"
         ) {
@@ -159,8 +159,8 @@ struct ProProfileView: View {
                     ProfileHeroPhoto(item: heroItem, seed: live.seed)
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel(heroItem?.caption ?? "Her work")
-                .accessibilityHint(heroItem == nil ? "" : "Opens her photos")
+                .accessibilityLabel(heroItem?.caption ?? "Their work")
+                .accessibilityHint(heroItem == nil ? "" : "Opens their photos")
             }
             .overlay {
                 LinearGradient(
@@ -230,7 +230,7 @@ struct ProProfileView: View {
                 }
                 .buttonStyle(PressLift(scale: 0.92))
                 .accessibilityLabel(isFavourite ? "Saved" : "Save")
-                .accessibilityHint(isFavourite ? "Takes her off your saved list" : "Keeps her in your saved list")
+                .accessibilityHint(isFavourite ? "Takes them off your saved list" : "Keeps them in your saved list")
             }
 
             ShareLink(item: shareText) {
@@ -398,7 +398,7 @@ struct ProProfileView: View {
 
             if live.services.isEmpty {
                 Hairline(strong: true)
-                Text("She hasn't listed her services yet. Message her to ask.")
+                Text("They haven't listed their services yet. Message them to ask.")
                     .font(HDFont.sub)
                     .foregroundStyle(Palette.inkSoft)
                     .padding(.vertical, Space.l)
@@ -421,14 +421,14 @@ struct ProProfileView: View {
                         Haptics.light()
                         showInstant = true
                     } label: {
-                        (Text("Instant book").underline() + Text(", and she replies in about \(replyWithin)."))
+                        (Text("Instant book").underline() + Text(", and they reply in about \(replyWithin)."))
                             .multilineTextAlignment(.leading)
                             .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                     .accessibilityHint("Explains instant book")
                 } else {
-                    Text("\(live.firstName) confirms each booking herself, usually within \(replyWithin).")
+                    Text("\(live.firstName) confirms each booking themselves, usually within \(replyWithin).")
                 }
             }
             .font(HDFont.caption)
@@ -443,7 +443,7 @@ struct ProProfileView: View {
     private var work: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .firstTextBaseline) {
-                Text("Her work").labelStyle().accessibilityAddTraits(.isHeader)
+                Text("Their work").labelStyle().accessibilityAddTraits(.isHeader)
                 Spacer(minLength: 0)
                 Text(live.work.count == 1 ? "1 photo" : "\(live.work.count) photos")
                     .font(HDFont.caption)
@@ -683,7 +683,7 @@ private enum ProfileNextFree {
 
     /// "Today from 5:00 pm".
     static func sectionLine(_ date: Date?) -> String {
-        guard let date else { return "Nothing free this week. Message her." }
+        guard let date else { return "Nothing free this week. Message them." }
         return "\(date.friendlyDay) from \(date.clock)"
     }
 }
@@ -967,7 +967,7 @@ private struct ProfileReportSheet: View {
     @State private var sending = false
 
     private let reasons = [
-        "Photos aren't her work",
+        "Photos aren't their work",
         "Asked me to pay outside the app",
         "Didn't show up",
         "Made me uncomfortable",
@@ -990,7 +990,7 @@ private struct ProfileReportSheet: View {
                         HairlineRow(title: "Report \(pro.firstName)", symbol: "flag") {
                             withAnimation(reduceMotion ? nil : Motion.spring) { mode = .report }
                         }
-                        HairlineRow(title: "Block \(pro.firstName)", subtitle: "She won't show up for you and can't message you.", symbol: "hand.raised") {
+                        HairlineRow(title: "Block \(pro.firstName)", subtitle: "They won't show up for you and can't message you.", symbol: "hand.raised") {
                             onBlock()
                         }
                     }

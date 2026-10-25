@@ -106,7 +106,7 @@ struct HomePortraitTile: View {
         .buttonStyle(PressLift(scale: 0.98))
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(title), \(line)")
-        .accessibilityHint("Opens her profile")
+        .accessibilityHint("Opens their profile")
         .accessibilityAddTraits(.isButton)
     }
 }
@@ -248,7 +248,7 @@ struct HomeProRow: View {
         .buttonStyle(PressLift(scale: 0.985))
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(accessibilityText)
-        .accessibilityHint("Opens her profile")
+        .accessibilityHint("Opens their profile")
         .accessibilityAddTraits(.isButton)
     }
 

@@ -761,7 +761,7 @@ private struct OnboardingName: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: Space.xl) {
-                    OnboardingHeadline(title: "And you are", sub: "First name's fine. It's what she'll see when you book.")
+                    OnboardingHeadline(title: "And you are", sub: "First name's fine. It's what your pro sees when you book.")
                         .padding(.top, Space.l)
 
                     VStack(alignment: .leading, spacing: Space.s) {
@@ -796,7 +796,7 @@ private struct OnboardingName: View {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
             Haptics.warning()
-            withAnimation(Motion.gentle) { error = "She'll need something to call you." }
+            withAnimation(Motion.gentle) { error = "Your pro will need something to call you." }
             return
         }
         app.client?.firstName = trimmed
@@ -827,7 +827,7 @@ private struct OnboardingLocation: View {
 
                     OnboardingHeadline(
                         title: "Pros near you",
-                        sub: "We use your location to show who's close and what her travel fee comes to. Only while you're in the app."
+                        sub: "We use your location to show who's close and what their travel fee comes to. Only while you're in the app."
                     )
                 }
                 .screenGutter()

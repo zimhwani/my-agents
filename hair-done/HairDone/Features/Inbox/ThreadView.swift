@@ -43,7 +43,7 @@ struct ThreadView: View {
     }
 
     private func otherName(_ thread: MessageThread) -> String {
-        isPro ? app.clientName(thread.clientID) : (app.pro(thread.proID)?.firstName ?? "Her")
+        isPro ? app.clientName(thread.clientID) : (app.pro(thread.proID)?.firstName ?? "Your pro")
     }
 
     /// On the pro side a client's name can still be on its way; show nothing rather than "Client".
@@ -96,7 +96,7 @@ struct ThreadView: View {
                 ScrollView {
                     LazyVStack(spacing: Space.s) {
                         if linked?.status == .requested && !isPro {
-                            Text("Phone numbers are shared once she's confirmed.")
+                            Text("Phone numbers are shared once they've confirmed.")
                                 .font(HDFont.caption)
                                 .foregroundStyle(Palette.inkSoft)
                                 .multilineTextAlignment(.center)

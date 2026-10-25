@@ -46,7 +46,7 @@ struct BookingDetailView: View {
 
     private func content(_ booking: Booking) -> some View {
         let pro = app.pro(booking.proID)
-        let proName = pro?.firstName ?? "her"
+        let proName = pro?.firstName ?? "your pro"
         return ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 if app.isOffline { OfflineBar() }
@@ -123,7 +123,7 @@ struct BookingDetailView: View {
                 NavigationLink(value: Route.pro(pro)) { coverPhoto(booking, pro: pro) }
                     .buttonStyle(.plain)
                     .accessibilityLabel("\(pro.displayName)'s work")
-                    .accessibilityHint("Opens her profile")
+                    .accessibilityHint("Opens their profile")
             } else {
                 coverPhoto(booking, pro: nil)
             }
@@ -314,7 +314,7 @@ struct BookingDetailView: View {
                 row("Booking fee", value: Money.format(booking.price.bookingFeeCents), money: true)
             }
             if booking.price.tipCents > 0 {
-                row("Tip", value: Money.format(booking.price.tipCents), note: "All of it went to her", money: true)
+                row("Tip", value: Money.format(booking.price.tipCents), note: "All of it went to them", money: true)
             }
             HStack(alignment: .firstTextBaseline) {
                 Text(totalLabel(booking)).font(HDFont.body).foregroundStyle(Palette.ink)
@@ -585,7 +585,7 @@ struct BookingTimeline: View {
     var booking: Booking
     var pro: Pro?
 
-    private var proName: String { pro?.firstName ?? "her" }
+    private var proName: String { pro?.firstName ?? "your pro" }
     private var currentIndex: Int { booking.status.timelineIndex ?? -1 }
     private var isOffPath: Bool { booking.status.isCancelled }
 
@@ -659,12 +659,12 @@ struct BookingTimeline: View {
         switch step {
         case .requested:
             let mins = pro?.responseMinutes ?? 60
-            return "She usually replies within \(mins.minutesLabel)."
+            return "They usually reply within \(mins.minutesLabel)."
         case .confirmed:
             return "See you \(booking.start.hdSpokenDay.replacingOccurrences(of: "on ", with: "")) at \(booking.start.clock)."
         case .onHerWay:
             if let pro { return "About \(booking.travelMinutes(from: pro)) minutes out." }
-            return "She's on the road."
+            return "They're on the road."
         case .arrived:
             return booking.status == .inProgress ? "Happening now." : "Put the kettle on."
         case .done:

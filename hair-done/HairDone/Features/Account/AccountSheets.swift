@@ -74,7 +74,7 @@ struct AccountDetailsSheet: View {
                 VStack(alignment: .leading, spacing: Space.xl) {
                     photoRow
                     HDTextField(label: "First name", text: $first, contentType: .givenName,
-                                caption: app.proSelf != nil ? "It's your name on both sides, booking and Pro mode." : "It's what she'll see when you book.")
+                                caption: app.proSelf != nil ? "It's your name on both sides, booking and Pro mode." : "It's what your pro sees when you book.")
                     HDTextField(label: "Last name", text: $last, contentType: .familyName, caption: "Optional")
                     HDTextField(label: "Email", text: $email, keyboard: .emailAddress, contentType: .emailAddress,
                                 caption: "Receipts go here.", error: emailProblem)
@@ -519,7 +519,7 @@ struct AccountPaymentsSheet: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            SheetHeader(title: "Payment methods", subtitle: "We hold the amount when you book and charge it when she's done.", onClose: { dismiss() })
+            SheetHeader(title: "Payment methods", subtitle: "We hold the amount when you book and charge it when they're done.", onClose: { dismiss() })
             if app.isOffline { OfflineBar() }
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
@@ -676,7 +676,7 @@ struct AccountNotificationsSheet: View {
                                 subtitle: "Can't turn these off, sorry. They're the useful ones.",
                                 value: "Always on", chevron: false)
                     HairlineRow(title: "Messages",
-                                subtitle: "Always on too. She might be at your door.",
+                                subtitle: "Always on too. They might be at your door.",
                                 value: "Always on", chevron: false)
                     HDSwitch(title: "Day-before reminders", isOn: $reminders)
                         .padding(.vertical, Space.s)
@@ -749,11 +749,11 @@ struct AccountHelpSheet: View {
     static let supportEmail = "hello@hairdonenailsdone.app"
 
     private let faqs: [(String, String)] = [
-        ("How holds and charges work", "When you book, we hold the total on your card. Nothing's taken until she's done. Then you pay in the app, with a tip if you like, or we charge the card 12 hours later. The receipt lands in your inbox. If the booking doesn't happen, the hold drops off in a few days."),
-        ("Cancelling and rescheduling", "Cancel with more than 24 hours' notice and it's free. Less than that and she keeps half. She's already turned down other work for you. Once she's on her way it's half, and once she's at the door it's the full price and the booking fee. Moving a booking is free with more than 24 hours' notice."),
-        ("What if she's late", "She'll message you from the thread if she's running behind. If she's more than 20 minutes late with no word, message us from here and a person will sort it, usually the same day."),
-        ("Safety", "Every pro has had her ID checked by a person before she's listed, and reviews only come from finished, paid bookings. Phone numbers stay hidden until she's confirmed. If anything feels off, report the pro from her profile or the conversation and we'll look at it."),
-        ("Reporting a pro", "Open her profile or the conversation and tap Report. Tell us what happened in a line or two. A person reads every one."),
+        ("How holds and charges work", "When you book, we hold the total on your card. Nothing's taken until they're done. Then you pay in the app, with a tip if you like, or we charge the card 12 hours later. The receipt lands in your inbox. If the booking doesn't happen, the hold drops off in a few days."),
+        ("Cancelling and rescheduling", "Cancel with more than 24 hours' notice and it's free. Less than that and they keep half. They've already turned down other work for you. Once they're on their way it's half, and once they're at the door it's the full price and the booking fee. Moving a booking is free with more than 24 hours' notice."),
+        ("What if they're late", "They'll message you from the thread if they're running behind. If they're more than 20 minutes late with no word, message us from here and a person will sort it, usually the same day."),
+        ("Safety", "Every pro has had their ID checked by a person before they're listed, and reviews only come from finished, paid bookings. Phone numbers stay hidden until they've confirmed. If anything feels off, report the pro from their profile or the conversation and we'll look at it."),
+        ("Reporting a pro", "Open their profile or the conversation and tap Report. Tell us what happened in a line or two. A person reads every one."),
         ("Becoming a pro", "Do hair, nails, makeup, lashes or brows? Tap Set up Pro mode on You. It's about ten minutes: what you do and your prices, where you'll go, your hours, three photos of your work, your ID and where your money lands. Clients can't see you until it's done and a person has checked your ID. It's the same account, so you can still book for yourself. Switch sides from You, or from Profile in Pro mode."),
         ("Deleting your account", "Tap Delete account at the bottom of You. Your profile, addresses and cards go, and if you're a pro, your pro profile, work photos and payout link go too. Past receipts stay in your email and money already on its way still lands. It can't be undone, and it has to wait until every booking you've got on, on either side, is finished.")
     ]
@@ -850,11 +850,11 @@ struct AccountLegalSheet: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: Space.l) {
                     Text("The short version").font(HDFont.name).foregroundStyle(Palette.ink)
-                    Text("Hair Done connects you with a mobile pro and takes payment for the booking. The pro is her own business; the work is hers, the booking terms are ours. We charge you what's on the review screen and nothing else.")
+                    Text("Hair Done connects you with a mobile pro and takes payment for the booking. The pro is their own business; the work is theirs, the booking terms are ours. We charge you what's on the review screen and nothing else.")
                         .font(HDFont.body).foregroundStyle(Palette.ink).fixedSize(horizontal: false, vertical: true)
                     Hairline(strong: true)
                     Text("Your data").font(HDFont.name).foregroundStyle(Palette.ink)
-                    Text("We keep your name, mobile, email, addresses and bookings so the app works. Your address goes to a pro only once she's confirmed. Your card details go to Stripe, not to us. Location is used only while you're in the app, to show who's near.")
+                    Text("We keep your name, mobile, email, addresses and bookings so the app works. Your address goes to a pro only once they've confirmed. Your card details go to Stripe, not to us. Location is used only while you're in the app, to show who's near.")
                         .font(HDFont.body).foregroundStyle(Palette.ink).fixedSize(horizontal: false, vertical: true)
                     Hairline(strong: true)
                     Text("The full terms and privacy policy are on hairdonenailsdone.app. Questions go to Help.")

@@ -345,7 +345,7 @@ struct ProProfileEditView: View {
 
     private func servicesSection(_ pro: Binding<Pro>) -> some View {
         section("Services and prices") {
-            Text("Your price is what she sees. Hair Done's 12% comes out of your side, and she pays a $3 booking fee on top.")
+            Text("Your price is what clients see. Hair Done's 12% comes out of your side, and they pay a $3 booking fee on top.")
                 .font(HDFont.sub).foregroundStyle(Palette.inkSoft)
                 .fixedSize(horizontal: false, vertical: true)
             VStack(spacing: 0) {
@@ -388,8 +388,8 @@ struct ProProfileEditView: View {
                 TertiaryButton(title: "Add photo ID and a selfie", tint: Palette.ink) { showIDCheck = true }
                     .padding(.leading, -8)
             }
-            HDTextField(label: "ABN", placeholder: "11 digits", text: pro.abn, keyboard: .numberPad,
-                        caption: "Sole trader is fine.",
+            HDTextField(label: "ABN (optional)", placeholder: "11 digits", text: pro.abn, keyboard: .numberPad,
+                        caption: "If you have one, it goes on your clients' receipts.",
                         error: !abnDigits.isEmpty && abnDigits.count != 11 ? "An ABN is 11 digits. Have another look." : nil)
         }
     }

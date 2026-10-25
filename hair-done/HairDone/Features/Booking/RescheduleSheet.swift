@@ -40,7 +40,7 @@ struct RescheduleSheet: View {
             } else {
                 VStack(spacing: 0) {
                     SheetHeader(title: "Pick a new time", onClose: { dismiss() })
-                    EmptyState(title: "We couldn't find her.", message: "Try again from your bookings.")
+                    EmptyState(title: "We couldn't find them.", message: "Try again from your bookings.")
                     Spacer(minLength: 0)
                 }
                 .paperBackground()
@@ -65,7 +65,7 @@ struct RescheduleSheet: View {
                         .foregroundStyle(Palette.ink)
                         .fixedSize(horizontal: false, vertical: true)
                     if charge > 0 {
-                        Text("Cancelling now costs \(Money.format(charge)). She's already turned down other work for you.")
+                        Text("Cancelling now costs \(Money.format(charge)). They've already turned down other work for you.")
                             .font(HDFont.sub)
                             .foregroundStyle(Palette.inkSoft)
                             .fixedSize(horizontal: false, vertical: true)

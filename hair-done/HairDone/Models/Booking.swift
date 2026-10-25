@@ -66,13 +66,13 @@ enum BookingStatus: String, Codable, CaseIterable, Hashable {
         switch self {
         case .requested: return "Requested"
         case .confirmed: return "Confirmed"
-        case .onHerWay: return "On her way"
-        case .arrived: return "She's here"
+        case .onHerWay: return "On their way"
+        case .arrived: return "They're here"
         case .inProgress: return "In progress"
         case .done: return "Done"
         case .paid: return "Paid"
         case .cancelledByClient: return "You cancelled"
-        case .cancelledByPro: return "She cancelled"
+        case .cancelledByPro: return "Pro cancelled"
         case .declined: return "Declined"
         case .noShow: return "Missed"
         }
@@ -98,9 +98,9 @@ enum BookingStatus: String, Codable, CaseIterable, Hashable {
     /// What the client sees under the status.
     func clientLine(pro: String) -> String {
         switch self {
-        case .requested: return "Waiting on \(pro). She usually replies in under an hour."
+        case .requested: return "Waiting on \(pro). They usually reply in under an hour."
         case .confirmed: return "\(pro) has locked it in."
-        case .onHerWay: return "\(pro) is on her way."
+        case .onHerWay: return "\(pro) is on their way."
         case .arrived: return "\(pro) is at the door."
         case .inProgress: return "Happening now."
         case .done: return "Done. Charging your card now."

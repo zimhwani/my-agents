@@ -12,7 +12,7 @@ struct PushPrePrompt: View {
     private var line: String {
         side == .pro
             ? "So you see requests in time. They lapse after two hours."
-            : "So you know when she's confirmed and on her way."
+            : "So you know when your pro confirms and when they're on their way."
     }
 
     private var note: String? { side == .pro ? nil : "Nothing else unless you turn it on." }

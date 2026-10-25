@@ -443,7 +443,7 @@ struct ProTodayView: View {
             if hasInspo(b) {
                 VStack(alignment: .leading, spacing: Space.xs) {
                     inspo(b, limit: 2, width: 38, height: 48)
-                    Text("Her inspo").font(HDFont.caption).foregroundStyle(Palette.onInkSoft)
+                    Text("Their inspo").font(HDFont.caption).foregroundStyle(Palette.onInkSoft)
                 }
                 .padding(.bottom, Space.xs)
             }

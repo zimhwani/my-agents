@@ -24,7 +24,7 @@ enum BookingFlowError: Equatable {
         switch self {
         case .declined: return "That card didn't go through. Nothing's been charged. Try another, or Apple Pay."
         case .slotTaken(let start): return "Someone just took \(start.clock). Here's what's still free."
-        case .proUnavailable: return "She's not taking bookings right now. Nothing's been charged."
+        case .proUnavailable: return "They're not taking bookings right now. Nothing's been charged."
         case .other(let line): return line
         }
     }
@@ -332,7 +332,7 @@ struct ServicesStep: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: Space.xl) {
-                StepTitle(title: "Services", sub: "Pick as many as you like. She'll do them in one visit.")
+                StepTitle(title: "Services", sub: "Pick as many as you like. They'll do them in one visit.")
                 VStack(spacing: 0) {
                     Hairline(strong: true)
                     ForEach(pro.services) { service in
@@ -414,7 +414,7 @@ struct TimeStep: View {
         ScrollView {
             VStack(alignment: .leading, spacing: Space.xl) {
                 VStack(alignment: .leading, spacing: Space.s) {
-                    StepTitle(title: "When", sub: "These are her real free slots.")
+                    StepTitle(title: "When", sub: "These are their real free slots.")
                     HStack(alignment: .firstTextBaseline, spacing: 6) {
                         Image(systemName: pro.instantBook ? "bolt" : "clock")
                             .font(.system(size: 13, weight: .regular))
@@ -470,7 +470,7 @@ struct WhereStep: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: Space.xl) {
-                StepTitle(title: "Where", sub: "She'll come to you. Somewhere with a power point and decent light is ideal.")
+                StepTitle(title: "Where", sub: "They'll come to you. Somewhere with a power point and decent light is ideal.")
 
                 VStack(spacing: 0) {
                     Hairline(strong: true)
@@ -489,7 +489,7 @@ struct WhereStep: View {
                 }
 
                 if let address, !pro.comesTo(address) {
-                    InlineNote(text: "That's outside where \(pro.firstName) travels. She comes to \(pro.travelAreaLine).", tone: .warn)
+                    InlineNote(text: "That's outside where \(pro.firstName) travels. They come to \(pro.travelAreaLine).", tone: .warn)
                         .transition(.opacity)
                 }
 
@@ -528,11 +528,11 @@ struct WhereStep: View {
                 placeholder: "Unit 4, the green gate, buzz 12",
                 text: $access,
                 axis: .vertical,
-                caption: "There's no street number here, so tell her which door."
+                caption: "There's no street number here, so tell them which door."
             )
             .lineLimit(1...3)
         } else {
-            HDTextField(label: "Getting in", placeholder: "Parking, buzzer, dogs. Anything she should know getting in.", text: $access, axis: .vertical)
+            HDTextField(label: "Getting in", placeholder: "Parking, buzzer, dogs. Anything they should know getting in.", text: $access, axis: .vertical)
                 .lineLimit(2...4)
         }
     }
@@ -676,9 +676,9 @@ struct NotesStep: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: Space.xl) {
-                StepTitle(title: "Notes and photos", sub: "Optional, but she'll thank you.")
+                StepTitle(title: "Notes and photos", sub: "Optional, but they'll thank you.")
 
-                HDTextField(label: "Anything she should know?", placeholder: "What you're after. Hair length, colours you like, what the event is.", text: $notes, axis: .vertical)
+                HDTextField(label: "Anything they should know?", placeholder: "What you're after. Hair length, colours you like, what the event is.", text: $notes, axis: .vertical)
                     .lineLimit(3...7)
 
                 VStack(alignment: .leading, spacing: Space.m) {
@@ -709,7 +709,7 @@ struct NotesStep: View {
                     if photos.count >= limit {
                         Text("Three's the limit. Keep your favourites.").font(HDFont.caption).foregroundStyle(Palette.inkSoft)
                     } else {
-                        Text("They go to her with the booking.").font(HDFont.caption).foregroundStyle(Palette.inkSoft)
+                        Text("They're sent with the booking.").font(HDFont.caption).foregroundStyle(Palette.inkSoft)
                     }
                 }
             }

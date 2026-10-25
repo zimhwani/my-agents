@@ -381,8 +381,8 @@ struct ProHelpSheet: View {
         ("When I get paid", "Once a client pays, or 12 hours after you mark it done, the money's yours. Stripe pays it to your bank daily. It lands the next business day."),
         ("What Hair Done takes", "12% of your services and travel fee. Tips are all yours. Clients pay a $3 booking fee on top, which doesn't come out of yours."),
         ("Requests and the two hours", "A request waits two hours for you. After that it lapses, the client's told, and it counts against your reliability. Keep notifications on so you see them in time."),
-        ("Cancelling on a client", "She's refunded in full and your reliability drops. Under 70% turns instant book off. If something's come up, message her first."),
-        ("A client didn't show", "Tap I'm here when you arrive and message her. No show opens 15 minutes after the start time, or after you arrived if you were late. It charges her in full and pays you. She can question it for 12 hours."),
+        ("Cancelling on a client", "They're refunded in full and your reliability drops. Under 70% turns instant book off. If something's come up, message them first."),
+        ("A client didn't show", "Tap I'm here when you arrive and message them. No show opens 15 minutes after the start time, or after you arrived if you were late. It charges them in full and pays you. They can question it for 12 hours."),
         ("Pausing or closing", "Taking bookings, in Profile, pauses you straight away. Close my pro profile, at the bottom of Profile, takes you off for good. Your work and reviews are kept if you come back.")
     ]
 

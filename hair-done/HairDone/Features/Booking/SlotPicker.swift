@@ -58,13 +58,13 @@ struct SlotPicker: View {
                     SlotSkeleton()
                         .screenGutter()
                 } else if loadFailed {
-                    ErrorState(title: "Couldn't load her times.", message: nil, actionTitle: "Try again") {
+                    ErrorState(title: "Couldn't load their times.", message: nil, actionTitle: "Try again") {
                         Task { @MainActor in await load() }
                     }
                 } else if offered.isEmpty && isTrimmed {
                     EmptyState(title: "That's as far as it goes.", message: cutoffLine)
                 } else if offered.isEmpty {
-                    EmptyState(title: day.nothingFreeLine, message: "Try another day. The faded ones are days she's off.")
+                    EmptyState(title: day.nothingFreeLine, message: "Try another day. The faded ones are days they're off.")
                 } else {
                     VStack(alignment: .leading, spacing: Space.l) {
                         if !offered.contains(where: \.isAvailable) {
@@ -159,7 +159,7 @@ struct DayStrip: View {
 
     private func offReason(_ date: Date) -> String {
         if pro.availability.isOff(date) { return "\(pro.firstName)'s off that day." }
-        return "She's off \(date.weekday.long)s."
+        return "They're off \(date.weekday.long)s."
     }
 }
 
@@ -198,7 +198,7 @@ struct DayCell: View {
 
     private var accessibilityText: String {
         let day = date.friendlyDay == date.shortDay ? "\(date.weekday.long) \(date.dayNumber)" : date.friendlyDay
-        return isOff ? "\(day), she's off" : day
+        return isOff ? "\(day), they're off" : day
     }
 }
 
@@ -230,7 +230,7 @@ struct SlotGrid: View {
                                         Haptics.selection()
                                         withAnimation(Motion.spring) { selected = slot.start }
                                     } else {
-                                        onUnavailable?(slot.reason ?? "She's booked then.")
+                                        onUnavailable?(slot.reason ?? "They're booked then.")
                                     }
                                 }
                             }
@@ -290,7 +290,7 @@ private struct SlotSkeleton: View {
             }
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Loading her times")
+        .accessibilityLabel("Loading their times")
     }
 }
 
