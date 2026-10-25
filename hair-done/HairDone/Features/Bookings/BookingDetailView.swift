@@ -72,6 +72,7 @@ struct BookingDetailView: View {
         .paperBackground()
         .refreshable { await app.loadBookings() }
         .toolbar(.hidden, for: .navigationBar)
+        .statusBarPaper()
         .animation(Motion.gentle, value: app.isOffline)
         // On the day, between confirmed and done, look for her moves every 30 seconds.
         .task(id: booking.status) {

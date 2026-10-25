@@ -41,15 +41,7 @@ struct RouteDestinations: ViewModifier {
         content
             .tabBarRoom()
             .onAppear { app.tabRootAppeared() }
-            .safeAreaInset(edge: .top, spacing: 0) {
-                // With the system bar hidden, a scrolled root ran its text into the clock. A zero-height
-                // inset sits just under the status bar; its paper reaches up behind it. (An overlay
-                // doesn't work: a ScrollView's frame already runs under the status bar.)
-                Color.clear.frame(height: 0)
-                    .background(Palette.paper.ignoresSafeArea(edges: .top))
-                    .allowsHitTesting(false)
-                    .accessibilityHidden(true)
-            }
+            .statusBarPaper()
             .navigationDestination(for: Route.self) { route in
                 Group {
                     switch route {
@@ -63,6 +55,23 @@ struct RouteDestinations: ViewModifier {
                 }
                 .tabBarRoom()
             }
+    }
+}
+
+// MARK: - Paper behind the status bar
+
+extension View {
+    /// Paper behind the clock, for a screen whose header scrolls away with its content (a tab root,
+    /// Booking detail). With the system bar hidden, scrolled text otherwise runs into the clock. A
+    /// zero-height inset sits just under the status bar; its paper reaches up behind it. (An overlay
+    /// doesn't work: a ScrollView's frame already runs under the status bar.)
+    func statusBarPaper() -> some View {
+        safeAreaInset(edge: .top, spacing: 0) {
+            Color.clear.frame(height: 0)
+                .background(Palette.paper.ignoresSafeArea(edges: .top))
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+        }
     }
 }
 
