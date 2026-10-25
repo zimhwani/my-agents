@@ -9,6 +9,8 @@
 #   Real:     a Resend account (resend.com, free up to 3,000 emails a month) with your domain
 #             verified (Resend > Domains > Add, then the DNS records it shows). Codes then go to
 #             anyone, from an address on that domain, e.g. hello@hairdone.com.au.
+#             The same key also turns on receipt emails: it's saved as the edge function secrets
+#             RESEND_API_KEY and RECEIPT_FROM, which the receipt, pay-booking and settle functions read.
 #
 # Keys are typed here, hidden, and go straight to Supabase. Nothing is saved.
 # Usage:  tools/setup-email.sh
@@ -31,6 +33,10 @@ if [[ -n "$RESEND" ]]; then
   [[ "$RESEND" == re_* ]] || { echo "That doesn't look like a Resend API key (they start with re_)."; exit 1; }
   read -rp "Send from (an address on your verified domain, e.g. hello@hairdone.com.au): " FROM
   [[ "$FROM" == *@*.* ]] || { echo "That isn't an email address."; exit 1; }
+  read -rp "Send receipts from (return for ${FROM}): " RECEIPT_FROM
+  RECEIPT_FROM=${RECEIPT_FROM:-$FROM}
+  [[ "$RECEIPT_FROM" == *@*.* && "${RECEIPT_FROM#*@}" == "${FROM#*@}" ]] || {
+    echo "Receipts need an address on the same verified domain as ${FROM}."; exit 1; }
 fi
 
 SUBJECT="Your Hair Done code"
@@ -106,11 +112,35 @@ if bad:
   print('      Authentication > Providers > Email: OTP length 6')
 sys.exit(1 if bad else 0)
 "
+
+if [[ -n "$RESEND" ]]; then
+  echo "==> Receipt emails (edge function secrets)"
+  BODY=$(RESEND="$RESEND" RECEIPT_FROM="$RECEIPT_FROM" python3 -c "
+import json, os
+print(json.dumps([{'name': 'RESEND_API_KEY', 'value': os.environ['RESEND']},
+                  {'name': 'RECEIPT_FROM', 'value': os.environ['RECEIPT_FROM']}]))")
+  OUT=$(mktemp)
+  CODE=$(curl -sS -o "$OUT" -w '%{http_code}' -X POST "https://api.supabase.com/v1/projects/$REF/secrets" \
+    -H "Authorization: Bearer $SBP" -H "Content-Type: application/json" -d "$BODY")
+  unset BODY
+  if [[ "$CODE" == 2* ]]; then
+    NAMES=$(curl -sS -H "Authorization: Bearer $SBP" "https://api.supabase.com/v1/projects/$REF/secrets" | \
+      python3 -c "import json,sys; print(' '.join(s['name'] for s in json.load(sys.stdin)))")
+    for n in RESEND_API_KEY RECEIPT_FROM; do
+      [[ " $NAMES " == *" $n "* ]] && echo "    ok:   $n" || echo "    NOT SET: $n"
+    done
+  else
+    echo "    Supabase said no (HTTP $CODE):"; cat "$OUT"; echo
+    echo "    Set them by hand: Supabase > Edge Functions > Secrets: RESEND_API_KEY and RECEIPT_FROM."
+  fi
+  rm -f "$OUT"
+fi
 unset SBP RESEND AUTH
 
 echo
 if [[ -n "$FROM" ]]; then
-  echo "Done. Codes come from Hair Done <$FROM> through Resend."
+  echo "Done. Codes come from Hair Done <$FROM> through Resend, and receipts from <$RECEIPT_FROM>."
+  echo "Receipts go out when a booking's paid; a paid booking's receipt screen now has Email it to me."
 else
   echo "Done, in test mode: codes only reach your Supabase team members' email addresses."
   echo "Run this again with a Resend key when your domain is verified."
