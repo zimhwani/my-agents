@@ -141,6 +141,12 @@ final class AppState {
     /// unsaved input). While any is up, a tapped notification waits instead of switching sides or
     /// moving things underneath her. Counted by `.holdsPushRoutes()`.
     var busySurfaces = 0
+    /// A booking she's just had done and hasn't paid: the client shell brings up Pay for it, once.
+    /// Set when bookings load (a push, the 30-second poll on the day, opening the app).
+    var payPrompt: Booking? = nil
+    /// Bookings Pay has already come up for on its own, so closing it isn't met with it again.
+    /// The follow-up push and the Bookings tab's "Pay Kiara" are there after that.
+    private var payPrompted: [String] = UserDefaults.standard.stringArray(forKey: "pay.prompted") ?? []
     /// Whether sign-in by text message is offered (server switch `phone_sign_in`). Off until Twilio's
     /// Australian sender registration is approved. Builds run from Xcode always offer it, for the test numbers.
     var phoneSignInOn: Bool = AppState.phoneSignInDefault
@@ -527,11 +533,22 @@ final class AppState {
             bookings = try await data.bookings(clientID: client.id)
             bookingsLoadFailed = false
             hasLoadedBookings = true
+            offerPay()
         } catch {
             bookingsLoadFailed = true
             lastError = error.localizedDescription
         }
         if people { await loadPeople() }
+    }
+
+    /// Brings up Pay for a done booking she hasn't paid, once per booking, and never over a sheet
+    /// or flow she's in the middle of (it waits for the next load).
+    private func offerPay() {
+        guard payPrompt == nil, busySurfaces == 0, mode == .client,
+              let due = bookings.first(where: { $0.status == .done && !payPrompted.contains($0.id) }) else { return }
+        payPrompted = Array((payPrompted + [due.id]).suffix(50))
+        UserDefaults.standard.set(payPrompted, forKey: "pay.prompted")
+        payPrompt = due
     }
 
     /// Both sides' threads in one go, split by side: `threads` for the side she's on, `otherSideThreads` for the other.

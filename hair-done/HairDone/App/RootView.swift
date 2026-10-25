@@ -145,6 +145,8 @@ struct ClientShell: View {
         .trackKeyboard($keyboardUp)
         // Normally already loading (launch, sign-in, a switch); this joins that rather than repeating it.
         .task { if !app.hasLoadedOnce { await app.refreshAll() } }
+        // She's done and it's time to pay: Pay comes up by itself, once (AppState.offerPay).
+        .sheet(item: Bindable(app).payPrompt) { PaySheet(booking: $0) }
     }
 
     @State private var keyboardUp = false

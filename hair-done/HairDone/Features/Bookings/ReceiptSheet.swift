@@ -85,7 +85,7 @@ struct ReceiptSheet: View {
                         .transition(.opacity)
                 }
                 HStack(spacing: Space.s) {
-                    if details?.canEmail ?? false {
+                    if details?.canEmail ?? true {
                         InkButton(title: sentTo == nil ? "Email it to me" : "Send again", isLoading: emailing, isEnabled: !app.isOffline) { email() }
                     }
                     ShareLink(item: booking.receiptText(proName: proName, proFirst: proFirst, details: details),
@@ -98,7 +98,7 @@ struct ReceiptSheet: View {
                                 .strokeBorder(Palette.ink, lineWidth: 1))
                             .contentShape(RoundedRectangle(cornerRadius: Radius.button, style: .continuous))
                     }
-                    .frame(maxWidth: details?.canEmail ?? false ? 120 : .infinity)
+                    .frame(maxWidth: details?.canEmail ?? true ? 120 : .infinity)
                     .simultaneousGesture(TapGesture().onEnded { Haptics.light() })
                 }
             }

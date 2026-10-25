@@ -2,7 +2,8 @@
 //   { event: "status", booking_id, status }   a booking moved
 //   { event: "message", message_id }          someone sent a message
 //   { event: "moved", booking_id }            the client moved the booking to a new time
-//   { event: "reminders" }                    every five minutes: unanswered requests, day-before, two hours before
+//   { event: "reminders" }                    every five minutes: unanswered requests, day-before, two hours before,
+//                                             and done-but-unpaid (an hour after done, an hour before the charge)
 // Copy follows docs/product-spec.md §12. Needs secrets APNS_KEY_ID, APNS_TEAM_ID, APNS_KEY_P8, APNS_TOPIC;
 // without them it answers 503 and sends nothing.
 import { admin, json } from "../_shared/stripe.ts";
@@ -251,6 +252,27 @@ async function reminders() {
       n += await once(`remind:${s.id}:24h:pro`, { to: x.b.pro_id!, side: "pro", body: `Tomorrow: ${x.client}, ${x.service}, ${clock(s.starts_at)} in ${x.b.address_suburb}.`, kind: "booking", bookingId: s.id });
     } else if (hours <= 2.1 && !quietForClient(true)) {
       n += await once(`remind:${s.id}:2h`, { to: x.b.client_id!, side: "client", body: `${x.pro}'s coming at ${clock(s.starts_at)}. Two hours to go.`, kind: "booking", bookingId: s.id });
+    }
+  }
+
+  // Done and not paid (her card's charged 12 hours after done, unless she's said something's wrong):
+  // a nudge an hour on, and a last word an hour before the charge. Quiet hours hold both back.
+  const { data: unpaid } = await admin.from("bookings").select("id, done_at, capture_paused_until")
+    .eq("status", "done").eq("hold_state", "held").not("done_at", "is", null)
+    .lte("done_at", iso(now - 60 * 60e3)).gte("done_at", iso(now - 12 * 3600e3));
+  for (const u of unpaid ?? []) {
+    if (u.capture_paused_until && new Date(u.capture_paused_until).getTime() > now) continue;
+    if (quietForClient(false)) continue;
+    const x = await load(u.id);
+    if (!x) continue;
+    const doneAt = new Date(u.done_at).getTime();
+    const chargeAt = clock(iso(doneAt + 12 * 3600e3));
+    if (now - doneAt >= 11 * 3600e3) {
+      n += await once(`remind:${u.id}:pay-last`, { to: x.b.client_id!, side: "client",
+        body: `We'll charge ${money(x.total)} for ${x.pro} at ${chargeAt}. Pay now if you'd like to add a tip.`, kind: "booking", bookingId: u.id });
+    } else {
+      n += await once(`remind:${u.id}:pay`, { to: x.b.client_id!, side: "client",
+        body: `Still to pay ${x.pro}: ${money(x.total)}. Pay in the app, or we'll charge your card at ${chargeAt}.`, kind: "booking", bookingId: u.id });
     }
   }
   return n;
