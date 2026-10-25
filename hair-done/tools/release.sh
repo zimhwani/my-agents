@@ -110,5 +110,6 @@ echo "==> uploading"
 xcrun altool --upload-app -f "$EXPORT/HairDone.ipa" -t ios \
   --apiKey "$KEY_ID" --apiIssuer "$ISSUER" 2>&1 | grep -E 'UPLOAD|ERROR|Delivery'
 
+echo "$BUILD" > .last-build   # testflight-ship.py with no number ships this one
 echo "==> build $BUILD ($SHA) is with Apple; processing takes 5-15 min"
 echo "    then: tools/testflight-ship.py $BUILD --internal"

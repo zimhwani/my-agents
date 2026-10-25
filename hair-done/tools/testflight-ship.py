@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Put an uploaded build in front of testers.
 
-    tools/testflight-ship.py --internal        newest uploaded build, internal testers (no review)
+    tools/testflight-ship.py --internal        the build release.sh just uploaded, internal testers (no review)
     tools/testflight-ship.py 21 --internal     a specific build number
     tools/testflight-ship.py 21                external group: submits for beta review
 
@@ -20,6 +20,13 @@ BASE = "https://api.appstoreconnect.apple.com"
 args = [a for a in sys.argv[1:] if not a.startswith("--")]
 INTERNAL = "--internal" in sys.argv
 VERSION = args[0] if args else None
+# No number: the build release.sh just uploaded. Apple can take a few minutes to list a fresh
+# upload, so asking it for the newest would hand back the one before.
+LAST = os.path.join(os.path.dirname(HERE), ".last-build")
+if VERSION is None and os.path.exists(LAST):
+    VERSION = open(LAST).read().strip() or None
+    if VERSION:
+        print("build %s, the one release.sh last uploaded" % VERSION, flush=True)
 
 
 def call(method, path, body=None):
@@ -46,7 +53,10 @@ if VERSION is None:
     print("newest upload is build %s" % VERSION, flush=True)
 else:
     known = [b["attributes"]["version"] for b in (call("GET", "/v1/builds?filter[app]=%s&sort=-uploadedDate&limit=10" % app)[1].get("data") or [])]
-    if known and VERSION not in known:
+    # Newer than anything listed: a fresh upload Apple hasn't listed yet, so wait for it below.
+    if known and VERSION not in known and VERSION.isdigit() and int(VERSION) > max(int(v) for v in known if v.isdigit()):
+        print("build %s isn't listed by Apple yet; waiting for it" % VERSION, flush=True)
+    elif known and VERSION not in known:
         sys.exit("no build %s in App Store Connect. Recent uploads: %s. The number is the commit count; check release.sh's first line." % (VERSION, ", ".join(known)))
 groups = call("GET", "/v1/betaGroups?filter[app]=%s" % app)[1]["data"]
 group = next((g["id"] for g in groups if g["attributes"]["isInternalGroup"] == INTERNAL), None)
