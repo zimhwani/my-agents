@@ -73,7 +73,7 @@ Hello, Melbourne.
 
 ## Screenshots
 
-6.9-inch iPhone (1320 × 2868), 3 to 10 of them. See docs/app-store/screenshots (mockup for approval first).
+iPhone 6.3-inch, 1206 × 2622 (App Store Connect: "iPhone with Dynamic Island, medium display"): docs/app-store/screenshots/1-6.png, in order. The 6.9-inch originals (1320 × 2868) are in screenshots/6.9-inch/. The app is iPhone-only, so no iPad set is needed.
 
 ## App Review Information
 

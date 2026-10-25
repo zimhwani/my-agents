@@ -105,9 +105,12 @@ if __name__ == "__main__":
         sheet.paste(im, (gap + i * (w + gap), gap))
     sheet.resize((sheet.width // 4, sheet.height // 4), Image.LANCZOS).save(os.path.join(HERE, "00-overview-appstore.png"))
     if all(reals):
-        os.makedirs(FINAL, exist_ok=True)
+        # App Store Connect takes RGB PNGs without transparency. Its iPhone slot ("iPhone with Dynamic
+        # Island, medium display") takes 1206 x 2622 (6.3-inch); the 6.9-inch originals are kept too.
+        os.makedirs(os.path.join(FINAL, "6.9-inch"), exist_ok=True)
         for n, p in enumerate(pngs, 1):
-            # App Store Connect takes RGB PNGs without transparency.
-            Image.open(p).convert("RGB").save(os.path.join(FINAL, f"{n}.png"))
+            im = Image.open(p).convert("RGB")
+            im.save(os.path.join(FINAL, "6.9-inch", f"{n}.png"))
+            im.resize((1206, 2622), Image.LANCZOS).save(os.path.join(FINAL, f"{n}.png"))
         print("final set in", os.path.normpath(FINAL))
     print("ok", sum(1 for r in reals if r), "of", len(SHOTS), "from the real app")
