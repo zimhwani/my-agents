@@ -8,7 +8,6 @@ import { admin, stripe } from "./stripe.ts";
 export const HAIR_DONE = {
   name: "Hair Done",
   abn: "45 281 131 814",
-  operator: "hd.nd labs",
   place: "Melbourne VIC",
   email: "hello@hairdonenailsdone.app",
   terms: "hairdonenailsdone.app/terms",
@@ -105,7 +104,7 @@ export function receiptText(r: Receipt): string {
 
 const footerText = (proFirst: string) =>
   `No GST included. ${proFirst} provides the service; Hair Done arranges the booking and payment.\n` +
-  `Hair Done is run by ${HAIR_DONE.operator} · ${HAIR_DONE.place} · ${HAIR_DONE.email} · ${HAIR_DONE.terms}`;
+  `${HAIR_DONE.name} · ${HAIR_DONE.place} · ${HAIR_DONE.email} · ${HAIR_DONE.terms}`;
 
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]!));
 

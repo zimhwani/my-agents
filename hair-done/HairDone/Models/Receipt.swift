@@ -5,7 +5,6 @@ import Foundation
 enum HairDoneBusiness {
     static let name = "Hair Done"
     static let abn = "45 281 131 814"
-    static let operatorName = "hd.nd labs"
     static let place = "Melbourne VIC"
     static let email = "hello@hairdonenailsdone.app"
     static let terms = "hairdonenailsdone.app/terms"
@@ -54,7 +53,7 @@ extension Booking {
     /// The small print under every receipt.
     static func receiptFooter(proFirst: String) -> String {
         "No GST included. \(proFirst) provides the service; Hair Done arranges the booking and payment.\n"
-            + "Hair Done is run by \(HairDoneBusiness.operatorName) · \(HairDoneBusiness.place) · "
+            + "\(HairDoneBusiness.name) · \(HairDoneBusiness.place) · "
             + "\(HairDoneBusiness.email) · \(HairDoneBusiness.terms)"
     }
 }
