@@ -75,7 +75,7 @@ jobs:
           for look in light dark; do
             xcrun simctl ui "$UDID" appearance $look
             xcodebuild test-without-building -project HairDone.xcodeproj -scheme HairDone \
-              -destination "id=$UDID" -derivedDataPath build \
+              -destination "id=$UDID" -derivedDataPath build -skip-testing:HairDoneUITests/AppStoreShots \
               -resultBundlePath "results-$look.xcresult" > "test-$look.log" 2>&1 || true
             grep -E "Test Case|error|failed" "test-$look.log" | tail -40 || true
             mkdir -p "raw-$look"

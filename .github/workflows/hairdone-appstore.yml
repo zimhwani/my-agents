@@ -1,0 +1,124 @@
+name: Hair Done App Store pictures
+
+# The six App Store screenshots from the real app on the sample data (HairDoneUITests/AppStoreShots.swift),
+# on the newest 6.9-inch iPhone (1320 x 2868) with a clean status bar, in light. The raw screens are
+# committed to hair-done/docs/app-store/raw/; docs/design/mockups/build_appstore.py frames them.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [claude/youthful-wright-9n079z]
+    paths:
+      - "hair-done/HairDoneUITests/AppStoreShots.swift"
+      - ".github/workflows/hairdone-appstore.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: hairdone-appstore-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  shots:
+    runs-on: macos-15
+    timeout-minutes: 60
+    defaults:
+      run:
+        working-directory: hair-done
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Tools
+        run: |
+          brew install xcodegen >/dev/null
+          XCODE=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1)
+          [ -n "$XCODE" ] || XCODE=$(ls -d /Applications/Xcode_16*.app | sort -V | tail -1)
+          sudo xcode-select -s "$XCODE"
+          xcodebuild -version
+          : > HairDone.xcconfig   # no backend: the sample data
+          xcodegen generate
+
+      - name: Simulator (6.9-inch, clean status bar)
+        run: |
+          UDID=$(xcrun simctl list devices available -j | python3 -c '
+          import json, re, sys
+          d = json.load(sys.stdin)["devices"]
+          best = None
+          for runtime, devs in d.items():
+              m = re.search(r"iOS-(\d+)-(\d+)", runtime)
+              if not m: continue
+              ver = (int(m.group(1)), int(m.group(2)))
+              for dev in devs:
+                  if re.match(r"iPhone \d+ Pro Max$", dev["name"]):
+                      key = (ver, dev["name"])
+                      if best is None or key > best[0]: best = (key, dev["udid"])
+          print(best[1]); print(best[0], file=sys.stderr)')
+          echo "UDID=$UDID" >> "$GITHUB_ENV"
+          xcrun simctl boot "$UDID"
+          xcrun simctl bootstatus "$UDID" -b
+          xcrun simctl ui "$UDID" appearance light
+          xcrun simctl status_bar "$UDID" override --time "9:41" --dataNetwork wifi --wifiMode active --wifiBars 3 \
+            --cellularMode active --cellularBars 4 --batteryState charged --batteryLevel 100 \
+            || echo "status bar override didn't take"
+          xcrun simctl privacy "$UDID" grant location com.keithchinyanda.hairdone || true
+          xcrun simctl privacy "$UDID" grant photos com.keithchinyanda.hairdone || true
+
+      - name: Build
+        run: |
+          xcodebuild build-for-testing -project HairDone.xcodeproj -scheme HairDone \
+            -destination "id=$UDID" -derivedDataPath build CODE_SIGNING_ALLOWED=NO > build.log 2>&1 \
+            || { grep -E 'error:|BUILD FAILED' build.log | head -60; tail -40 build.log; exit 1; }
+
+      - name: Shots
+        run: |
+          xcodebuild test-without-building -project HairDone.xcodeproj -scheme HairDone \
+            -destination "id=$UDID" -derivedDataPath build -only-testing:HairDoneUITests/AppStoreShots \
+            -resultBundlePath results.xcresult > test.log 2>&1 || true
+          grep -E "Test Case|error|failed" test.log | tail -20 || true
+          mkdir -p raw
+          xcrun xcresulttool export attachments --path results.xcresult --output-path raw || true
+
+      - name: Name the pictures
+        run: |
+          python3 - <<'PY'
+          import json, os, re, shutil
+          os.makedirs("shots", exist_ok=True)
+          def walk(x, out):
+              if isinstance(x, dict):
+                  if "exportedFileName" in x and "suggestedHumanReadableName" in x:
+                      out.append((x["exportedFileName"], x["suggestedHumanReadableName"]))
+                  for v in x.values(): walk(v, out)
+              elif isinstance(x, list):
+                  for v in x: walk(v, out)
+          pairs = []
+          if os.path.exists("raw/manifest.json"):
+              walk(json.load(open("raw/manifest.json")), pairs)
+          for exported, human in pairs:
+              base = human.split("_0_")[0].split(".")[0]
+              if re.fullmatch(r"appstore-[a-z0-9-]+", base) and os.path.exists(f"raw/{exported}"):
+                  shutil.copy(f"raw/{exported}", f"shots/{base}.png")
+          print("\n".join(sorted(os.listdir("shots"))))
+          PY
+          for f in shots/*.png; do sips -g pixelWidth -g pixelHeight "$f" | tail -2 | tr '\n' ' '; echo " $f"; done
+
+      - name: Commit the pictures to the branch
+        run: |
+          set -e
+          OUT="$RUNNER_TEMP/shots"; mkdir -p "$OUT"; cp shots/*.png "$OUT/"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          BRANCH="${GITHUB_REF_NAME}"
+          for attempt in 1 2 3; do
+            git fetch -q origin "$BRANCH"
+            git checkout -q -B shots-commit "origin/$BRANCH"
+            rm -rf docs/app-store/raw; mkdir -p docs/app-store/raw
+            cp "$OUT"/*.png docs/app-store/raw/
+            printf 'App Store screens of %s (run %s).\n' "${GITHUB_SHA:0:7}" "$GITHUB_RUN_ID" > docs/app-store/raw/README.md
+            git add -A docs/app-store/raw
+            git diff --cached --quiet && exit 0
+            git commit -q -m "App Store screens for ${GITHUB_SHA:0:7}"
+            git push -q origin "HEAD:$BRANCH" && exit 0
+            sleep 5
+          done
+          exit 1

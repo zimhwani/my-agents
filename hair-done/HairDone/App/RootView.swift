@@ -147,6 +147,9 @@ struct ClientShell: View {
         .task { if !app.hasLoadedOnce { await app.refreshAll() } }
         // She's done and it's time to pay: Pay comes up by itself, once (AppState.offerPay).
         .sheet(item: Bindable(app).payPrompt) { PaySheet(booking: $0) }
+        #if DEBUG
+        .modifier(DemoShow())
+        #endif
     }
 
     @State private var keyboardUp = false
