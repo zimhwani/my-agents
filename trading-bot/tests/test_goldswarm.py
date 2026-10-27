@@ -65,6 +65,19 @@ def test_trades_doc_rows_and_stats():
     assert all(not k.startswith("_") for r in rows for k in r)   # internal fields never published
 
 
+def test_plumbing_test_trades_are_listed_but_kept_out_of_the_stats():
+    f = feed()
+    f["eas"]["GS_Pulse"] = {"plumbing": True, "open": None, "halted": False, "alerts": {}, "decisions": [],
+                            "lab_check": {}, "trades": [
+        {"open_srv": "2026-10-28 09:00:01", "dir": 1, "fill": 4110.0, "dist": 10.0, "lots": 0.01,
+         "risk_usd": 10.0, "close_srv": "2026-10-28 09:20:00", "exit": 4120.0, "reason": "tp",
+         "profit": 10.0, "swap": 0.0, "R": 1.0}]}
+    doc = goldswarm.trades_doc(f)
+    assert len(doc["rows"]) == 3
+    assert any(r["symbol"] == "XAUUSD·Pulse (test)" for r in doc["rows"])
+    assert doc["stats"]["trades"] == 2 and doc["stats"]["total_r"] == pytest.approx(-0.59, abs=0.011)
+
+
 def test_r_and_pnl_fall_back_to_prices_when_the_log_lacks_them():
     f = feed()
     t = f["eas"]["GS_USOpen"]["trades"][0]

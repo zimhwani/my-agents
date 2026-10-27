@@ -17,7 +17,7 @@ from zoneinfo import ZoneInfo
 
 ET = ZoneInfo("America/New_York")
 CONTRACT_OZ = 100.0                     # MT5 XAUUSD: 1 lot = 100 oz
-LABELS = {"GS_USOpen": "XAUUSD·USOpen", "GS_Trend": "XAUUSD·Trend"}
+LABELS = {"GS_USOpen": "XAUUSD·USOpen", "GS_Trend": "XAUUSD·Trend", "GS_Pulse": "XAUUSD·Pulse (test)"}
 ERRORS = {"HALT", "OPEN_FAIL", "EXIT_FAIL", "TRAIL_FAIL"}
 WARNINGS = {"SKIP"}
 
@@ -82,8 +82,12 @@ def _stats(rows: list[dict]) -> dict:
 
 
 def trades_doc(feed: dict) -> dict:
+    """All closed trades are listed; the headline stats leave out plumbing-test EAs
+    (GS_Pulse: hourly min-lot trades that lose the spread by design)."""
     rows = closed_rows(feed)
-    return {"rows": [{k: v for k, v in r.items() if not k.startswith("_")} for r in rows], "stats": _stats(rows)}
+    test = {n for n, ea in (feed.get("eas") or {}).items() if ea.get("plumbing")}
+    return {"rows": [{k: v for k, v in r.items() if not k.startswith("_")} for r in rows],
+            "stats": _stats([r for r in rows if r["reason"] not in test])}
 
 
 def live_doc(feed: dict, start_equity: float = 10_000.0, now: datetime | None = None) -> dict:
