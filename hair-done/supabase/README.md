@@ -20,6 +20,7 @@ Everything in this folder is deployed there. What's left to switch on is in `../
 | `functions/stripe-webhook` | Keeps bookings, saved cards and payouts in step with Stripe |
 | `functions/connect-onboarding` | Stripe Connect Express link for a pro's payouts |
 | `functions/payouts-return` | The page Stripe sends a pro back to; hands her to `hairdone://payouts/...` |
+| `migrations/0019_watchdog.sql`, `functions/watchdog` | The watchdog: a read-only health check that emails Keith every morning, and within the hour when something new goes red |
 
 ## How the app talks to it
 
@@ -46,6 +47,33 @@ Clients never see a pro's exact location, ABN or Stripe id, and never write pric
 |---|---|---|
 | `hairdone-sweep` | 10 min | Unpaid requests lapse at 30 min; unanswered requests decline at 2 h (−2 reliability); in-progress becomes done 12 h after the end |
 | `hairdone-settle` | 5 min | Calls `functions/v1/settle` with the secret from `private.settings` |
+| `hairdone-watchdog-digest` | daily, 20:30 UTC | Morning email: what needs Keith today, what to watch, the numbers |
+| `hairdone-watchdog-alert` | hourly, :07 | Emails only when a red finding is new in the last 24 h |
+
+## The watchdog
+
+It reads and reports; it never changes a booking, a payment or an account. `watchdog_snapshot()` is a
+STABLE function, so Postgres refuses any write inside it, and Stripe and App Store Connect only get GET
+requests. Its one write is its own log, `private.watchdog_runs`.
+
+- **What it checks.** Money the timers should have moved (settle errors, holds not placed or not let go,
+  charges not taken), bookings stuck past the sweep, open reports, low reviews, pros waiting on their ID
+  check, failed payouts, every timer and what its function answered, RLS, Stripe webhooks, failed
+  deliveries and disputes, live Stripe with sample pros still showing, and App Store review and TestFlight
+  expiry. The rules and their levels are in `functions/watchdog/assess.ts`.
+- **Test the rules:** `node supabase/functions/watchdog/assess.test.ts` (Node 23.6 or later). A made-up
+  snapshot with one of everything has to trip all 30 rules at the right level; the quiet one has to come back clear.
+- **Try it without emailing:** in the SQL editor,
+  `select net.http_post(url := 'https://yohqeunmgrxyakviofua.supabase.co/functions/v1/watchdog', headers := jsonb_build_object('content-type','application/json','x-cron-secret',(select value from private.settings where key='cron_secret')), body := '{"mode":"digest","dry":true}'::jsonb);`
+  then read the answer from `net._http_response` by the id it returns. `"preview"` is the email as text.
+- **Send one now:** `select private.call_watchdog('digest');`
+- **Its own history:** `select ran_at, mode, level, email from private.watchdog_runs order by ran_at desc limit 20;`
+- **Switch it on:** `tools/setup-watchdog.sh` (where to email, sender, a read-only Stripe key, App Store
+  Connect, and optionally an Anthropic key for the two lines at the top). Until `WATCHDOG_TO` is set it runs
+  and logs but emails nobody.
+- **What it can't see:** errors inside functions the app calls directly (`pay-booking`,
+  `create-payment-intent`), which only show in Supabase's logs; and anything Stripe doesn't report on the
+  platform account. If the morning email doesn't arrive, that's the signal: the watchdog itself is down.
 
 ## Changing things
 

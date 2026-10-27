@@ -44,3 +44,6 @@ verify_jwt = false          # checks the cron secret held in private.settings
 
 [functions.payouts-return]
 verify_jwt = false          # a public page Stripe sends pros back to
+
+[functions.watchdog]
+verify_jwt = false          # pg_cron calls it with the cron secret

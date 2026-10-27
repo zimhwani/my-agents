@@ -91,6 +91,13 @@ Never paste a secret key into a chat, an issue or the repo. They go straight int
 Until then the `notify` function answers "not configured" and nothing is sent; the rest of the app works.
 Bookings, messages and reminders (unanswered requests, the day before, two hours before) all push.
 
+## 3c. The watchdog (your morning email)
+
+Already running: it checks money, bookings, reports, pros, timers, Stripe and the App Store every hour, and
+emails you each morning at 7:30. It only reads. Tell it where to write with `tools/setup-watchdog.sh`; it
+also asks for a read-only Stripe key (the script says which boxes to tick) and offers the App Store Connect
+key `asc-status.py` already uses. Details: `supabase/README.md`, "The watchdog".
+
 ## 4. The app on your Mac
 
 In `hair-done/HairDone.xcconfig` (it's gitignored), alongside the team and App Store Connect lines:
@@ -108,6 +115,7 @@ the app runs on its built-in sample data, as it does today.
 ## 5. Your first real pros
 
 There's no admin screen yet. Until there is, you do these in Supabase → SQL editor:
+(The watchdog's morning email lists each of these when there's one waiting, with the line to run.)
 
 - **See who's sent their ID:** `select id, id_submitted_at from pros where id_submitted_at is not null and not is_verified;`
   The photos are in Storage → `id-docs` → her id. They're private: only she and you can see them.
