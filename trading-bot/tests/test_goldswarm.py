@@ -137,3 +137,17 @@ def test_cli_refuses_a_file_that_is_not_a_feed(tmp_path):
     with pytest.raises(SystemExit) as e:
         main(["--env", str(env), "goldswarm-publish", "--feed", str(tmp_path / "missing.json")])
     assert e.value.code == 2
+
+
+def test_live_doc_uses_the_real_account_when_the_feed_has_it():
+    f = feed(account={"server": "Deriv-Demo", "mode": "demo", "balance": 18_102.70, "equity": 18_142.70,
+                      "algo_on": True})
+    L = goldswarm.live_doc(f, start_equity=10_000.0, now=NOW)
+    assert L["equity"] == pytest.approx(18_142.70)                  # straight from MT5
+    assert L["day_start_equity"] == pytest.approx(18_102.70 + 50.30)  # balance before today's -50.30
+    assert not any("Algo Trading" in b for b in L["blockers"])
+
+
+def test_live_doc_warns_when_algo_trading_is_off():
+    f = feed(account={"mode": "demo", "balance": 1.0, "equity": 1.0, "algo_on": False})
+    assert any("Algo Trading is OFF" in b for b in goldswarm.live_doc(f, now=NOW)["blockers"])

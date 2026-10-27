@@ -136,12 +136,20 @@ def live_doc(feed: dict, start_equity: float = 10_000.0, now: datetime | None = 
             blockers.append(f"MT5 price data {age_min / 60:.1f} h old - is the terminal running?")
 
     float_pnl = sum(o["pnl"] for o in open_rows)
+    acct = feed.get("account") or {}
+    if isinstance(acct.get("equity"), (int, float)) and isinstance(acct.get("balance"), (int, float)):
+        # GS_DataAgent v1.20+ exports the real account: show it rather than an assumed start
+        equity, day_start = float(acct["equity"]), float(acct["balance"]) - realized_today
+    else:
+        equity, day_start = start_equity + realized + float_pnl, start_equity + realized - realized_today
+    if acct.get("algo_on") is False:
+        blockers.append("MT5 Algo Trading is OFF - the EAs cannot place orders")
     return {
         "updated": now.isoformat(), "strategy": "Gold Swarm · MT5 EAs",
         "mode": f"{(feed.get('account') or {}).get('mode', 'demo')} · Deriv MT5 · " + " + ".join(eas),
         "currency": "USD", "chart": feed.get("chart"), "log": lines, "events": [],
-        "equity": round(start_equity + realized + float_pnl, 2),
-        "day_start_equity": round(start_equity + realized - realized_today, 2),
+        "equity": round(equity, 2),
+        "day_start_equity": round(day_start, 2),
         "realized_r": round(sum(r["r"] for r in today), 2), "realized_pnl": round(realized_today, 2),
         "closed_today": len(today), "open": open_rows,
         "watchlist": [{"symbol": _label(n), "price": round(bid, 2), "gap_pct": 0.0, "atr_pct": 0.0} for n in eas],
