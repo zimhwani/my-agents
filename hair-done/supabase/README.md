@@ -106,4 +106,5 @@ the app asks them for their photos again (`id_submitted_at` is cleared).
 - **Try it without saving or emailing:** `select net.http_post(url := 'https://yohqeunmgrxyakviofua.supabase.co/functions/v1/vetting', headers := jsonb_build_object('content-type','application/json','x-cron-secret',(select value from private.settings where key='cron_secret')), body := jsonb_build_object('dry', true, 'pro_id', '<pro id>'));`
 - **History:** `select pro_id, verdict, email, decision, reason, decided_at from private.vetting_reviews order by created_at desc;`
 - **The review page is on the website,** because Supabase serves HTML from `*.supabase.co` as plain text.
-  It goes live with the rest of `site/`. Until it does, the email carries the same decision as SQL lines.
+  The site deploys from `hair-done/` with `npx wrangler deploy` (see `wrangler.jsonc`). The email also carries
+  the same decision as SQL lines, in case the page is ever down.

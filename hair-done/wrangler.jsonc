@@ -1,0 +1,11 @@
+// The website, hairdonenailsdone.app: the static files in site/, served by the Cloudflare Worker that
+// owns the domain (first made in the dashboard as noisy-hill-5195). No code, just files.
+// Deploy from this folder after `npx wrangler login`:  npx wrangler deploy
+// It replaces the whole site with what's in site/, so a file deleted here disappears from the web.
+{
+  "name": "noisy-hill-5195",
+  "compatibility_date": "2026-10-25",
+  "assets": {
+    "directory": "./site"
+  }
+}
