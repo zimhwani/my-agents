@@ -47,3 +47,9 @@ verify_jwt = false          # a public page Stripe sends pros back to
 
 [functions.watchdog]
 verify_jwt = false          # pg_cron calls it with the cron secret
+
+[functions.vetting]
+verify_jwt = false          # pg_cron calls it with the cron secret
+
+[functions.vetting-review]
+verify_jwt = false          # the review page calls it; the signed review link is the key

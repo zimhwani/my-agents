@@ -116,6 +116,7 @@ the app runs on its built-in sample data, as it does today.
 
 There's no admin screen yet. Until there is, you do these in Supabase → SQL editor:
 (The watchdog's morning email lists each of these when there's one waiting, with the line to run.)
+(Pro vetting now does the ID check legwork: you get an email per pro with a link to `hairdonenailsdone.app/review/`, where you approve or send it back. See `supabase/README.md`, "Pro vetting". The lines below still work.)
 
 - **See who's sent their ID:** `select id, id_submitted_at from pros where id_submitted_at is not null and not is_verified;`
   The photos are in Storage → `id-docs` → her id. They're private: only she and you can see them.

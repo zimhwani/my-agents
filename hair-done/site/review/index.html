@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="en-AU">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="referrer" content="no-referrer">
+  <title>ID check · Hair Done</title>
+  <link rel="stylesheet" href="/style.css">
+  <style>
+    /* The review page for a pro's ID check. Opened from the vetting email; the link after # is the key.
+       Data comes from the vetting-review function (supabase/functions/vetting-review). */
+    .muted { color: var(--ink-soft); }
+    .verdict { display: inline-block; font: 600 13px/1 var(--sans); letter-spacing: .06em; text-transform: uppercase;
+               padding: 6px 8px; border: 1px solid currentColor; border-radius: 4px; }
+    .v-pass { color: #2E6B3F; } .v-look_closer { color: #8A5A00; } .v-problem { color: var(--lacquer); }
+    @media (prefers-color-scheme: dark) { .v-pass { color: #7BC48F; } .v-look_closer { color: #E0B25C; } }
+    .checks { list-style: none; padding: 0; margin: 12px 0 0; }
+    .checks li { display: grid; grid-template-columns: 72px 1fr; gap: 12px; padding: 12px 0; border-top: 0.5px solid var(--line); margin: 0; }
+    .checks .tag { font: 600 13px/1.6 var(--sans); }
+    .s-ok { color: #2E6B3F; } .s-warn { color: #8A5A00; } .s-bad { color: var(--lacquer); } .s-skip { color: var(--ink-soft); }
+    @media (prefers-color-scheme: dark) { .s-ok { color: #7BC48F; } .s-warn { color: #E0B25C; } }
+    .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .pair figure, .grid figure { margin: 0; }
+    .pair img { width: 100%; aspect-ratio: 3 / 4; object-fit: cover; border-radius: 2px; background: var(--line); display: block; }
+    figcaption { font-size: 14px; color: var(--ink-soft); margin-top: 6px; }
+    .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+    .grid img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 2px; background: var(--line); display: block; }
+    .missing { aspect-ratio: 3 / 4; display: grid; place-items: center; border: 1px dashed var(--line); color: var(--ink-soft); font-size: 14px; }
+    .decide { margin-top: 12px; }
+    .decide label { display: flex; gap: 10px; align-items: flex-start; padding: 8px 0; cursor: pointer; }
+    .decide input[type=checkbox], .decide input[type=radio] { width: 20px; height: 20px; margin: 3px 0 0; accent-color: var(--ink); flex: none; }
+    textarea { width: 100%; min-height: 72px; font: 16px/1.5 var(--sans); color: var(--ink); background: transparent;
+               border: 0; border-bottom: 1px solid var(--line); padding: 6px 0; resize: vertical; }
+    button { font: 600 17px/1 var(--sans); min-height: 52px; width: 100%; border-radius: 6px; cursor: pointer; margin-top: 12px; }
+    .ink { background: var(--ink); color: var(--paper); border: 0; }
+    .outline { background: transparent; color: var(--ink); border: 1px solid var(--ink); }
+    button[disabled] { opacity: .5; cursor: default; }
+    .banner { padding: 14px 16px; border: 1px solid var(--line); border-radius: 6px; margin: 16px 0; }
+    .err { color: var(--lacquer); }
+    [hidden] { display: none !important; }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header><a class="mark" href="/">hd<span>.</span></a></header>
+    <h1>ID check</h1>
+    <p id="status" class="lead muted">Opening…</p>
+
+    <div id="review" hidden>
+      <p id="who" class="lead"></p>
+      <p><span id="verdict" class="verdict"></span></p>
+
+      <h2>What the checks found</h2>
+      <ul id="checks" class="checks"></ul>
+      <p class="note">The checks never look at the photo ID or selfie. That part is yours.</p>
+
+      <div id="photos">
+        <h2>Photo ID and selfie</h2>
+        <p class="note">Same person? Is the ID real, in date, and in their name? Tap a photo to see it full size. These links stop working 10 minutes after the page opens.</p>
+        <div class="pair">
+          <figure id="idfig"></figure>
+          <figure id="selfiefig"></figure>
+        </div>
+
+        <h2>Their work</h2>
+        <div id="work" class="grid"></div>
+        <p id="nowork" class="note" hidden>No work photos yet.</p>
+      </div>
+
+      <h2>Services</h2>
+      <table><thead><tr><th>Service</th><th class="num">Price</th><th class="num">Others charge</th></tr></thead><tbody id="services"></tbody></table>
+      <p id="travel" class="note"></p>
+
+      <div id="decision">
+        <h2>Decide</h2>
+        <div class="decide">
+          <label><input type="checkbox" id="insurance"> <span>I've seen their public liability insurance</span></label>
+          <button class="ink" id="approve">Approve</button>
+        </div>
+        <div class="decide" style="margin-top:32px">
+          <p class="muted">Or send it back. They'll get an email with the reason, and the app asks them for their photos again.</p>
+          <div id="reasons"></div>
+          <textarea id="other" placeholder="What should they fix?" hidden></textarea>
+          <button class="outline" id="back">Send it back</button>
+        </div>
+        <p id="decideErr" class="err" role="alert"></p>
+      </div>
+    </div>
+
+    <footer><p>Only for the Hair Done team. Nothing on this page is saved in your browser.</p></footer>
+  </main>
+
+  <script>
+  (() => {
+    const API = "https://yohqeunmgrxyakviofua.supabase.co/functions/v1/vetting-review";
+    const token = new URLSearchParams(location.hash.slice(1)).get("t") || "";
+    const $ = (id) => document.getElementById(id);
+    const REASONS = [
+      "the photo ID isn't readable",
+      "the selfie doesn't clearly show your face",
+      "the name on your ID doesn't match your profile",
+      "the ABN you gave doesn't match your name",
+    ];
+    const TAG = { ok: "OK", warn: "Look", bad: "Problem", skip: "n/a" };
+    const WORDS = { pass: "Looks good", look_closer: "Look closer", problem: "Problem" };
+    const money = (c) => "$" + Math.round(c / 100);
+    const el = (tag, attrs = {}, text) => { const e = document.createElement(tag); Object.assign(e, attrs); if (text != null) e.textContent = text; return e; };
+    const date = (iso) => iso ? new Date(iso).toLocaleString("en-AU", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" }) : "";
+
+    async function call(body) {
+      const res = await fetch(API, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ token, ...body }) });
+      return { status: res.status, data: await res.json().catch(() => ({})) };
+    }
+
+    const ENDED = {
+      link_expired: "This link has run out or isn't right. Links last 72 hours. To get a fresh one, run this in the Supabase SQL editor with their pro id: select private.call_vetting('<pro id>');",
+      already_decided: "Already decided on this link.",
+      stale: "They've sent new photos since this was checked, or they're already ID checked. A new email comes within 15 minutes.",
+    };
+
+    function photo(fig, url, label) {
+      fig.replaceChildren();
+      if (url) {
+        const a = el("a", { href: url, target: "_blank", rel: "noreferrer" });
+        a.append(el("img", { src: url, alt: label, referrerPolicy: "no-referrer" }));
+        fig.append(a);
+      } else fig.append(el("div", { className: "missing" }, "Not uploaded"));
+      fig.append(el("figcaption", {}, label));
+    }
+
+    function show(d) {
+      const p = d.pro;
+      $("status").hidden = true;
+      $("review").hidden = false;
+      $("who").textContent = `${p.name || "A pro"}${(p.specialties || []).length ? ", " + p.specialties.join(", ") : ""}${p.suburb ? ", " + p.suburb : ""}. Sent ${date(p.submitted)}.`;
+      $("verdict").textContent = WORDS[d.verdict] || d.verdict;
+      $("verdict").className = "verdict v-" + d.verdict;
+      $("checks").replaceChildren(...(d.checks || []).map((c) => {
+        const li = el("li");
+        li.append(el("span", { className: "tag s-" + c.status }, TAG[c.status] || c.status));
+        const t = el("div"); t.append(el("strong", {}, c.label), document.createElement("br"), document.createTextNode(c.note));
+        li.append(t); return li;
+      }));
+      const open = !d.decided && !d.stale;
+      $("photos").hidden = !open;
+      if (open) {
+        photo($("idfig"), d.photos.id, "Photo ID");
+        photo($("selfiefig"), d.photos.selfie, "Selfie");
+        $("work").replaceChildren(...d.photos.work.map((u) => {
+          const a = el("a", { href: u, target: "_blank", rel: "noreferrer" });
+          a.append(el("img", { src: u, alt: "Their work", loading: "lazy", referrerPolicy: "no-referrer" })); return a;
+        }));
+        $("nowork").hidden = d.photos.work.length > 0;
+      }
+      $("services").replaceChildren(...(p.services || []).map((s) => {
+        const tr = el("tr");
+        tr.append(el("td", {}, s.name), el("td", { className: "num" }, money(s.price_cents)),
+                  el("td", { className: "num" }, s.median_of >= 3 ? "about " + money(s.median_cents) : "not enough yet"));
+        return tr;
+      }));
+      $("travel").textContent = `Travels up to ${p.travel_radius_km ?? 0} km${p.suburb ? " from " + p.suburb : ""}, ${p.travel_fee_cents ? money(p.travel_fee_cents) + " travel fee" : "no travel fee"}. ABN: ${p.abn || "none given"}.`;
+      $("decision").hidden = !open;
+      if (!open) {
+        const b = el("p", { className: "banner" }, d.decided ? `Already decided: ${d.decided === "approved" ? "approved" : "sent back"}.` : ENDED.stale);
+        $("review").prepend(b);
+      }
+    }
+
+    function reasons() {
+      const box = $("reasons");
+      [...REASONS, "something else"].forEach((r, i) => {
+        const l = el("label"); const input = el("input", { type: "radio", name: "reason", value: i < REASONS.length ? r : "" });
+        input.addEventListener("change", () => { $("other").hidden = i < REASONS.length; if (!$("other").hidden) $("other").focus(); });
+        l.append(input, el("span", {}, r.charAt(0).toUpperCase() + r.slice(1)));
+        box.append(l);
+      });
+    }
+
+    async function decide(decision) {
+      $("decideErr").textContent = "";
+      let reason = "";
+      if (decision === "sent_back") {
+        const picked = document.querySelector("input[name=reason]:checked");
+        if (!picked) { $("decideErr").textContent = "Pick a reason first. They'll see it."; return; }
+        reason = picked.value || $("other").value.trim();
+        if (!reason) { $("decideErr").textContent = "Write what they should fix. They'll see it."; return; }
+        if (!confirm(`Send it back? They'll get an email saying: we couldn't finish your ID check: ${reason}.`)) return;
+      } else if (!confirm($("insurance").checked ? "Approve, with insurance seen?" : "Approve without insurance on file?")) return;
+      $("approve").disabled = $("back").disabled = true;
+      const { status, data } = await call({ action: "decide", decision, reason, insurance: $("insurance").checked });
+      if (status === 200 && data.ok) {
+        $("review").hidden = true; $("status").hidden = false;
+        $("status").textContent = decision === "approved"
+          ? `Approved. ${data.email === "sent" ? "They've been emailed." : "The email to them didn't send (" + data.email + "), so tell them yourself."}`
+          : `Sent back. ${data.email === "sent" ? "They've been emailed the reason." : "The email to them didn't send (" + data.email + "), so tell them yourself."}`;
+        return;
+      }
+      $("approve").disabled = $("back").disabled = false;
+      $("decideErr").textContent = ENDED[data.error] || "That didn't go through. Nothing changed. Try again.";
+    }
+
+    $("approve").addEventListener("click", () => decide("approved"));
+    $("back").addEventListener("click", () => decide("sent_back"));
+    reasons();
+
+    if (!token) { $("status").textContent = "This page opens from the link in the vetting email."; return; }
+    call({ action: "view" }).then(({ status, data }) => {
+      if (status === 200) show(data);
+      else $("status").textContent = ENDED[data.error] || "Couldn't open it. Try the link again in a minute.";
+    }).catch(() => { $("status").textContent = "Couldn't reach Hair Done. Check your connection and try again."; });
+  })();
+  </script>
+</body>
+</html>

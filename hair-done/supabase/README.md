@@ -21,6 +21,7 @@ Everything in this folder is deployed there. What's left to switch on is in `../
 | `functions/connect-onboarding` | Stripe Connect Express link for a pro's payouts |
 | `functions/payouts-return` | The page Stripe sends a pro back to; hands her to `hairdone://payouts/...` |
 | `migrations/0019_watchdog.sql`, `functions/watchdog` | The watchdog: a read-only health check that emails Keith every morning, and within the hour when something new goes red |
+| `migrations/0020_vetting.sql`, `functions/vetting`, `functions/vetting-review` | Pro vetting: checks each pro who sends their ID and emails Keith a review link for `site/review/` |
 
 ## How the app talks to it
 
@@ -49,6 +50,7 @@ Clients never see a pro's exact location, ABN or Stripe id, and never write pric
 | `hairdone-settle` | 5 min | Calls `functions/v1/settle` with the secret from `private.settings` |
 | `hairdone-watchdog-digest` | daily, 20:30 UTC | Morning email: what needs Keith today, what to watch, the numbers |
 | `hairdone-watchdog-alert` | hourly, :07 | Emails only when a red finding is new in the last 24 h |
+| `hairdone-vetting` | 15 min | Checks pros who sent their ID and emails Keith each one |
 
 ## The watchdog
 
@@ -80,3 +82,28 @@ requests. Its one write is its own log, `private.watchdog_runs`.
 Use the Supabase MCP or CLI. For a fresh project: apply the migrations in order, deploy the six functions
 (`settle`, `stripe-webhook` and `payouts-return` with JWT verification off), change the URL in
 `0005_schedule.sql`, then follow `../docs/go-live.md`.
+
+## Pro vetting
+
+When a pro sends their photo ID and selfie, within 15 minutes Keith gets an email: what the checks found,
+a verdict (looks good, look closer, problem) and a button to the review page,
+`hairdonenailsdone.app/review/` (`site/review/index.html`). There he sees the ID, the selfie and their work
+side by side and taps Approve, or sends it back with a reason. Either way the pro is emailed; sent back,
+the app asks them for their photos again (`id_submitted_at` is cleared).
+
+- **What it checks:** both ID photos are there (and not tiny files), the ABN (check digits; then the
+  government's ABN Lookup: active, and the name matches theirs), work photos (none the same file as one in
+  another account, none uploaded twice), prices against everyone else's for the same category, travel area
+  and fee. Rules: `functions/vetting/assess.ts`; test: `node supabase/functions/vetting/assess.test.ts`.
+- **What it never does:** look at the ID photo or selfie. The privacy policy says they're never shown to
+  anyone outside the Hair Done team, and no AI service is on its list of processors. Checking a face
+  against an ID is Keith's job on the review page.
+- **The link** is signed with a key in `private.settings`, lasts 72 hours, decides once, and stops working
+  if the pro sends new photos. Photos on the page are signed storage links that last 10 minutes.
+  A fresh link for a pro: `select private.call_vetting('<pro id>');`
+- **ABN Lookup:** `tools/setup-vetting.sh` saves the GUID (register free at abr.business.gov.au). Without
+  it, ABNs are only checked for typos.
+- **Try it without saving or emailing:** `select net.http_post(url := 'https://yohqeunmgrxyakviofua.supabase.co/functions/v1/vetting', headers := jsonb_build_object('content-type','application/json','x-cron-secret',(select value from private.settings where key='cron_secret')), body := jsonb_build_object('dry', true, 'pro_id', '<pro id>'));`
+- **History:** `select pro_id, verdict, email, decision, reason, decided_at from private.vetting_reviews order by created_at desc;`
+- **The review page is on the website,** because Supabase serves HTML from `*.supabase.co` as plain text.
+  It goes live with the rest of `site/`. Until it does, the email carries the same decision as SQL lines.
