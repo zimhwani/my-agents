@@ -958,6 +958,32 @@ def cmd_dashboard(args) -> None:
         http.server.ThreadingHTTPServer((args.host, args.serve), handler).serve_forever()
 
 
+def cmd_goldswarm_publish(args) -> None:
+    """Gold Swarm MT5 EAs -> the hosted dashboard's tab for VERCEL_BLOB_PREFIX (display only)."""
+    import json as _json
+    from .goldswarm import publish
+    from .publish import BlobPublisher, PublishError
+    s = _settings(args)
+    try:
+        feed = _json.loads(Path(args.feed).read_text())
+    except (OSError, ValueError) as exc:
+        print(f"cannot read feed {args.feed}: {exc}")
+        sys.exit(2)
+    if not isinstance(feed, dict) or "eas" not in feed:
+        print(f"{args.feed} is not a Gold Swarm feed")
+        sys.exit(2)
+    try:
+        pub = BlobPublisher(s.vercel_blob_token, s.vercel_blob_prefix)
+    except PublishError as exc:
+        print(f"publish failed: {exc}")
+        sys.exit(1)
+    live_ok, trades_ok = publish(feed, pub, args.start_equity)
+    print(f"goldswarm -> {s.vercel_blob_prefix}/live.json {'ok' if live_ok else 'FAILED'}, "
+          f"trades.json {'ok' if trades_ok else 'FAILED'}")
+    if not (live_ok and trades_ok):
+        sys.exit(1)
+
+
 # ---------------------------------------------------------------------------
 def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(prog="tradebot", description="IB autonomous intraday trading bot")
@@ -1078,6 +1104,10 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--publish", action="store_true", help="upload trades.json + live.json to Vercel Blob now")
     p.add_argument("--snapshot", action="store_true", help="with --publish: refresh the offline equity snapshot even if a session snapshot exists")
 
+    p = sub.add_parser("goldswarm-publish", help="show the Gold Swarm MT5 EAs on the dashboard tab for VERCEL_BLOB_PREFIX")
+    p.add_argument("--feed", default="data-goldswarm/feed.json", help="feed JSON built by the Gold Swarm lab")
+    p.add_argument("--start-equity", type=float, default=10_000.0, help="demo balance the EAs started from")
+
     args = ap.parse_args(argv)
     {"check": cmd_check, "scan": cmd_scan, "run": cmd_run, "flatten": cmd_flatten, "kill": cmd_kill, "job": cmd_job,
      "telegram-test": cmd_telegram_test, "fetch-data": cmd_fetch_data, "backtest": cmd_backtest,
@@ -1085,7 +1115,7 @@ def main(argv: list[str] | None = None) -> None:
      "fetch-gappers": cmd_fetch_gappers, "fetch-crypto": cmd_fetch_crypto,
      "crypto-explain": cmd_crypto_explain, "arb-monitor": cmd_arb_monitor, "report": cmd_report,
      "research": cmd_research, "news": cmd_news, "notify": cmd_notify,
-     "tjl-check": cmd_tjl_check}[args.cmd](args)
+     "tjl-check": cmd_tjl_check, "goldswarm-publish": cmd_goldswarm_publish}[args.cmd](args)
 
 
 if __name__ == "__main__":
