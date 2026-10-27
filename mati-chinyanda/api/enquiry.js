@@ -79,6 +79,20 @@ function detailsTable(f) {
     ).join('') + `</table>`;
 }
 
+// Spam heuristics. Returns true for submissions that look automated. The form sets _t to the
+// time it was opened; anything submitted in under 4 seconds is a bot. Then link-heavy SEO pitches.
+function isSpam(f) {
+  const opened = Number(f._t || 0);
+  if (opened && Date.now() - opened < 4000) return true;
+  const text = `${f.message || ''} ${f.name || ''} ${f.organisation || ''} ${f.event_name || ''}`.toLowerCase();
+  const links = (text.match(/https?:\/\/|www\.|\b[a-z0-9-]+\.(?:pro|xyz|top|click|site|online|shop|info|biz|ru|cn)\b/g) || []).length;
+  if (links >= 2) return true;
+  const pitches = /search index|google'?s? index|indexsubmit|seo service|backlink|rank(?:ing)? (?:on|in) google|web design service|boost your (?:traffic|ranking)|crypto|bitcoin|casino|loan offer|guest post/;
+  if (pitches.test(text)) return true;
+  if (/^[a-z]{2,}[0-9]{3,}$/i.test(String(f.name || '').trim())) return true;   // "john48213"
+  return false;
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'POST only' });
   const key = process.env.RESEND_API_KEY, to = process.env.ENQUIRY_TO;
@@ -86,6 +100,7 @@ export default async function handler(req, res) {
   let f;
   try { f = await readForm(req); } catch { return res.status(400).json({ ok: false, error: 'Bad form data' }); }
   if (f._gotcha) return res.status(200).json({ ok: true });                      // honeypot: pretend success
+  if (isSpam(f)) { console.warn('Dropped as spam:', { name: f.name, email: f.email, msg: String(f.message).slice(0, 80) }); return res.status(200).json({ ok: true }); }
   if (!f.name || !f.email || !f.message) { console.error('Missing fields; keys received:', Object.keys(f)); return res.status(422).json({ ok: false, error: 'Name, email and message are required (form data not received)' }); }
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(f.email)) return res.status(422).json({ ok: false, error: 'Invalid email' });
   if (f.date_tbc && !f.event_date) f.event_date = 'Not sure yet';

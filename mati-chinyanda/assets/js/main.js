@@ -78,6 +78,7 @@
   /* Enquiry form */
   const form = d.querySelector('#enquiry-form');
   if (form) {
+    form.dataset.opened = String(Date.now());
     const status = form.querySelector('.form-status');
     const setStatus = (msg, kind) => { status.textContent = msg; status.className = 'form-status is-' + kind; };
     form.addEventListener('submit', async (e) => {
@@ -106,6 +107,7 @@
       btn.disabled = true; btn.classList.add('is-loading'); setStatus('Sending…', 'pending');
       try {
         const payload = {}; data.forEach((v, k) => { payload[k] = v; });
+        payload._t = form.dataset.opened;
         const res = await fetch(endpoint, { method: 'POST', body: JSON.stringify(payload), headers: { Accept: 'application/json', 'Content-Type': 'application/json' } });
         if (res.status === 503) { useMail(); return; }   // email sending not configured yet
         if (!res.ok) { let msg = ''; try { msg = (await res.json()).error || ''; } catch {} throw new Error(msg || 'Request failed'); }
