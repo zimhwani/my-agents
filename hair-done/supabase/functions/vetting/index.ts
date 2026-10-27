@@ -2,6 +2,7 @@
 //   {}                   checks every pro who sent their ID and has no review yet, and emails Keith each one
 //   { pro_id }           (re)checks that pro and emails a fresh review link (an old link has run out)
 //   add  dry: true       returns the checks without saving or emailing (works on any pro, for trying it out)
+//   { test: true }       emails Keith an example for a made-up pro, marked [Test], so he knows what to expect
 //
 // It decides nothing: the review page (site/review/, through the vetting-review function) is where Keith
 // approves or sends it back. It never reads the ID photo or selfie: only their file names and sizes.
@@ -25,6 +26,10 @@ Deno.serve(async (req) => {
   const body = await req.json().catch(() => ({}));
   const dry = body.dry === true;
   const only = typeof body.pro_id === "string" ? body.pro_id : null;
+  if (body.test === true) {
+    const { verdict, checks } = assess(EXAMPLE, EXAMPLE_ABR);
+    return json({ test: true, verdict, email: await tellKeith(EXAMPLE, "Ivy K", verdict, checks, null) });
+  }
 
   const { data: queue, error } = await admin.rpc("vetting_queue", { only_pro: only });
   if (error) return json({ error: error.message }, 500);
@@ -65,14 +70,16 @@ const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replac
 const MARK: Record<string, string> = { ok: "OK", warn: "Look", bad: "Problem", skip: "n/a" };
 const COLOR: Record<string, string> = { ok: "#2E6B3F", warn: "#8A5A00", bad: "#B3261E", skip: "#6B655C" };
 
-async function tellKeith(p: Record<string, any>, who: string, verdict: Verdict, checks: Check[], token: string): Promise<string> {
+async function tellKeith(p: Record<string, any>, who: string, verdict: Verdict, checks: Check[], token: string | null): Promise<string> {
   if (!TO || !FROM || !RESEND_KEY) return "not_configured";
-  const link = `${REVIEW_PAGE}#t=${token}`;
-  const subject = `Hair Done: ${who} is waiting for their ID check (${VERDICT_WORDS[verdict]})`;
+  // No token: the test email. Its button opens the page with no review behind it.
+  const link = token ? `${REVIEW_PAGE}#t=${token}` : REVIEW_PAGE;
+  const subject = `${token ? "" : "[Test] "}Hair Done: ${who} is waiting for their ID check (${VERDICT_WORDS[verdict]})`;
   const what = [(p.specialties ?? []).join(", "), p.suburb].filter(Boolean).join(", ");
   const sqlApprove = `update pros set is_verified = true, id_checked_at = now(), insurance_on_file = true where id = '${p.id}';`;
   const sqlBack = `update pros set id_submitted_at = null where id = '${p.id}';`;
   const text = [
+    ...(token ? [] : ["This is a test: Ivy is made up, and the button doesn't open a real review.", ""]),
     `${who} sent their photo ID and a selfie${what ? ` (${what})` : ""}.`, "",
     ...checks.map((c) => `- ${MARK[c.status]}: ${c.label}. ${c.note}`), "",
     "Nothing here looked at the ID photo or selfie: compare those yourself on the review page.",
@@ -82,6 +89,7 @@ async function tellKeith(p: Record<string, any>, who: string, verdict: Verdict, 
   ].join("\n");
   const html = `<!doctype html><html><body style="margin:0;background:#F8F3EC"><div style="max-width:600px;margin:0 auto;padding:28px 20px;font:15px/1.5 -apple-system,Helvetica,sans-serif;color:#241A16">
   <div style="font:italic 24px Georgia,serif">${esc(who)} is waiting for their ID check</div>
+  ${token ? "" : `<p style="background:#F4E3B5;padding:8px 10px;border-radius:4px;margin:12px 0 0">This is a test: Ivy is made up, and the button doesn't open a real review.</p>`}
   <p style="color:#6F625B;margin:6px 0 18px">${esc(what || "New pro")} · ${esc(VERDICT_WORDS[verdict])}</p>
   <table style="width:100%;border-collapse:collapse">${checks.map((c) => `<tr><td style="padding:8px 10px 8px 0;border-top:1px solid #E7E1D8;vertical-align:top;white-space:nowrap;font-weight:600;color:${COLOR[c.status]}">${MARK[c.status]}</td><td style="padding:8px 0;border-top:1px solid #E7E1D8"><b>${esc(c.label)}</b><br>${esc(c.note)}</td></tr>`).join("")}</table>
   <p style="margin:18px 0">Nothing here looked at the ID photo or selfie: compare those yourself on the review page.</p>
@@ -92,7 +100,8 @@ async function tellKeith(p: Record<string, any>, who: string, verdict: Verdict, 
   try {
     const res = await fetch("https://api.resend.com/emails", {
       method: "POST",
-      headers: { Authorization: `Bearer ${RESEND_KEY}`, "Content-Type": "application/json", "Idempotency-Key": `vetting-${token.slice(0, 36)}-${token.split(".")[1]}` },
+      headers: { Authorization: `Bearer ${RESEND_KEY}`, "Content-Type": "application/json",
+                 "Idempotency-Key": token ? `vetting-${token.slice(0, 36)}-${token.split(".")[1]}` : `vetting-test-${Math.floor(Date.now() / 60000)}` },
       body: JSON.stringify({ from: `Hair Done vetting <${FROM}>`, to: TO.split(",").map((s) => s.trim()), subject, html, text }),
     });
     return res.ok ? "sent" : `resend ${res.status}: ${(await res.text()).slice(0, 160)}`;
@@ -100,3 +109,15 @@ async function tellKeith(p: Record<string, any>, who: string, verdict: Verdict, 
     return `resend: ${(e as Error).message}`;
   }
 }
+
+// The made-up pro for { test: true }: one name mismatch on the ABN, so the email shows a "Look" row.
+const EXAMPLE = {
+  id: "00000000-0000-0000-0000-000000000000", first_name: "Ivy", last_name: "Kaur", last_initial: "K",
+  specialties: ["lashes", "brows"], suburb: "Brunswick", abn: "51 824 753 556", travel_radius_km: 20, travel_fee_cents: 2000,
+  id_docs: [{ name: "x/photo-id.jpg", size: 210_000 }, { name: "x/selfie.jpg", size: 180_000 }],
+  work: [1, 2, 3, 4].map((i) => ({ path: `x/${i}.jpg`, size: 90_000, also_in: 0, copies: 1 })),
+  services: [{ name: "Classic lashes", category: "lashes", price_cents: 12000, median_cents: 11000, median_of: 6 },
+             { name: "Brow lamination", category: "brows", price_cents: 8500, median_cents: 8000, median_of: 4 }],
+};
+const EXAMPLE_ABR: Abr = { Abn: "51824753556", AbnStatus: "Active", AbnStatusEffectiveFrom: "2019-03-01", EntityName: "SINGH, IVY",
+  EntityTypeCode: "IND", EntityTypeName: "Individual/Sole Trader", BusinessName: [], AddressState: "VIC", AddressPostcode: "3056", Message: "" };

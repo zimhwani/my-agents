@@ -50,7 +50,7 @@ Clients never see a pro's exact location, ABN or Stripe id, and never write pric
 | `hairdone-settle` | 5 min | Calls `functions/v1/settle` with the secret from `private.settings` |
 | `hairdone-watchdog-digest` | daily, 20:30 UTC | Morning email: what needs Keith today, what to watch, the numbers |
 | `hairdone-watchdog-alert` | hourly, :07 | Emails only when a red finding is new in the last 24 h |
-| `hairdone-vetting` | 15 min | Checks pros who sent their ID and emails Keith each one |
+| `hairdone-vetting` | 15 min | Backstop for the instant check: anyone who sent their ID and has no review yet |
 
 ## The watchdog
 
@@ -85,7 +85,8 @@ Use the Supabase MCP or CLI. For a fresh project: apply the migrations in order,
 
 ## Pro vetting
 
-When a pro sends their photo ID and selfie, within 15 minutes Keith gets an email: what the checks found,
+When a pro sends their photo ID and selfie, Keith gets an email within about a minute (a trigger on
+`pros.id_submitted_at`, migration 0021; the 15-minute timer catches anything it misses): what the checks found,
 a verdict (looks good, look closer, problem) and a button to the review page,
 `hairdonenailsdone.app/review/` (`site/review/index.html`). There he sees the ID, the selfie and their work
 side by side and taps Approve, or sends it back with a reason. Either way the pro is emailed; sent back,
@@ -104,6 +105,8 @@ the app asks them for their photos again (`id_submitted_at` is cleared).
 - **ABN Lookup:** `tools/setup-vetting.sh` saves the GUID (register free at abr.business.gov.au). Without
   it, ABNs are only checked for typos.
 - **Try it without saving or emailing:** `select net.http_post(url := 'https://yohqeunmgrxyakviofua.supabase.co/functions/v1/vetting', headers := jsonb_build_object('content-type','application/json','x-cron-secret',(select value from private.settings where key='cron_secret')), body := jsonb_build_object('dry', true, 'pro_id', '<pro id>'));`
+- **See what the email looks like:** `select net.http_post(url := 'https://yohqeunmgrxyakviofua.supabase.co/functions/v1/vetting', headers := jsonb_build_object('content-type','application/json','x-cron-secret',(select value from private.settings where key='cron_secret')), body := '{"test":true}'::jsonb);`
+  sends one for a made-up pro, marked [Test].
 - **History:** `select pro_id, verdict, email, decision, reason, decided_at from private.vetting_reviews order by created_at desc;`
 - **The review page is on the website,** because Supabase serves HTML from `*.supabase.co` as plain text.
   The site deploys from `hair-done/` with `npx wrangler deploy` (see `wrangler.jsonc`). The email also carries
