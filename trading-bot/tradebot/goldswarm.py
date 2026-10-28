@@ -17,7 +17,8 @@ from zoneinfo import ZoneInfo
 
 ET = ZoneInfo("America/New_York")
 CONTRACT_OZ = 100.0                     # MT5 XAUUSD: 1 lot = 100 oz
-LABELS = {"GS_USOpen": "XAUUSD·USOpen", "GS_Trend": "XAUUSD·Trend", "GS_Pulse": "XAUUSD·Pulse (test)"}
+LABELS = {"GS_USOpen": "XAUUSD·USOpen", "GS_Trend": "XAUUSD·Trend", "GS_Pulse": "XAUUSD·Pulse (test)",
+          "GS_Pulse20": "XAUUSD·Pulse:20 (test)", "GS_Pulse40": "XAUUSD·Pulse:40 (test)"}
 ERRORS = {"HALT", "OPEN_FAIL", "EXIT_FAIL", "TRAIL_FAIL"}
 WARNINGS = {"SKIP"}
 
