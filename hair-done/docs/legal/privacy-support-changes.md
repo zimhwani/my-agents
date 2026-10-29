@@ -1,12 +1,12 @@
-# Privacy policy: changes for support (draft, not live)
+# Privacy policy: changes for support (published 29 Oct 2026)
 
 Since 29 Oct 2026, email to hello@hairdonenailsdone.app goes through Cloudflare Email Routing to the
 support agent, which keeps a copy in the database next to in-app reports. The live policy
 (`site/privacy/index.html`) doesn't say that yet. Changes 1 to 4 describe what already happens. Change 5
 only applies if the support agent's drafting is switched on (`private.app_flags` `support_ai`).
 
-Nothing here is published. Approve or edit, then it goes into `site/privacy/index.html` with a new
-"Last updated" date, and the site is redeployed (`npx wrangler deploy` from `hair-done/`).
+Keith approved all five on 29 Oct 2026, with two years for change 4; they're live in
+`site/privacy/index.html` (last updated 29 October 2026). The two-year deletion runs daily (migration 0024).
 
 ## 1. What we collect
 
@@ -41,8 +41,8 @@ reply before it's sent. | United States"
 And under "Who sees it", one sentence:
 
 "When you email us or send a report, an AI service (Anthropic) may draft our reply. It sees your message and
-the booking it's about. We never send it your ID photos, card details or street address, and a person reads
-and approves every reply before it's sent."
+the booking it's about. Apart from anything you write yourself, it never sees your ID photos, card details or
+street address, and a person reads and approves every reply before it's sent."
 
 What the agent sends to Anthropic, to back that sentence (from `functions/support/assess.ts`, `draftInput`):
 the person's message and subject; their first name, whether they're a client or a pro, and when they

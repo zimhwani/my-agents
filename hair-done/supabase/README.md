@@ -134,8 +134,10 @@ The `support` function picks each one up within seconds (the 5-minute timer is t
   thread, or closes it. The link lasts 7 days and sends once. Nothing is ever sent, refunded or cancelled
   by the agent.
 - **Drafts the reply** only while `private.app_flags` `support_ai` is on and `ANTHROPIC_API_KEY` is set.
-  It starts off: the privacy policy needs the changes in `docs/legal/privacy-support-changes.md` first.
-  To switch it on afterwards: `update private.app_flags set value = true where key = 'support_ai';`
+  The flag is on since 29 Oct 2026, when the privacy policy started naming Anthropic. The key goes in with
+  `tools/setup-ai.sh`. Without it, items are sorted and emailed with no draft.
+- **Kept two years,** then deleted by the `hairdone-support-retention` timer (migration 0024), as the
+  privacy policy says. The originals forwarded to Keith's inbox aren't touched by that.
 
 - **Test the rules:** `node supabase/functions/support/assess.test.ts`.
 - **See what it would do, without emailing:** `select net.http_post(url := 'https://yohqeunmgrxyakviofua.supabase.co/functions/v1/support', headers := jsonb_build_object('content-type','application/json','x-cron-secret',(select value from private.settings where key='cron_secret')), body := '{"dry":true}'::jsonb);`
