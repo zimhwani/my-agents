@@ -53,3 +53,12 @@ verify_jwt = false          # pg_cron calls it with the cron secret
 
 [functions.vetting-review]
 verify_jwt = false          # the review page calls it; the signed review link is the key
+
+[functions.support]
+verify_jwt = false          # pg_cron and the reports trigger call it with the cron secret
+
+[functions.support-inbound]
+verify_jwt = false          # the hairdone-mail Worker calls it with the mail secret
+
+[functions.support-review]
+verify_jwt = false          # the reply page calls it; the signed link is the key

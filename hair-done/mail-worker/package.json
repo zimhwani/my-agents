@@ -1,0 +1,7 @@
+{
+  "name": "hairdone-mail",
+  "private": true,
+  "description": "Mail to hello@hairdonenailsdone.app: forwards it to Keith and hands a copy to the support agent.",
+  "scripts": { "deploy": "wrangler deploy" },
+  "dependencies": { "postal-mime": "2.7.4" }
+}

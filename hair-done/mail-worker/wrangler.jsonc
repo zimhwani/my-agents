@@ -1,0 +1,14 @@
+// hairdone-mail: the Email Routing Worker for hello@hairdonenailsdone.app (src/index.js says what it does).
+// Deploy from this folder after `npx wrangler login`:  npm install && npx wrangler deploy
+// Two Worker secrets, kept out of this public repo (npx wrangler secret put NAME):
+//   MAIL_SECRET  the same value as private.settings 'mail_secret' in Supabase
+//   FORWARD_TO   where the originals go; must be a verified Email Routing destination
+{
+  "name": "hairdone-mail",
+  "main": "src/index.js",
+  "compatibility_date": "2026-10-25",
+  "workers_dev": false,
+  "vars": {
+    "INBOUND_URL": "https://yohqeunmgrxyakviofua.supabase.co/functions/v1/support-inbound"
+  }
+}

@@ -22,6 +22,7 @@ Everything in this folder is deployed there. What's left to switch on is in `../
 | `functions/payouts-return` | The page Stripe sends a pro back to; hands her to `hairdone://payouts/...` |
 | `migrations/0019_watchdog.sql`, `functions/watchdog` | The watchdog: a read-only health check that emails Keith every morning, and within the hour when something new goes red |
 | `migrations/0020_vetting.sql`, `functions/vetting`, `functions/vetting-review` | Pro vetting: checks each pro who sends their ID and emails Keith a review link for `site/review/` |
+| `migrations/0022_support.sql`, `functions/support`, `functions/support-inbound`, `functions/support-review` | Support and safety: hello@ email and in-app reports, sorted, drafted, and answered from `site/reply/` |
 
 ## How the app talks to it
 
@@ -51,6 +52,7 @@ Clients never see a pro's exact location, ABN or Stripe id, and never write pric
 | `hairdone-watchdog-digest` | daily, 20:30 UTC | Morning email: what needs Keith today, what to watch, the numbers |
 | `hairdone-watchdog-alert` | hourly, :07 | Emails only when a red finding is new in the last 24 h |
 | `hairdone-vetting` | 15 min | Backstop for the instant check: anyone who sent their ID and has no review yet |
+| `hairdone-support` | 5 min | Backstop for support: anything new that the instant calls missed |
 
 ## The watchdog
 
@@ -111,3 +113,34 @@ the app asks them for their photos again (`id_submitted_at` is cleared).
 - **The review page is on the website,** because Supabase serves HTML from `*.supabase.co` as plain text.
   The site deploys from `hair-done/` with `npx wrangler deploy` (see `wrangler.jsonc`). The email also carries
   the same decision as SQL lines, in case the page is ever down.
+
+## Support and safety
+
+Everything people send lands in one queue, `private.support_items`:
+
+- **Email to hello@hairdonenailsdone.app.** Cloudflare Email Routing hands it to the `hairdone-mail` Worker
+  (`hair-done/mail-worker/`), which forwards the original to Keith's inbox, always, and posts a plain-text
+  copy to `support-inbound`. Auto-replies and bounces are forwarded but not queued.
+- **In-app reports, blocks and "Something wrong?"**, through a trigger on `reports`.
+
+The `support` function picks each one up within seconds (the 5-minute timer is the backstop):
+
+- **Sorts it** with fixed rules (`functions/support/assess.ts`): safety, money, booking, pro, account or
+  other, and now, today or later. Anything that reads as unsafe ("unsafe", "allergic", "burnt",
+  "uncomfortable" and so on, or the "Made me uncomfortable" report) is safety, and its email to Keith
+  starts "URGENT, safety". A model can raise an item, never calm one down.
+- **Emails Keith** the message, what Hair Done knows (their bookings, as client or pro) and a link to
+  `hairdonenailsdone.app/reply/`, where he writes or edits the reply and sends it from hello@ in the same
+  thread, or closes it. The link lasts 7 days and sends once. Nothing is ever sent, refunded or cancelled
+  by the agent.
+- **Drafts the reply** only while `private.app_flags` `support_ai` is on and `ANTHROPIC_API_KEY` is set.
+  It starts off: the privacy policy needs the changes in `docs/legal/privacy-support-changes.md` first.
+  To switch it on afterwards: `update private.app_flags set value = true where key = 'support_ai';`
+
+- **Test the rules:** `node supabase/functions/support/assess.test.ts`.
+- **See what it would do, without emailing:** `select net.http_post(url := 'https://yohqeunmgrxyakviofua.supabase.co/functions/v1/support', headers := jsonb_build_object('content-type','application/json','x-cron-secret',(select value from private.settings where key='cron_secret')), body := '{"dry":true}'::jsonb);`
+- **The queue:** `select received_at, source, from_email, category, urgency, status, notified from private.support_items order by received_at desc;`
+- **The mail Worker** deploys from `hair-done/mail-worker/` (`npm install && npx wrangler deploy`). Its
+  secrets, `MAIL_SECRET` (the same as `private.settings` `mail_secret`) and `FORWARD_TO`, stay out of this
+  public repo. If the Worker ever fails, Email Routing can point hello@ straight at Keith's inbox again
+  (Cloudflare > Email > Routing rules).

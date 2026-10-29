@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en-AU">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="referrer" content="no-referrer">
+  <title>Reply · Hair Done</title>
+  <link rel="stylesheet" href="/style.css">
+  <style>
+    /* The reply page for one support item. Opened from the support email; the link after # is the key.
+       Data comes from the support-review function (supabase/functions/support-review). */
+    .muted { color: var(--ink-soft); }
+    .tag { display: inline-block; font: 600 13px/1 var(--sans); letter-spacing: .06em; text-transform: uppercase;
+           padding: 6px 8px; border: 1px solid currentColor; border-radius: 4px; margin-right: 6px; }
+    .t-safety { color: var(--lacquer); } .t-now { color: var(--lacquer); }
+    .safety { padding: 14px 16px; border-radius: 6px; background: var(--lacquer); color: #fff; font-weight: 600; margin: 16px 0; }
+    .quote { white-space: pre-wrap; border-left: 3px solid var(--line); padding: 4px 0 4px 14px; margin: 8px 0 0; }
+    .facts { padding-left: 20px; font-size: 15px; }
+    textarea { width: 100%; min-height: 260px; font: 17px/1.55 var(--sans); color: var(--ink); background: transparent;
+               border: 1px solid var(--line); border-radius: 6px; padding: 12px; resize: vertical; }
+    button { font: 600 17px/1 var(--sans); min-height: 52px; width: 100%; border-radius: 6px; cursor: pointer; margin-top: 12px; }
+    .ink { background: var(--ink); color: var(--paper); border: 0; }
+    .outline { background: transparent; color: var(--ink); border: 1px solid var(--ink); }
+    button[disabled] { opacity: .5; cursor: default; }
+    .banner { padding: 14px 16px; border: 1px solid var(--line); border-radius: 6px; margin: 16px 0; }
+    .err { color: var(--lacquer); }
+    [hidden] { display: none !important; }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header><a class="mark" href="/">hd<span>.</span></a></header>
+    <h1>Reply</h1>
+    <p id="status" class="lead muted">Opening…</p>
+
+    <div id="item" hidden>
+      <p id="safety" class="safety" hidden>This may be about someone's safety. If anyone is in danger, call 000 first, then reply.</p>
+      <p><span id="cat" class="tag"></span><span id="urg" class="tag"></span></p>
+      <p id="who" class="lead"></p>
+
+      <h2 id="subject">Their message</h2>
+      <div id="body" class="quote"></div>
+
+      <h2>What Hair Done knows</h2>
+      <ul id="facts" class="facts"></ul>
+
+      <div id="compose">
+        <h2>Your reply</h2>
+        <p id="drafted" class="note"></p>
+        <textarea id="text" aria-label="Your reply"></textarea>
+        <p class="note">Sends from hello@hairdonenailsdone.app, in the same email thread. Nothing has been sent yet.</p>
+        <button class="ink" id="send">Send</button>
+        <button class="outline" id="close">Close without replying</button>
+        <p id="err" class="err" role="alert"></p>
+      </div>
+      <div id="done" class="banner" hidden></div>
+    </div>
+
+    <footer><p>Only for the Hair Done team. Nothing on this page is saved in your browser.</p></footer>
+  </main>
+
+  <script>
+  (() => {
+    const API = "https://yohqeunmgrxyakviofua.supabase.co/functions/v1/support-review";
+    const token = new URLSearchParams(location.hash.slice(1)).get("t") || "";
+    const $ = (id) => document.getElementById(id);
+    const el = (tag, attrs = {}, text) => { const e = document.createElement(tag); Object.assign(e, attrs); if (text != null) e.textContent = text; return e; };
+    const CAT = { safety: "Safety", money: "Money", booking: "Booking", pro: "Pro", account: "Account", other: "Other" };
+    const URG = { now: "Now", today: "Today", later: "No rush" };
+    const ERR = {
+      link_expired: "This link has run out or isn't right. Links last 7 days. The message is still in your inbox: hello@ forwards everything to you.",
+      already_done: "Already done on this link.",
+      no_email: "There's no email address to reply to. Reply in the app's thread, or close this one.",
+      email_not_configured: "Sending isn't set up (no Resend key). Nothing was sent.",
+      send_failed: "It didn't send. Nothing went out. Try again in a minute.",
+      empty: "Write something first.",
+    };
+    const date = (iso) => iso ? new Date(iso).toLocaleString("en-AU", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" }) : "";
+
+    async function call(body) {
+      const res = await fetch(API, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ token, ...body }) });
+      return { status: res.status, data: await res.json().catch(() => ({})) };
+    }
+
+    function finished(text) {
+      $("compose").hidden = true;
+      $("done").hidden = false;
+      $("done").textContent = text;
+    }
+
+    function show(d) {
+      $("status").hidden = true;
+      $("item").hidden = false;
+      $("safety").hidden = d.category !== "safety";
+      $("cat").textContent = CAT[d.category] || "Not sorted yet";
+      $("cat").className = "tag" + (d.category === "safety" ? " t-safety" : "");
+      $("urg").textContent = URG[d.urgency] || "";
+      $("urg").className = "tag" + (d.urgency === "now" ? " t-now" : "");
+      $("urg").hidden = !d.urgency;
+      const name = d.from.name || d.from.email || "Someone";
+      $("who").textContent = `${name}${d.from.email && d.from.name ? " (" + d.from.email + ")" : ""}, ${d.source === "report" ? "in-app report" : "email"}, ${date(d.received)}.`;
+      $("subject").textContent = d.subject || "Their message";
+      $("body").textContent = d.body || "(No message.)";
+      $("facts").replaceChildren(...(d.facts || []).map((f) => el("li", {}, f)));
+      $("text").value = d.draft || "";
+      $("drafted").textContent = d.draft ? "Drafted for you. Read it and change anything before you send." : "No draft: write it yourself.";
+      if (d.status === "sent") finished(`Sent ${date(d.replied_at)}:\n\n${d.reply}`);
+      else if (d.status === "closed") finished("Closed without a reply.");
+      else if (d.reply_error) $("err").textContent = "The last try didn't send. Nothing went out. You can send again.";
+    }
+
+    async function act(action) {
+      $("err").textContent = "";
+      const text = $("text").value.trim();
+      if (action === "send") {
+        if (!text) { $("err").textContent = ERR.empty; return; }
+        if (!confirm("Send this reply now?")) return;
+      } else if (!confirm("Close this without replying?")) return;
+      $("send").disabled = $("close").disabled = true;
+      const { status, data } = await call(action === "send" ? { action, text } : { action });
+      if (status === 200 && data.ok) {
+        finished(action === "send" ? `Sent to ${data.to}.` : "Closed without a reply.");
+        return;
+      }
+      $("send").disabled = $("close").disabled = false;
+      $("err").textContent = ERR[data.error] || "That didn't go through. Nothing was sent. Try again.";
+    }
+
+    $("send").addEventListener("click", () => act("send"));
+    $("close").addEventListener("click", () => act("close"));
+
+    if (!token) { $("status").textContent = "This page opens from the link in a support email."; return; }
+    call({ action: "view" }).then(({ status, data }) => {
+      if (status === 200) show(data);
+      else $("status").textContent = ERR[data.error] || "Couldn't open it. Try the link again in a minute.";
+    }).catch(() => { $("status").textContent = "Couldn't reach Hair Done. Check your connection and try again."; });
+  })();
+  </script>
+</body>
+</html>
