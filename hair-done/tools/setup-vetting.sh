@@ -31,13 +31,15 @@ SBP=$(printf '%s' "$SBP" | tr -d '[:space:]')
 [[ "$SBP" == sbp_* ]] || { echo "That isn't a Supabase personal access token (they start with sbp_)."; exit 1; }
 
 echo "==> Supabase function secrets"
+# Built on its own line: inside a quoted "$(...)" argument, macOS's bash 3.2 brace-expands the {...}.
+BODY=$(GUID="$GUID" python3 -c "import json,os; print(json.dumps([{'name':'ABR_GUID','value':os.environ['GUID']}]))")
 OUT=$(mktemp)
 CODE=$(curl -sS -o "$OUT" -w '%{http_code}' -X POST "https://api.supabase.com/v1/projects/$REF/secrets" \
   -H "Authorization: Bearer $SBP" -H "Content-Type: application/json" \
-  -d "$(GUID="$GUID" python3 -c "import json,os; print(json.dumps([{'name':'ABR_GUID','value':os.environ['GUID']}]))")")
+  -d "$BODY")
 if [[ "$CODE" == 2* ]]; then echo "    ok: ABR_GUID"; else echo "    failed (HTTP $CODE):"; cat "$OUT"; echo; rm -f "$OUT"; exit 1; fi
 rm -f "$OUT"
-unset SBP GUID
+unset SBP GUID BODY
 
 echo
 echo "Done. Every pro who sends their ID from now on gets their ABN looked up."

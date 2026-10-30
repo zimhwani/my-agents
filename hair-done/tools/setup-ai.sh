@@ -28,13 +28,15 @@ SBP=$(printf '%s' "$SBP" | tr -d '[:space:]')
 [[ "$SBP" == sbp_* ]] || { echo "That isn't a Supabase personal access token (they start with sbp_)."; exit 1; }
 
 echo "==> Supabase function secrets"
+# Built on its own line: inside a quoted "$(...)" argument, macOS's bash 3.2 brace-expands the {...}.
+BODY=$(KEY="$KEY" python3 -c "import json,os; print(json.dumps([{'name':'ANTHROPIC_API_KEY','value':os.environ['KEY']}]))")
 OUT=$(mktemp)
 CODE=$(curl -sS -o "$OUT" -w '%{http_code}' -X POST "https://api.supabase.com/v1/projects/$REF/secrets" \
   -H "Authorization: Bearer $SBP" -H "Content-Type: application/json" \
-  -d "$(KEY="$KEY" python3 -c "import json,os; print(json.dumps([{'name':'ANTHROPIC_API_KEY','value':os.environ['KEY']}]))")")
+  -d "$BODY")
 if [[ "$CODE" == 2* ]]; then echo "    ok: ANTHROPIC_API_KEY"; else echo "    failed (HTTP $CODE):"; cat "$OUT"; echo; rm -f "$OUT"; exit 1; fi
 rm -f "$OUT"
-unset SBP KEY
+unset SBP KEY BODY
 
 echo
 echo "Done. The next support email or report comes with a drafted reply."
