@@ -23,6 +23,7 @@ Everything in this folder is deployed there. What's left to switch on is in `../
 | `migrations/0019_watchdog.sql`, `functions/watchdog` | The watchdog: a read-only health check that emails Keith every morning, and within the hour when something new goes red |
 | `migrations/0020_vetting.sql`, `functions/vetting`, `functions/vetting-review` | Pro vetting: checks each pro who sends their ID and emails Keith a review link for `site/review/` |
 | `migrations/0022_support.sql`, `functions/support`, `functions/support-inbound`, `functions/support-review` | Support and safety: hello@ email and in-app reports, sorted, drafted, and answered from `site/reply/` |
+| `migrations/0025_finance.sql`, `0026`, `functions/finance` | Finance: every Monday, checks the week's money in Stripe against the bookings |
 
 ## How the app talks to it
 
@@ -53,6 +54,7 @@ Clients never see a pro's exact location, ABN or Stripe id, and never write pric
 | `hairdone-watchdog-alert` | hourly, :07 | Emails only when a red finding is new in the last 24 h |
 | `hairdone-vetting` | 15 min | Backstop for the instant check: anyone who sent their ID and has no review yet |
 | `hairdone-support` | 5 min | Backstop for support: anything new that the instant calls missed |
+| `hairdone-finance` | Mondays, 20:00 UTC Sunday | Weekly money check, emailed at 7 am Melbourne time |
 
 ## The watchdog
 
@@ -146,3 +148,27 @@ The `support` function picks each one up within seconds (the 5-minute timer is t
   secrets, `MAIL_SECRET` (the same as `private.settings` `mail_secret`) and `FORWARD_TO`, stay out of this
   public repo. If the Worker ever fails, Email Routing can point hello@ straight at Keith's inbox again
   (Cloudflare > Email > Routing rules).
+
+## Finance
+
+Every Monday at 7 am Melbourne time, an email: does last week's money add up?
+
+- **For each booking charged** (paid, late cancel or no-show): Stripe took the amount the booking says,
+  Hair Done's fee is right (12% of services and travel plus the $3, or 12% of a late-cancel charge; none on
+  a sample pro), the rest went to the pro's own account, and any tip went to them in full. Refunds made in
+  the Stripe dashboard and disputes are listed.
+- **The other way round:** any payment, or any Hair Done fee, in Stripe that no booking accounts for.
+- **Payouts** to pros and to Hair Done's bank that failed.
+- **GST:** Hair Done's fees over the last 12 months against the $75,000 threshold (amber from 80%). The
+  email also shows the full booking value, since which one counts for a marketplace is a question for the
+  accountant.
+- **The ATO's sharing economy report:** January to June is due 31 July, July to December is due 31
+  January. Inside 30 days the email says so, with how many pros were paid and how much.
+- No model: every figure is arithmetic on the bookings and what Stripe reports. Read-only, like the
+  watchdog: a STABLE snapshot (`finance_snapshot`) and GET-only Stripe calls. It uses the watchdog's
+  read-only Stripe key if that key can see payments, and the payment key otherwise (the email says which).
+
+- **Test the rules:** `node supabase/functions/finance/assess.test.ts`.
+- **Try any span without emailing:** `select net.http_post(url := 'https://yohqeunmgrxyakviofua.supabase.co/functions/v1/finance', headers := jsonb_build_object('content-type','application/json','x-cron-secret',(select value from private.settings where key='cron_secret')), body := '{"dry":true,"days":40}'::jsonb, timeout_milliseconds := 120000);`
+- **Send this week's now:** `select private.call_finance();`
+- **History:** `select ran_at, week_from, week_to, level, email from private.finance_runs order by ran_at desc;`

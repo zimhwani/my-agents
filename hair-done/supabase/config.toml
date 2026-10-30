@@ -62,3 +62,6 @@ verify_jwt = false          # the hairdone-mail Worker calls it with the mail se
 
 [functions.support-review]
 verify_jwt = false          # the reply page calls it; the signed link is the key
+
+[functions.finance]
+verify_jwt = false          # pg_cron calls it with the cron secret
