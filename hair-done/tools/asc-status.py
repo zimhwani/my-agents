@@ -52,7 +52,35 @@ if not apps:
     sys.exit("No app with bundle id %s in App Store Connect yet. Create it: My Apps > + > New App." % BUNDLE)
 app = apps[0]["id"]
 
-print("BUILDS")
+# What each App Store state means, in plain words.
+STATES = {
+    "PREPARE_FOR_SUBMISSION": "not submitted yet: fill in the version page and press Add for Review",
+    "READY_FOR_REVIEW": "added for review but not sent: open the draft submission and press Submit to App Review",
+    "WAITING_FOR_REVIEW": "submitted, in Apple's queue (usually 1-2 days)",
+    "IN_REVIEW": "Apple is reviewing it now",
+    "PENDING_DEVELOPER_RELEASE": "APPROVED: waiting for you to press Release",
+    "READY_FOR_SALE": "live on the App Store",
+    "REJECTED": "rejected: see App Review messages in App Store Connect",
+    "METADATA_REJECTED": "listing rejected (not the build): see App Review messages",
+    "DEVELOPER_REJECTED": "you pulled it back from review",
+    "INVALID_BINARY": "the build was refused: check your email from Apple",
+}
+
+print("APP STORE")
+for v in get("/v1/apps/%s/appStoreVersions?limit=3" % app).get("data") or []:
+    a = v["attributes"]
+    state = a.get("appVersionState") or a.get("appStoreState") or "?"
+    build = (get("/v1/appStoreVersions/%s/build" % v["id"]).get("data") or {}).get("attributes", {}).get("version", "none")
+    print("  %-6s %-26s build %-5s %s" % (a.get("versionString"), state, build,
+          STATES.get(state, STATES.get(a.get("appStoreState"), ""))))
+subs = get("/v1/reviewSubmissions?filter[app]=%s&limit=3" % app).get("data") or []
+for r in subs:
+    a = r["attributes"]
+    print("  submission %-20s submitted %s" % (a.get("state"), (a.get("submittedDate") or "not yet")[:16].replace("T", " ")))
+if not subs:
+    print("  no review submission yet: nothing has been sent to Apple")
+
+print("\nBUILDS")
 for b in get("/v1/builds?filter[app]=%s&sort=-uploadedDate&limit=10" % app)["data"]:
     a = b["attributes"]
     sub = (get("/v1/builds/%s/betaAppReviewSubmission" % b["id"]).get("data") or {})
