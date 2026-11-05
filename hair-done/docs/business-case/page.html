@@ -1,0 +1,392 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hair Done Business Case</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+  /* Layout: summary and charts first, assumptions beside them on a wide screen and below on a phone. Hair Done's paper, ink and lacquer; the second chart colour is a validated blue. */
+  :root {
+    --paper: #F8F3EC; --card: #FFFDF9; --ink: #241A16; --soft: #6F625B; --mute: #8C8079;
+    --line: rgba(36, 26, 22, 0.12); --grid: rgba(36, 26, 22, 0.08);
+    --lacquer: #C8323A; --blue: #2a78d6; --wash-blue: rgba(42, 120, 214, 0.10);
+    --good: #2E6B3F; --bad: #B3261E; --warn: #8A5A00;
+    --serif: ui-serif, "New York", Georgia, "Times New Roman", serif;
+    --sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper: #171210; --card: #201916; --ink: #F4ECE4; --soft: #B3A69D; --mute: #93877F;
+      --line: rgba(244, 236, 228, 0.14); --grid: rgba(244, 236, 228, 0.08);
+      --lacquer: #E2504F; --blue: #3987e5; --wash-blue: rgba(57, 135, 229, 0.14);
+      --good: #7BC48F; --bad: #F08A84; --warn: #E0B25C; color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper: #171210; --card: #201916; --ink: #F4ECE4; --soft: #B3A69D; --mute: #93877F;
+    --line: rgba(244, 236, 228, 0.14); --grid: rgba(244, 236, 228, 0.08);
+    --lacquer: #E2504F; --blue: #3987e5; --wash-blue: rgba(57, 135, 229, 0.14);
+    --good: #7BC48F; --bad: #F08A84; --warn: #E0B25C; color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--paper); color: var(--ink); font: 15px/1.5 var(--sans); }
+  .page { max-width: 1180px; margin: 0 auto; padding-block: 32px 72px;
+          padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  .mark { font: italic 400 24px/1 var(--serif); }
+  .mark span { color: var(--lacquer); font-style: normal; }
+  h1 { font: 400 38px/1.1 var(--serif); margin: 18px 0 6px; text-wrap: balance; }
+  h2 { font: 400 22px/1.25 var(--serif); margin: 0 0 4px; }
+  .lead { color: var(--soft); max-width: 70ch; margin: 0; }
+  .num { font-variant-numeric: tabular-nums; }
+
+  .controls { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; margin: 22px 0 0; }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+  .seg button { font: 600 14px/1 var(--sans); padding: 10px 14px; background: transparent; color: var(--ink); border: 0; cursor: pointer; }
+  .seg button + button { border-left: 1px solid var(--line); }
+  .seg button[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
+  .seg button:focus-visible, .field input:focus-visible, details summary:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+  .hint { color: var(--mute); font-size: 13px; }
+
+  .layout { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 28px; margin-top: 24px; align-items: start; }
+  .main { min-width: 0; display: flex; flex-direction: column; gap: 22px; }
+
+  .tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+  .tile { background: var(--card); border: 1px solid var(--line); border-radius: 6px; padding: 14px; min-width: 0; }
+  .tile .k { font: 600 11px/1.3 var(--sans); letter-spacing: .07em; text-transform: uppercase; color: var(--soft); }
+  .tile .v { font: 400 28px/1.15 var(--serif); margin-top: 6px; }
+  .tile .s { color: var(--soft); font-size: 13px; margin-top: 2px; }
+  .v.good { color: var(--good); } .v.bad { color: var(--bad); }
+  .insight { margin: 0; padding: 12px 14px; border-left: 3px solid var(--lacquer); background: var(--card); border-radius: 0 6px 6px 0; }
+
+  .chart { background: var(--card); border: 1px solid var(--line); border-radius: 6px; padding: 14px 14px 8px; position: relative; }
+  .chart header { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 16px; align-items: baseline; }
+  .legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 13px; color: var(--soft); }
+  .legend i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; vertical-align: -1px; margin-right: 6px; }
+  .legend i.line { height: 2px; border-radius: 1px; vertical-align: 3px; width: 16px; }
+  svg { display: block; width: 100%; height: auto; overflow: visible; }
+  .axis text { fill: var(--mute); font: 11px var(--sans); font-variant-numeric: tabular-nums; }
+  .tip { position: absolute; pointer-events: none; background: var(--ink); color: var(--paper); font-size: 13px; line-height: 1.4;
+         padding: 8px 10px; border-radius: 6px; white-space: nowrap; transform: translateX(-50%); z-index: 2; }
+  .tip b { font-weight: 600; }
+
+  .unit { background: var(--card); border: 1px solid var(--line); border-radius: 6px; padding: 14px; }
+  .flow { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; margin-top: 10px; }
+  .flow div { min-width: 0; }
+  .flow .k { color: var(--soft); font-size: 13px; }
+  .flow .v { font: 400 22px/1.2 var(--serif); }
+  .unit p { margin: 10px 0 0; color: var(--soft); font-size: 14px; }
+
+  aside { background: var(--card); border: 1px solid var(--line); border-radius: 6px; padding: 14px 16px; position: sticky; top: calc(env(safe-area-inset-top, 0px) + 12px); max-height: calc(100vh - 24px); overflow: auto; }
+  aside h2 { margin-bottom: 2px; }
+  .group { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
+  .group h3 { font: 600 12px/1 var(--sans); letter-spacing: .08em; text-transform: uppercase; color: var(--soft); margin: 0 0 8px; }
+  .field { display: grid; grid-template-columns: minmax(0, 1fr) 86px; gap: 4px 10px; align-items: center; padding: 6px 0; }
+  .field label { font-size: 14px; min-width: 0; }
+  .field .src { font: 600 10px/1 var(--sans); letter-spacing: .06em; text-transform: uppercase; padding: 3px 5px; border-radius: 3px; border: 1px solid currentColor; margin-left: 6px; vertical-align: 1px; }
+  .src.app { color: var(--good); } .src.spec { color: var(--blue); } .src.check { color: var(--warn); } .src.guess { color: var(--mute); }
+  .field input[type="number"] { width: 100%; font: 15px var(--sans); font-variant-numeric: tabular-nums; padding: 6px 8px; border: 1px solid var(--line); border-radius: 4px; background: var(--paper); color: var(--ink); text-align: right; }
+  .field input[type="range"] { grid-column: 1 / -1; width: 100%; accent-color: var(--lacquer); margin: 0; }
+  .field .note { grid-column: 1 / -1; color: var(--mute); font-size: 12px; }
+  .keys { display: flex; flex-wrap: wrap; gap: 6px 12px; font-size: 12px; color: var(--soft); margin-top: 6px; }
+
+  details { background: var(--card); border: 1px solid var(--line); border-radius: 6px; }
+  details summary { cursor: pointer; padding: 12px 14px; font-weight: 600; }
+  .tablewrap { overflow-x: auto; padding: 0 14px 14px; }
+  .tablewrap.flush { padding: 0; margin-top: 10px; }
+  #mtable { min-width: 820px; }
+  table { border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; min-width: 820px; width: 100%; }
+  th, td { text-align: right; padding: 6px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  th:first-child, td:first-child { text-align: left; }
+  th { color: var(--soft); font-weight: 600; }
+  td.neg { color: var(--bad); }
+  .notes { color: var(--soft); font-size: 14px; max-width: 75ch; }
+  .notes li { margin-bottom: 4px; }
+
+  @media (max-width: 980px) {
+    .layout { grid-template-columns: minmax(0, 1fr); }
+    aside { position: static; max-height: none; }
+  }
+  @media (max-width: 640px) {
+    .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .flow { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    h1 { font-size: 30px; }
+  }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<main class="page">
+  <div class="mark">hd<span>.</span></div>
+  <h1>Hair Done business case</h1>
+  <p class="lead">A month-by-month model, city by city. In each city pros and clients meet, the smaller side sets the bookings, and the money follows. Choose how far it rolls out: Melbourne, Australia, or the world the way Airbnb grew. Every number is an estimate you can change. Today's real figures: 1 real pro, 1 real paid booking.</p>
+
+  <div class="controls">
+    <div class="seg" role="group" aria-label="Scenario">
+      <button type="button" id="sc-cautious" data-sc="cautious">Cautious</button>
+      <button type="button" id="sc-base" data-sc="base">Base</button>
+      <button type="button" id="sc-ambitious" data-sc="ambitious">Ambitious</button>
+    </div>
+    <div class="seg" role="group" aria-label="Where">
+      <button type="button" data-rg="melbourne">Melbourne</button>
+      <button type="button" data-rg="australia">Australia</button>
+      <button type="button" data-rg="global">Global</button>
+    </div>
+    <div class="seg" role="group" aria-label="How far ahead">
+      <button type="button" data-hz="24">2 yrs</button>
+      <button type="button" data-hz="36">3</button>
+      <button type="button" data-hz="60">5</button>
+      <button type="button" data-hz="120">10</button>
+    </div>
+    <span class="hint" id="custom-hint" hidden>Your own numbers. Pick a scenario to reset them.</span>
+  </div>
+
+  <div class="layout">
+    <div class="main">
+      <div class="tiles" id="tiles"></div>
+      <p class="insight" id="insight"></p>
+
+      <section class="chart" aria-labelledby="c1-title">
+        <header><h2 id="c1-title">Bookings a month</h2>
+          <div class="legend"><span><i style="background:var(--lacquer)"></i>Bookings</span><span><i class="line" style="background:var(--blue)"></i>What the pros could take</span></div></header>
+        <svg id="c1" viewBox="0 0 680 240" role="img" aria-label="Monthly bookings against what the pros could take"></svg>
+        <div class="tip" id="t1" hidden></div>
+      </section>
+
+      <section class="chart" aria-labelledby="c2-title">
+        <header><h2 id="c2-title">Money</h2>
+          <div class="legend"><span><i style="background:var(--blue)"></i>Profit each month</span><span><i class="line" style="background:var(--ink)"></i>Cash, running total</span></div></header>
+        <svg id="c2" viewBox="0 0 680 240" role="img" aria-label="Monthly profit and running cash"></svg>
+        <div class="tip" id="t2" hidden></div>
+      </section>
+
+      <section class="unit" aria-labelledby="u-title">
+        <h2 id="u-title">One booking</h2>
+        <div class="flow" id="flow"></div>
+        <p id="unit-note"></p>
+      </section>
+
+      <section class="unit" aria-labelledby="m-title">
+        <h2 id="m-title">Cities</h2>
+        <p id="m-note"></p>
+        <div class="tablewrap flush"><table id="mtable"></table></div>
+      </section>
+
+      <details>
+        <summary>Month by month</summary>
+        <div class="tablewrap"><table id="table"></table></div>
+      </details>
+
+      <section class="notes">
+        <h2>What this doesn't know</h2>
+        <ul>
+          <li>Every "guess" is a starting point. The first three months of real bookings will replace most of them.</li>
+          <li>The roll-out copies Airbnb's: line up pros in a city before clients arrive, open the next city once the playbook works, and charge both sides (Hair Done's $3 from the client plus 12% from the pro is the same split). Airbnb also spent heavily on marketing as it grew. With paid marketing off, every city here grows by word of mouth alone.</li>
+          <li>New pros only join while the ones there are busy enough, but pros already signed up don't leave any faster when it's quiet. Real pros drift off if Hair Done sends them too little work.</li>
+          <li>Bookings a pro wants but no client books, and clients who find no one free, are simply lost. Real people wait, or leave for good.</li>
+          <li>Populations are each country's latest official metro estimates (mostly mid-2025). A city's price level is the median Fresha listing for a gel manicure and a women's cut on 30 Oct 2026, in Australian dollars: small samples of 10 to 66 salons, before tips. That's why Auckland, Toronto and Vancouver come out cheaper than Melbourne and Canberra dearer. Overseas sales taxes and VAT, currency swings and local licences aren't in it.</li>
+          <li>Stripe prices are Stripe's own published ones for each country, read on 30 Oct 2026, with fixed fees turned into Australian dollars at that day's rates. Australia's Connect page still says 1.7% where the pricing page says 1.65%. Payout fees are counted once per booking, which overstates them.</li>
+          <li>Market size: IBISWorld puts Australian hair and beauty services at $12.5bn in 2026 (about $450 a person); the ABS's household spending weights point lower, closer to $8bn. No one publishes how much of it goes to mobile pros. The closest at-home business, Glamsquad in the US, is about US$20M a year in an US$85bn salon market. Priv, a US beauty app, shrank because travel time ate into what pros earned.</li>
+          <li>GST: once Hair Done's Australian fees pass $75,000 in 12 months, the model registers it and sends 1/11 of those fees to the ATO from the next month. Whether the full booking value counts instead is a question for your accountant.</li>
+          <li>No income tax, no salaries unless you add them to running costs, no salary for you unless you set an hourly rate, no investment or loans.</li>
+        </ul>
+      </section>
+    </div>
+
+    <aside aria-labelledby="a-title">
+      <h2 id="a-title">Assumptions</h2>
+      <div class="keys"><span><span class="src app">app</span> what the app does</span><span><span class="src spec">spec</span> a launch target</span><span><span class="src check">check</span> a price to confirm</span><span><span class="src guess">guess</span> mine, replace it</span></div>
+      <form id="form" onsubmit="return false"></form>
+    </aside>
+  </div>
+</main>
+
+<script>
+/*MODEL*/
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const KEY = "hd-business-case-v3";
+  let state = { ...MODEL.SCENARIOS.base }, scenario = "base";
+  try { const saved = JSON.parse(localStorage.getItem(KEY) || "null"); if (saved && saved.a) { state = { ...state, ...saved.a }; scenario = saved.sc || "custom"; } } catch {}
+  const save = () => { try { localStorage.setItem(KEY, JSON.stringify({ a: state, sc: scenario })); } catch {} };
+
+  const money = (v, dp = 0) => `${v < 0 ? "−" : ""}$${Math.abs(v).toLocaleString("en-AU", { minimumFractionDigits: dp, maximumFractionDigits: dp })}`;
+  const compact = (v) => { const a = Math.abs(v), s = v < 0 ? "−" : ""; return a >= 1e9 ? `${s}$${(a / 1e9).toFixed(1)}bn` : a >= 1e6 ? `${s}$${(a / 1e6).toFixed(1)}M` : a >= 1e4 ? `${s}$${Math.round(a / 1e3)}k` : a >= 1e3 ? `${s}$${(a / 1e3).toFixed(1)}k` : `${s}$${Math.round(a)}`; };
+  const int = (v) => Math.round(v).toLocaleString("en-AU");
+  // Month 1 is December 2026, the month after launch prep finishes.
+  const label = (m) => new Date(Date.UTC(2026, 11 + m - 1, 1)).toLocaleDateString("en-AU", { month: "short", year: "numeric", timeZone: "UTC" });
+
+  // ---- The assumptions form, built from MODEL.FIELDS --------------------------------------------
+  const form = $("form");
+  let group = "";
+  for (const f of MODEL.FIELDS) {
+    if (f.group !== group) { group = f.group; const g = document.createElement("div"); g.className = "group"; g.innerHTML = `<h3>${group}</h3>`; g.id = `g-${group}`; form.append(g); }
+    const box = document.createElement("div"); box.className = "field";
+    box.innerHTML = `<label for="n-${f.id}">${f.label}${f.unit && f.unit !== "$" ? ` (${f.unit})` : f.unit === "$" ? " ($)" : ""}<span class="src ${f.src}">${f.src}</span></label>
+      <input type="number" id="n-${f.id}" min="${f.min}" max="${f.max}" step="${f.step}" inputmode="decimal">
+      <input type="range" id="r-${f.id}" min="${f.min}" max="${f.max}" step="${f.step}" aria-label="${f.label}">
+      ${f.note ? `<span class="note">${f.note}</span>` : ""}`;
+    form.lastChild.append(box);
+    const n = box.querySelector('input[type="number"]'), r = box.querySelector('input[type="range"]');
+    const set = (v) => { const x = Math.min(f.max, Math.max(f.min, Number(v))); if (!Number.isFinite(x)) return; state[f.id] = x; scenario = "custom"; n.value = x; r.value = x; draw(); save(); };
+    n.addEventListener("change", () => set(n.value));
+    r.addEventListener("input", () => set(r.value));
+  }
+  const fill = () => { for (const f of MODEL.FIELDS) { $(`n-${f.id}`).value = state[f.id]; $(`r-${f.id}`).value = state[f.id]; } };
+
+  document.querySelectorAll("[data-sc]").forEach((b) => b.addEventListener("click", () => {
+    scenario = b.dataset.sc; state = { ...MODEL.SCENARIOS[scenario], months: state.months, region: state.region }; fill(); draw(); save();
+  }));
+  document.querySelectorAll("[data-hz]").forEach((b) => b.addEventListener("click", () => { state.months = Number(b.dataset.hz); draw(); save(); }));
+  document.querySelectorAll("[data-rg]").forEach((b) => b.addEventListener("click", () => {
+    state.region = b.dataset.rg; state.months = MODEL.HORIZON[state.region]; draw(); save();
+  }));
+
+  // ---- Charts: plain SVG, one scale each ---------------------------------------------------------
+  const H = 240, L = 46, R = 12, T = 12, B = 26;
+  let W = 680;
+  const niceMax = (v) => { if (v <= 0) return 1; const p = 10 ** Math.floor(Math.log10(v)); const m = v / p; return (m <= 1 ? 1 : m <= 2 ? 2 : m <= 5 ? 5 : 10) * p; };
+  const svg = (tag, attrs) => { const e = document.createElementNS("http://www.w3.org/2000/svg", tag); for (const k in attrs) e.setAttribute(k, attrs[k]); return e; };
+
+  function chart(el, tipEl, months, cfg) {
+    el.replaceChildren();
+    W = Math.max(300, Math.round(el.getBoundingClientRect().width) || 680);   // draw at the real width so text stays 11px
+    el.setAttribute("viewBox", `0 0 ${W} ${H}`);
+    const n = months.length, bw = (W - L - R) / n;
+    const vals = months.flatMap(cfg.values);
+    const hi = niceMax(Math.max(0, ...vals)), lo = Math.min(0, ...vals) < 0 ? -niceMax(-Math.min(...vals)) : 0;
+    const y = (v) => T + (H - T - B) * (hi - v) / (hi - lo);
+    const x = (i) => L + bw * i + bw / 2;
+    const g = svg("g", { class: "axis" });
+    // Below zero, only label ticks with room for them: a small loss under a big total gets one label, or none.
+    const below = y(lo) - y(0);
+    const ticks = lo < 0 ? [...(below >= 16 ? [lo] : []), ...(below >= 40 ? [lo / 2] : []), 0, hi / 2, hi] : [0, hi / 4, hi / 2, (3 * hi) / 4, hi];
+    for (const t of ticks) {
+      g.append(svg("line", { x1: L, x2: W - R, y1: y(t), y2: y(t), stroke: t === 0 ? "var(--soft)" : "var(--grid)", "stroke-width": 1 }));
+      const tx = svg("text", { x: L - 8, y: y(t) + 4, "text-anchor": "end" }); tx.textContent = cfg.tick(t); g.append(tx);
+    }
+    const every = (n <= 36 ? 6 : n <= 60 ? 12 : 24) * (W < 520 ? 2 : 1);
+    months.forEach((m, i) => { if (i % every === 0) { const tx = svg("text", { x: x(i), y: H - 8, "text-anchor": "middle" }); tx.textContent = label(m.m); g.append(tx); } });
+    el.append(g);
+    // Bars: capped width, 4px rounded at the data end, square at the baseline.
+    const bar = Math.min(24, bw - 2), r = Math.min(4, bar / 2);
+    months.forEach((m, i) => {
+      const v = cfg.bar(m); if (!v) return;
+      const x0 = x(i) - bar / 2, y0 = y(0), y1 = y(v), h = Math.abs(y0 - y1);
+      const up = v > 0, top = up ? y1 : y0, rr = Math.min(r, h);
+      const d = up
+        ? `M${x0},${y0} V${top + rr} Q${x0},${top} ${x0 + rr},${top} H${x0 + bar - rr} Q${x0 + bar},${top} ${x0 + bar},${top + rr} V${y0} Z`
+        : `M${x0},${y0} V${y0 + h - rr} Q${x0},${y0 + h} ${x0 + rr},${y0 + h} H${x0 + bar - rr} Q${x0 + bar},${y0 + h} ${x0 + bar},${y0 + h - rr} V${y0} Z`;
+      el.append(svg("path", { d, fill: cfg.barColor }));
+    });
+    const pts = months.map((m, i) => `${x(i)},${y(cfg.line(m))}`).join(" ");
+    el.append(svg("polyline", { points: pts, fill: "none", stroke: cfg.lineColor, "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round" }));
+    const last = months[n - 1];
+    el.append(svg("circle", { cx: x(n - 1), cy: y(cfg.line(last)), r: 4, fill: cfg.lineColor, stroke: "var(--card)", "stroke-width": 2 }));
+    const end = svg("text", { x: x(n - 1) - 8, y: y(cfg.line(last)) - 10, "text-anchor": "end", class: "endlabel", fill: "var(--ink)", "font-size": 12, "font-weight": 600 });
+    end.textContent = cfg.endLabel(last); el.append(end);
+    // Hover: a full-height hit strip per month, a crosshair and a tooltip.
+    const cross = svg("line", { y1: T, y2: H - B, stroke: "var(--soft)", "stroke-width": 1, visibility: "hidden" }); el.append(cross);
+    months.forEach((m, i) => {
+      const hit = svg("rect", { x: L + bw * i, y: T, width: bw, height: H - T - B, fill: "transparent", tabindex: -1 });
+      const show = () => {
+        cross.setAttribute("x1", x(i)); cross.setAttribute("x2", x(i)); cross.setAttribute("visibility", "visible");
+        tipEl.innerHTML = cfg.tip(m); tipEl.hidden = false;
+        const box = el.getBoundingClientRect(), host = el.parentElement.getBoundingClientRect();
+        const px = box.left - host.left + (x(i) / W) * box.width;
+        const tw = tipEl.offsetWidth, hw = host.width;
+        tipEl.style.left = `${Math.min(hw - tw / 2 - 4, Math.max(tw / 2 + 4, px))}px`;
+        tipEl.style.top = `${box.top - host.top + (T / H) * box.height + 6}px`;
+      };
+      hit.addEventListener("mouseenter", show); hit.addEventListener("touchstart", show, { passive: true });
+      el.append(hit);
+    });
+    el.addEventListener("mouseleave", () => { cross.setAttribute("visibility", "hidden"); tipEl.hidden = true; });
+  }
+
+  // ---- Draw everything ----------------------------------------------------------------------------
+  function draw() {
+    const r = MODEL.simulate(state);
+    const ms = r.months, last = ms[ms.length - 1], u = r.unit;
+    document.querySelectorAll("[data-sc]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.sc === scenario)));
+    document.querySelectorAll("[data-hz]").forEach((b) => b.setAttribute("aria-pressed", String(Number(b.dataset.hz) === state.months)));
+    document.querySelectorAll("[data-rg]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.rg === state.region)));
+    $("custom-hint").hidden = scenario !== "custom";
+
+    const ys = r.years, lastY = ys[ys.length - 1], firstY = ys[0];
+    const midY = ys.length > 2 ? ys[Math.floor((ys.length - 1) / 2)] : null;
+    const tiles = [
+      { k: "Breaks even", v: r.breakEven ? label(r.breakEven) : "Not yet", cls: r.breakEven ? "good" : "bad",
+        s: r.breakEven ? `Month ${r.breakEven}, and stays above zero` : `Not within ${state.months / 12} years` },
+      { k: "Cash you need", v: money(-r.lowCash), cls: "",
+        s: r.lowMonth ? `Lowest ${label(r.lowMonth)}. ${r.moneyBack ? `Back above zero ${label(r.moneyBack)}` : "Not back above zero yet"}` : "Never below zero" },
+      { k: `Profit, year ${lastY.k}`, v: compact(lastY.profit), cls: lastY.profit >= 0 ? "good" : "bad",
+        s: `Year 1: ${compact(firstY.profit)}${midY ? `, year ${midY.k}: ${compact(midY.profit)}` : ""}` },
+      { k: `Booked, year ${lastY.k}`, v: compact(lastY.gmv), cls: "",
+        s: `Hair Done's fees: ${compact(lastY.fees)}. ${r.gstMonth ? `GST from ${label(r.gstMonth + 1)}` : "Under the GST threshold"}` },
+    ];
+    $("tiles").innerHTML = tiles.map((t) => `<div class="tile"><div class="k">${t.k}</div><div class="v num ${t.cls}">${t.v}</div><div class="s">${t.s}</div></div>`).join("");
+
+    const pctFull = last.capacity > 0 ? Math.round((100 * last.bookings) / last.capacity) : 0;
+    const perPro = last.pros > 0 ? last.bookings / last.pros : 0;
+    const across = last.live > 1 ? ` across ${last.live} cities` : "";
+    $("insight").textContent = last.limit === "clients"
+      ? `Clients are the limit. By ${label(last.m)}, ${int(last.pros)} pros${across} could take ${int(last.capacity)} bookings a month, but clients make ${int(last.bookings)}: each pro is ${pctFull}% booked through Hair Done, about ${perPro.toFixed(1)} bookings a month.` +
+        (perPro < 4 ? " Real pros drift away when it stays that low." : "") +
+        (state.marketing === 0 ? " Paid marketing is off, so every client comes from word of mouth or finding you for free." : "") +
+        " More clients finding you, or more of them coming back, moves this; more pros doesn't."
+      : `Pros are the limit. By ${label(last.m)}, clients want ${int(last.demand)} bookings a month and ${int(last.pros)} pros${across} can take ${int(last.capacity)}. Signing up pros faster, or each one taking more Hair Done bookings, moves this.`;
+
+    chart($("c1"), $("t1"), ms, {
+      values: (m) => [m.bookings, m.capacity], bar: (m) => m.bookings, line: (m) => m.capacity,
+      barColor: "var(--lacquer)", lineColor: "var(--blue)", tick: (t) => (t >= 1000 ? `${t / 1000}k` : `${Math.round(t)}`),
+      endLabel: (m) => `${int(m.bookings)} of ${int(m.capacity)}`,
+      tip: (m) => `<b>${label(m.m)}</b><br>${int(m.bookings)} bookings<br>Pros could take ${int(m.capacity)}<br>${int(m.pros)} pros · ${int(m.repeat)} regulars<br>${m.live} ${m.live === 1 ? "city" : "cities"} open`,
+    });
+    chart($("c2"), $("t2"), ms, {
+      values: (m) => [m.profit, m.cash], bar: (m) => m.profit, line: (m) => m.cash,
+      barColor: "var(--blue)", lineColor: "var(--ink)", tick: (t) => compact(t),
+      endLabel: (m) => `${compact(m.cash)} cash`,
+      tip: (m) => `<b>${label(m.m)}</b><br>Fees ${money(m.fees)}<br>Costs ${money(m.costs)}<br>Profit ${money(m.profit)}<br>Cash ${money(m.cash)}`,
+    });
+
+    const flow = [
+      ["Client pays", money(u.clientPays, 2)],
+      ["Pro gets", money(u.proGets, 2)],
+      ["Hair Done's fee", money(u.fee, 2)],
+      ["Stripe, refunds, support", money(-(u.card + u.payout + u.refunds + u.support), 2)],
+      ["Hair Done keeps", money(u.contribution, 2)],
+    ];
+    $("flow").innerHTML = flow.map(([k, v]) => `<div><div class="k">${k}</div><div class="v num">${v}</div></div>`).join("");
+    const worth = u.lifetime * u.contribution;
+    if (state.marketing === 0) {
+      $("unit-note").textContent = `A Melbourne booking. A client books about ${u.lifetime.toFixed(1)} times before drifting away, so each one is worth about ${money(worth)} to Hair Done. Paid marketing is off, so winning them costs nothing but time.`;
+    } else {
+      const pay = u.contribution > 0 ? state.cac / u.contribution : Infinity;
+      $("unit-note").textContent = `A Melbourne booking. A client books about ${u.lifetime.toFixed(1)} times before drifting away, worth about ${money(worth)}, so winning one for ${money(state.cac)} costs ${money(u.cacPerBooking, 2)} a booking. ` +
+        (Number.isFinite(pay) ? `They pay back their ${money(state.cac)} after ${pay.toFixed(1)} bookings${pay > u.lifetime ? ", which is more than they make: each new client loses money" : ""}.` : "At these numbers a booking loses money before marketing.");
+    }
+
+    const pct = (x) => (x >= 0.1 ? `${Math.round(x * 100)}%` : x >= 0.001 ? `${(x * 100).toFixed(1)}%` : `${(x * 100).toFixed(2)}%`);
+    const open = r.markets.filter((c) => c.live), later = r.markets.length - open.length;
+    const home = r.markets[0];
+    $("m-note").textContent = `Melbourne spends about ${compact(home.pop * 1e6 * state.spendPerPerson)} a year on hair and beauty. If ${state.mobileShare}% of that goes to mobile pros, ` +
+      `that's ${compact(home.market)}, and Hair Done's bookings there come to ${pct(home.yearGmv / home.market)} of it by ${label(last.m)}. ` +
+      `Each city's ceiling is the ${state.reach}% of its people who'd ever book a mobile pro. ` +
+      (later ? `${later} more ${later === 1 ? "city opens" : "cities open"} after ${label(last.m)}.` : open.length > 1 ? `All ${open.length} cities open within the period.` : "Choose Australia or Global to add more cities.");
+    const mcols = [["City", (c) => c.name], ["Opens", (c) => label(c.open)], ["People", (c) => `${c.pop}M`], ["Ceiling", (c) => int(c.cap)],
+      ["Clients so far", (c) => int(c.ever)], ["Of the ceiling", (c) => pct(c.share)], ["Pros", (c) => int(c.pros)],
+      ["Bookings a month", (c) => int(c.bookings)], ["Mobile market a year", (c) => compact(c.market)], ["Hair Done's share", (c) => pct(c.yearGmv / c.market)]];
+    $("mtable").innerHTML = `<thead><tr>${mcols.map(([h]) => `<th scope="col">${h}</th>`).join("")}</tr></thead><tbody>` +
+      open.map((c) => `<tr>${mcols.map(([, f]) => `<td>${f(c)}</td>`).join("")}</tr>`).join("") + "</tbody>";
+
+    const cols = [["Month", (m) => label(m.m)], ["Cities", (m) => m.live], ["Pros", (m) => int(m.pros)], ["Regulars", (m) => int(m.repeat)],
+      ["Bookings", (m) => int(m.bookings)], ["Limit", (m) => m.limit], ["Booked value", (m) => money(m.gmv)], ["Hair Done fees", (m) => money(m.fees)],
+      ["Stripe", (m) => money(m.stripe)], ["Refunds and support", (m) => money(m.refunds + m.support)],
+      ["Pros and marketing", (m) => money(m.marketing + m.recruiting)], ["Cities and countries", (m) => money(m.local + m.launch)],
+      ["Running and you", (m) => money(m.fixed + m.time)], ["GST", (m) => money(m.gst)], ["Profit", (m) => money(m.profit)], ["Cash", (m) => money(m.cash)]];
+    $("table").innerHTML = `<thead><tr>${cols.map(([h]) => `<th scope="col">${h}</th>`).join("")}</tr></thead><tbody>` +
+      ms.map((m) => `<tr>${cols.map(([h, f]) => `<td class="${(h === "Profit" && m.profit < 0) || (h === "Cash" && m.cash < 0) ? "neg" : ""}">${f(m)}</td>`).join("")}</tr>`).join("") + "</tbody>";
+  }
+
+  fill(); draw();
+  let pending = 0;
+  addEventListener("resize", () => { cancelAnimationFrame(pending); pending = requestAnimationFrame(draw); });
+})();
+</script>
