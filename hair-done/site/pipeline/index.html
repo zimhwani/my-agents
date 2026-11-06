@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="en-AU">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="referrer" content="no-referrer">
+  <title>Pro pipeline · Hair Done</title>
+  <link rel="stylesheet" href="/style.css">
+  <style>
+    /* The pro pipeline: who to message, follow up or ask for a referral, with each message drafted. Opened from
+       the Monday pipeline email; the link after # is the key. Data comes from the pipeline-board function. */
+    .muted { color: var(--ink-soft); }
+    .seg { display: flex; flex-wrap: wrap; gap: 8px; margin: 20px 0 8px; }
+    .seg button { font: 600 15px/1 var(--sans); padding: 10px 12px; border-radius: 6px; border: 1px solid var(--line);
+                  background: transparent; color: var(--ink); cursor: pointer; min-height: 40px; }
+    .seg button[aria-pressed="true"] { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+    .card { border-top: 0.5px solid var(--line); padding: 20px 0; }
+    .card h3 { font: 400 22px/1.25 var(--serif); margin: 0; }
+    .meta { color: var(--ink-soft); font-size: 15px; margin: 2px 0 0; }
+    .due { display: inline-block; font: 600 12px/1 var(--sans); letter-spacing: .06em; text-transform: uppercase;
+           padding: 5px 7px; border: 1px solid currentColor; border-radius: 4px; color: var(--lacquer); margin-top: 8px; }
+    .note { font-size: 15px; }
+    textarea, input[type=text], input[type=email], select {
+      width: 100%; font: 16px/1.5 var(--sans); color: var(--ink); background: transparent;
+      border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; }
+    textarea.msg { margin-top: 12px; resize: vertical; }
+    .row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+    .row button, .row a.btn { flex: 1 1 140px; font: 600 16px/1 var(--sans); min-height: 46px; border-radius: 6px; cursor: pointer;
+                              display: inline-flex; align-items: center; justify-content: center; text-decoration: none; }
+    .ink { background: var(--ink); color: var(--paper); border: 0; }
+    .outline { background: transparent; color: var(--ink); border: 1px solid var(--ink); }
+    .quiet { background: transparent; color: var(--ink-soft); border: 1px solid var(--line); }
+    button[disabled] { opacity: .5; cursor: default; }
+    details { margin-top: 12px; }
+    summary { cursor: pointer; color: var(--ink-soft); font-size: 15px; }
+    .fields { display: grid; gap: 10px; margin-top: 10px; }
+    .fields label { display: grid; gap: 4px; font-size: 14px; color: var(--ink-soft); }
+    .cats { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 15px; }
+    .cats label { display: inline-flex; gap: 6px; align-items: center; color: var(--ink); }
+    .err { color: var(--lacquer); }
+    .banner { padding: 14px 16px; border: 1px solid var(--line); border-radius: 6px; margin: 16px 0; }
+    [hidden] { display: none !important; }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header><a class="mark" href="/">hd<span>.</span></a></header>
+    <h1>Pro pipeline</h1>
+    <p id="status" class="lead muted">Opening…</p>
+
+    <div id="board" hidden>
+      <p id="summary" class="lead"></p>
+      <p class="note muted">Every message is drafted for you. Copy it, send it from your own Instagram or email, then tap Sent. Nothing here messages anyone.</p>
+
+      <div class="seg" role="group" aria-label="Show">
+        <button type="button" data-view="todo">To do</button>
+        <button type="button" data-view="waiting">Waiting</button>
+        <button type="button" data-view="talking">Talking</button>
+        <button type="button" data-view="joined">Joined</button>
+        <button type="button" data-view="closed">Closed</button>
+      </div>
+      <div id="list"></div>
+      <p id="empty" class="muted" hidden></p>
+
+      <h2>Add a pro</h2>
+      <p class="note muted">Someone you found on Instagram, or a pro's referral. They go to the top of To do.</p>
+      <form id="add" class="fields" onsubmit="return false">
+        <label>Business or name<input type="text" id="a-name" required maxlength="120" placeholder="Nails by Kiara"></label>
+        <label>First name, if you know it<input type="text" id="a-first" maxlength="60"></label>
+        <label>Instagram<input type="text" id="a-ig" maxlength="200" placeholder="@nailsbykiara"></label>
+        <label>Email<input type="email" id="a-email" maxlength="200"></label>
+        <label>Suburb<input type="text" id="a-suburb" maxlength="60" placeholder="Brunswick"></label>
+        <div class="cats" id="a-cats"></div>
+        <label>What caught your eye (the message uses it)<textarea id="a-note" maxlength="1000" rows="2" placeholder="your chrome French tips are very good"></textarea></label>
+        <label>Referred by<select id="a-ref"><option value="">Nobody</option></select></label>
+        <div class="row"><button type="button" class="ink" id="a-go">Add</button></div>
+        <p id="a-err" class="err" role="alert"></p>
+      </form>
+    </div>
+
+    <footer><p>Only for the Hair Done team. Nothing on this page is saved in your browser.</p></footer>
+  </main>
+
+  <script>
+  (() => {
+    const API = "https://yohqeunmgrxyakviofua.supabase.co/functions/v1/pipeline-board";
+    const token = new URLSearchParams(location.hash.slice(1)).get("t") || "";
+    const $ = (id) => document.getElementById(id);
+    const el = (tag, attrs = {}, text) => { const e = document.createElement(tag); Object.assign(e, attrs); if (text != null) e.textContent = text; return e; };
+    const CATS = { hair: "Hair", nails: "Nails", makeup: "Makeup", lashes: "Lashes", brows: "Brows" };
+    const SOURCE = { abn: "ABN Lookup", keith: "You added", referral: "Referral" };
+    const STATUS = { new: "Not messaged yet", messaged: "Messaged", followed_up: "Followed up", replied: "Replied",
+                     signed_up: "Joined Hair Done", verified: "ID checked", quiet: "Went quiet", declined: "Said no", not_a_fit: "Not a fit" };
+    const DUE = { message: "Message", follow_up: "Follow up", ask_referral: "Ask for a referral" };
+    const VIEWS = {
+      todo: (p) => !!p.next && p.next !== "quiet",
+      waiting: (p) => ["messaged", "followed_up"].includes(p.status) && !p.next,
+      talking: (p) => p.status === "replied",
+      joined: (p) => ["signed_up", "verified"].includes(p.status) && !p.next,
+      closed: (p) => ["quiet", "declined", "not_a_fit"].includes(p.status),
+    };
+    const EMPTY = { todo: "Nothing to do. New leads come every Monday, or add someone below.", waiting: "Nobody waiting on a reply.",
+      talking: "Nobody's replied yet.", joined: "Nobody from the pipeline has joined yet.", closed: "Nothing closed." };
+    let data = null, view = "todo";
+    const day = (iso) => iso ? new Date(iso).toLocaleDateString("en-AU", { day: "numeric", month: "short" }) : "";
+
+    async function call(body) {
+      const res = await fetch(API, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ token, ...body }) });
+      return { status: res.status, data: await res.json().catch(() => ({})) };
+    }
+
+    // The buttons each status gets. [label, status, style]
+    function actions(p) {
+      if (p.next === "message") return [["Sent", "messaged", "ink"], ["Not a fit", "not_a_fit", "quiet"]];
+      if (p.next === "follow_up") return [["Sent follow-up", "followed_up", "ink"], ["Replied", "replied", "outline"], ["Said no", "declined", "quiet"]];
+      if (p.next === "ask_referral") return [["Asked them", "referral_asked", "ink"]];
+      if (p.status === "messaged" || p.status === "followed_up") return [["Replied", "replied", "outline"], ["Said no", "declined", "quiet"], ["Went quiet", "quiet", "quiet"]];
+      if (p.status === "replied") return [["Joined", "signed_up", "outline"], ["Said no", "declined", "quiet"], ["Not a fit", "not_a_fit", "quiet"]];
+      if (["quiet", "declined", "not_a_fit"].includes(p.status)) return [["Back to To do", "new", "quiet"]];
+      return [];
+    }
+
+    function card(p) {
+      const box = el("article", { className: "card" });
+      box.append(el("h3", {}, p.first_name && !p.name.includes(p.first_name) ? `${p.name} (${p.first_name})` : p.name));
+      const what = p.categories.map((c) => CATS[c]).filter(Boolean).join(", ");
+      box.append(el("p", { className: "meta" }, [what, p.area, SOURCE[p.source]].filter(Boolean).join(" · ")));
+      const when = p.status === "messaged" ? ` ${day(p.messaged_at)}` : p.status === "followed_up" ? ` ${day(p.followed_up_at)}` : "";
+      box.append(el("p", { className: "meta" }, STATUS[p.status] + when));
+      if (p.note) box.append(el("p", { className: "meta" }, p.note.charAt(0).toUpperCase() + p.note.slice(1)));
+      if (p.next && DUE[p.next]) box.append(el("span", { className: "due" }, DUE[p.next]));
+
+      if (p.draft) {
+        // Tall enough for the whole message on a phone: about 34 characters a line.
+        const rows = p.draft.split("\n").reduce((n, l) => n + Math.max(1, Math.ceil(l.length / 34)), 0);
+        const msg = el("textarea", { className: "msg", value: p.draft, rows: Math.min(18, rows + 1), ariaLabel: `Message for ${p.name}` });
+        box.append(msg);
+        const r = el("div", { className: "row" });
+        const copy = el("button", { type: "button", className: "outline" }, "Copy message");
+        copy.addEventListener("click", async () => {
+          try { await navigator.clipboard.writeText(msg.value); } catch { msg.select(); document.execCommand("copy"); }
+          copy.textContent = "Copied";
+          setTimeout(() => (copy.textContent = "Copy message"), 1500);
+        });
+        r.append(copy, el("a", { className: "btn outline", href: p.find, target: "_blank", rel: "noreferrer" }, p.instagram ? "Open Instagram" : "Find them"));
+        box.append(r);
+      } else {
+        const r = el("div", { className: "row" });
+        r.append(el("a", { className: "btn quiet", href: p.find, target: "_blank", rel: "noreferrer" }, p.instagram ? "Open Instagram" : "Find them"));
+        box.append(r);
+      }
+
+      const acts = actions(p);
+      const err = el("p", { className: "err", role: "alert" });
+      if (acts.length) {
+        const r = el("div", { className: "row" });
+        for (const [label, status, style] of acts) {
+          const b = el("button", { type: "button", className: style }, label);
+          b.addEventListener("click", () => change(p, { status }, r, err));
+          r.append(b);
+        }
+        box.append(r);
+      }
+
+      // Their details: the message updates when you save.
+      const d = el("details"); d.append(el("summary", {}, "Edit details"));
+      const f = el("div", { className: "fields" });
+      const input = (label, key, type = "text") => { const l = el("label", {}, label); const i = el("input", { type, value: p[key] || "" }); i.dataset.key = key; l.append(i); f.append(l); return i; };
+      input("First name", "first_name"); input("Instagram", "instagram"); input("Email", "email", "email"); input("Suburb", "suburb");
+      const nl = el("label", {}, "What caught your eye, or how it went"); const note = el("textarea", { rows: 2, value: p.note || "" }); note.dataset.key = "note"; nl.append(note); f.append(nl);
+      const sr = el("div", { className: "row" }); const save = el("button", { type: "button", className: "outline" }, "Save");
+      save.addEventListener("click", () => {
+        const fields = {}; f.querySelectorAll("[data-key]").forEach((i) => (fields[i.dataset.key] = i.value));
+        change(p, { fields }, sr, err);
+      });
+      sr.append(save); f.append(sr); d.append(f); box.append(d, err);
+      return box;
+    }
+
+    async function change(p, body, row, err) {
+      err.textContent = "";
+      row.querySelectorAll("button").forEach((b) => (b.disabled = true));
+      const { status, data: d } = await call({ action: "change", id: p.id, ...body });
+      if (status === 200 && d.ok) { Object.assign(p, d.prospect); draw(); return; }
+      row.querySelectorAll("button").forEach((b) => (b.disabled = false));
+      err.textContent = d.error === "link_expired" ? "This link has run out. A new one comes with Monday's email." : "That didn't save. Try again.";
+    }
+
+    function draw() {
+      const t = tallyOf(data.prospects);
+      $("summary").textContent = `${data.id_checked_pros} of 50 pros ID checked. ${t.message} to message, ${t.follow_up} to follow up` +
+        (t.ask_referral ? `, ${t.ask_referral} to ask for a referral` : "") + ".";
+      document.querySelectorAll("[data-view]").forEach((b) => {
+        b.setAttribute("aria-pressed", String(b.dataset.view === view));
+        b.textContent = b.textContent.replace(/ \d+$/, "") + ` ${data.prospects.filter(VIEWS[b.dataset.view]).length}`;
+      });
+      const shown = data.prospects.filter(VIEWS[view]);
+      $("list").replaceChildren(...shown.map(card));
+      $("empty").hidden = shown.length > 0; $("empty").textContent = EMPTY[view];
+    }
+    const tallyOf = (ps) => ps.reduce((n, p) => (p.next && (n[p.next] = (n[p.next] || 0) + 1), n), { message: 0, follow_up: 0, ask_referral: 0 });
+
+    document.querySelectorAll("[data-view]").forEach((b) => b.addEventListener("click", () => { view = b.dataset.view; draw(); }));
+
+    for (const [k, v] of Object.entries(CATS)) {
+      const l = el("label"); const c = el("input", { type: "checkbox", value: k }); l.append(c, document.createTextNode(v)); $("a-cats").append(l);
+    }
+    $("a-go").addEventListener("click", async () => {
+      $("a-err").textContent = "";
+      const name = $("a-name").value.trim();
+      if (!name) { $("a-err").textContent = "Give them a name first."; return; }
+      const fields = { name, first_name: $("a-first").value, instagram: $("a-ig").value, email: $("a-email").value, suburb: $("a-suburb").value,
+        note: $("a-note").value, referred_by: $("a-ref").value, categories: [...$("a-cats").querySelectorAll("input:checked")].map((c) => c.value) };
+      $("a-go").disabled = true;
+      const { status, data: d } = await call({ action: "add", fields });
+      $("a-go").disabled = false;
+      if (status === 200 && d.ok) { $("add").reset(); view = "todo"; await load(); $("list").scrollIntoView({ behavior: "smooth" }); return; }
+      $("a-err").textContent = d.error === "link_expired" ? "This link has run out. A new one comes with Monday's email." : "That didn't save. Try again.";
+    });
+
+    async function load() {
+      const { status, data: d } = await call({ action: "view" });
+      if (status !== 200) {
+        $("board").hidden = true; $("status").hidden = false;
+        $("status").textContent = d.error === "link_expired" ? "This link has run out or isn't right. Links last 8 days, and a new one comes with every Monday email." : "Couldn't open it. Try the link again in a minute.";
+        return;
+      }
+      data = d;
+      $("a-ref").replaceChildren(el("option", { value: "" }, "Nobody"), ...d.pros.map((p) => el("option", { value: p.id }, p.first_name)));
+      $("status").hidden = true; $("board").hidden = false;
+      draw();
+    }
+
+    if (!token) { $("status").textContent = "This page opens from the link in the Monday pipeline email."; return; }
+    load().catch(() => { $("status").textContent = "Couldn't reach Hair Done. Check your connection and try again."; });
+  })();
+  </script>
+</body>
+</html>
